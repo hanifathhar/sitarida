@@ -1,0 +1,390 @@
+export interface PermissionDefinition {
+  kode: string;
+  nama: string;
+  modul: string;
+  deskripsi: string;
+  jenis: "MENU" | "AKSI";
+  menuHref?: string;
+}
+
+export interface MenuPermissionGroup {
+  groupKey: string;
+  groupTitle: string;
+  groupSubtitle: string;
+  items: Array<{
+    menuKey: string;
+    menuLabel: string;
+    menuHref: string;
+    menuPermKode: string;
+    menuPermNama: string;
+    modul: string;
+    actions: Array<{
+      kode: string;
+      nama: string;
+      deskripsi: string;
+    }>;
+  }>;
+}
+
+/**
+ * Katalog Lengkap Modul, Menu Sidebar, dan Hak Aksi (RBAC) SITARIDA
+ */
+export const RBAC_MODULE_GROUPS: MenuPermissionGroup[] = [
+  {
+    groupKey: "dashboard",
+    groupTitle: "1. Modul Dashboard & Ringkasan Eksekutif",
+    groupSubtitle: "Pengaturan tampilan halaman utama ringkasan & realisasi anggaran",
+    items: [
+      {
+        menuKey: "dashboard",
+        menuLabel: "Dashboard Utama",
+        menuHref: "/dashboard",
+        menuPermKode: "dashboard:view",
+        menuPermNama: "Tampilkan Menu Dashboard",
+        modul: "reporting",
+        actions: [],
+      },
+    ],
+  },
+  {
+    groupKey: "perencanaan",
+    groupTitle: "2. Modul Perencanaan Penganggaran",
+    groupSubtitle: "Plafont Anggaran, RKA-SKPD, Anggaran Kas (RAK), dan SPD",
+    items: [
+      {
+        menuKey: "plafond",
+        menuLabel: "Plafont OPD / Unit",
+        menuHref: "/perencanaan/plafond",
+        menuPermKode: "menu:perencanaan:plafond",
+        menuPermNama: "Tampilkan Menu Plafont OPD / Unit",
+        modul: "perencanaan",
+        actions: [
+          {
+            kode: "kuappas:read",
+            nama: "Lihat Data Plafont",
+            deskripsi: "Melihat daftar pagu plafont anggaran OPD & Unit Kerja",
+          },
+          {
+            kode: "kuappas:manage",
+            nama: "Input, Ubah & Kunci RKA (Penyusunan/Perubahan)",
+            deskripsi: "Mengubah nominal plafont serta mengunci/membuka kunci input RKA",
+          },
+        ],
+      },
+      {
+        menuKey: "rka",
+        menuLabel: "Rencana Kerja Anggaran (RKA)",
+        menuHref: "/perencanaan/rka",
+        menuPermKode: "menu:perencanaan:rka",
+        menuPermNama: "Tampilkan Menu Rencana Kerja Anggaran (RKA)",
+        modul: "perencanaan",
+        actions: [
+          {
+            kode: "rka:read",
+            nama: "Lihat Dokumen RKA",
+            deskripsi: "Melihat sub kegiatan, rekening, dan rincian belanja RKA",
+          },
+          {
+            kode: "rka:write",
+            nama: "Input, Ubah & Hapus Rincian RKA",
+            deskripsi: "Menambah/mengubah sub kegiatan, memilih PPTK, dan mengisi rincian belanja",
+          },
+          {
+            kode: "rka:submit",
+            nama: "Ajukan RKA-SKPD",
+            deskripsi: "Mengajukan dokumen RKA-SKPD untuk diverifikasi",
+          },
+          {
+            kode: "rka:verify",
+            nama: "Verifikasi & Setujui RKA",
+            deskripsi: "Memverifikasi dan mengesahkan dokumen RKA-SKPD",
+          },
+        ],
+      },
+      {
+        menuKey: "anggaran-kas",
+        menuLabel: "Anggaran Kas Belanja OPD",
+        menuHref: "/perencanaan/anggaran-kas",
+        menuPermKode: "menu:perencanaan:anggaran-kas",
+        menuPermNama: "Tampilkan Menu Anggaran Kas",
+        modul: "perencanaan",
+        actions: [
+          {
+            kode: "angkas:read",
+            nama: "Lihat Data Anggaran Kas",
+            deskripsi: "Melihat pembagian anggaran kas 12 bulan per rekening belanja",
+          },
+          {
+            kode: "angkas:write",
+            nama: "Input & Simpan Anggaran Kas 12 Bulan",
+            deskripsi: "Mengisi, membagi rata, dan menyimpan anggaran kas bulanan",
+          },
+          {
+            kode: "angkas:lock",
+            nama: "Kunci / Buka Kunci (Lock) Anggaran Kas",
+            deskripsi: "Mengunci dan membuka kunci penginputan anggaran kas OPD",
+          },
+        ],
+      },
+      {
+        menuKey: "spd",
+        menuLabel: "Surat Penyediaan Dana (SPD)",
+        menuHref: "/perencanaan/spd",
+        menuPermKode: "menu:perencanaan:spd",
+        menuPermNama: "Tampilkan Menu Surat Penyediaan Dana (SPD)",
+        modul: "perencanaan",
+        actions: [
+          {
+            kode: "spd:read",
+            nama: "Lihat Dokumen SPD",
+            deskripsi: "Melihat daftar dan rincian Surat Penyediaan Dana (SPD)",
+          },
+          {
+            kode: "dpa:manage",
+            nama: "Kelola & Terbitkan SPD / DPA",
+            deskripsi: "Membuat, mengubah, dan mengesahkan dokumen SPD / DPA",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    groupKey: "masterRekeningOpd",
+    groupTitle: "3. Modul Master Data — Rekening & Organisasi",
+    groupSubtitle: "Master Rekening 6 Level, Master Perangkat Daerah (OPD), dan Master Unit Kerja",
+    items: [
+      {
+        menuKey: "master-rekening",
+        menuLabel: "Master Rekening",
+        menuHref: "/master/rekening",
+        menuPermKode: "menu:master:rekening",
+        menuPermNama: "Tampilkan Menu Master Rekening",
+        modul: "master-data",
+        actions: [
+          {
+            kode: "master:write",
+            nama: "Tambah, Ubah & Hapus Data Master",
+            deskripsi: "Mengelola penambahan, perubahan, dan penghapusan data master",
+          },
+        ],
+      },
+      {
+        menuKey: "master-opd",
+        menuLabel: "Master OPD",
+        menuHref: "/master/opd",
+        menuPermKode: "menu:master:opd",
+        menuPermNama: "Tampilkan Menu Master OPD",
+        modul: "master-data",
+        actions: [
+          {
+            kode: "opd:manage",
+            nama: "Kelola Perangkat Daerah & Unit Kerja",
+            deskripsi: "Menambah, mengubah, dan menghapus data OPD serta Unit Kerja",
+          },
+        ],
+      },
+      {
+        menuKey: "master-unit",
+        menuLabel: "Master Unit Kerja",
+        menuHref: "/master/unit",
+        menuPermKode: "menu:master:unit",
+        menuPermNama: "Tampilkan Menu Master Unit Kerja",
+        modul: "master-data",
+        actions: [],
+      },
+    ],
+  },
+  {
+    groupKey: "masterNomenklatur",
+    groupTitle: "4. Modul Master Data — Nomenklatur & Dana",
+    groupSubtitle: "Master Program, Kegiatan, Sub Kegiatan, dan Sumber Dana",
+    items: [
+      {
+        menuKey: "master-program",
+        menuLabel: "Master Program",
+        menuHref: "/master/program",
+        menuPermKode: "menu:master:program",
+        menuPermNama: "Tampilkan Menu Master Program",
+        modul: "master-data",
+        actions: [],
+      },
+      {
+        menuKey: "master-kegiatan",
+        menuLabel: "Master Kegiatan",
+        menuHref: "/master/kegiatan",
+        menuPermKode: "menu:master:kegiatan",
+        menuPermNama: "Tampilkan Menu Master Kegiatan",
+        modul: "master-data",
+        actions: [],
+      },
+      {
+        menuKey: "master-subkegiatan",
+        menuLabel: "Master Sub Kegiatan",
+        menuHref: "/master/subkegiatan",
+        menuPermKode: "menu:master:subkegiatan",
+        menuPermNama: "Tampilkan Menu Master Sub Kegiatan",
+        modul: "master-data",
+        actions: [],
+      },
+      {
+        menuKey: "master-sumber-dana",
+        menuLabel: "Master Sumber Dana",
+        menuHref: "/master/sumber-dana",
+        menuPermKode: "menu:master:sumber-dana",
+        menuPermNama: "Tampilkan Menu Master Sumber Dana",
+        modul: "master-data",
+        actions: [],
+      },
+    ],
+  },
+  {
+    groupKey: "masterReferensi",
+    groupTitle: "5. Modul Master Data — Pengaturan Master",
+    groupSubtitle: "Tahun Anggaran, Standar Harga (SSH/SBU/HSPK/ASB), dan Import Template",
+    items: [
+      {
+        menuKey: "master-tahun-anggaran",
+        menuLabel: "Tahun Anggaran",
+        menuHref: "/master/tahun-anggaran",
+        menuPermKode: "menu:master:tahun-anggaran",
+        menuPermNama: "Tampilkan Menu Tahun Anggaran",
+        modul: "master-data",
+        actions: [],
+      },
+      {
+        menuKey: "master-standar-harga",
+        menuLabel: "Standar Harga (SSH)",
+        menuHref: "/master/standar-harga",
+        menuPermKode: "menu:master:standar-harga",
+        menuPermNama: "Tampilkan Menu Standar Harga (SSH)",
+        modul: "master-data",
+        actions: [],
+      },
+      {
+        menuKey: "master-import",
+        menuLabel: "Import Template Master Data",
+        menuHref: "/master/import",
+        menuPermKode: "menu:master:import",
+        menuPermNama: "Tampilkan Menu Import Template",
+        modul: "master-data",
+        actions: [
+          {
+            kode: "master:import",
+            nama: "Eksekusi Import & Validasi Excel",
+            deskripsi: "Mengunggah dan mengeksekusi import template data master",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    groupKey: "pengaturan",
+    groupTitle: "6. Modul Pengaturan & Administrasi Sistem",
+    groupSubtitle: "Manajemen Pegawai/User Multi-Peran, Konfigurasi Role & Hak Akses, serta Audit Log",
+    items: [
+      {
+        menuKey: "admin-users",
+        menuLabel: "Data Pegawai / User",
+        menuHref: "/admin/users",
+        menuPermKode: "menu:admin:users",
+        menuPermNama: "Tampilkan Menu Data Pegawai / User",
+        modul: "users",
+        actions: [
+          {
+            kode: "users:read",
+            nama: "Lihat Daftar Pengguna",
+            deskripsi: "Melihat daftar akun pegawai dan penugasan OPD/Unit",
+          },
+          {
+            kode: "users:manage",
+            nama: "Tambah, Ubah, Kunci & Hapus Pengguna",
+            deskripsi: "Mengelola akun pegawai dan penugasan multi-peran",
+          },
+        ],
+      },
+      {
+        menuKey: "admin-roles",
+        menuLabel: "Role & Hak Akses",
+        menuHref: "/admin/roles",
+        menuPermKode: "menu:admin:roles",
+        menuPermNama: "Tampilkan Menu Role & Hak Akses",
+        modul: "users",
+        actions: [],
+      },
+      {
+        menuKey: "admin-audit",
+        menuLabel: "Laporan Audit Log",
+        menuHref: "/admin/audit-log",
+        menuPermKode: "menu:admin:audit",
+        menuPermNama: "Tampilkan Menu Laporan Audit Log",
+        modul: "audit",
+        actions: [
+          {
+            kode: "audit:read",
+            nama: "Lihat & Filter Jejak Audit",
+            deskripsi: "Melihat rekaman aktivitas pengguna pada sistem",
+          },
+        ],
+      },
+    ],
+  },
+];
+
+/**
+ * Menghasilkan daftar datar seluruh definisi permission yang wajib ada di tabel Permission
+ */
+export function getAllCatalogPermissions(): PermissionDefinition[] {
+  const map = new Map<string, PermissionDefinition>();
+
+  for (const grp of RBAC_MODULE_GROUPS) {
+    for (const item of grp.items) {
+      map.set(item.menuPermKode, {
+        kode: item.menuPermKode,
+        nama: item.menuPermNama,
+        modul: item.modul,
+        deskripsi: `Menampilkan menu '${item.menuLabel}' (${item.menuHref}) pada navigasi sidebar`,
+        jenis: "MENU",
+        menuHref: item.menuHref,
+      });
+
+      for (const act of item.actions) {
+        if (!map.has(act.kode)) {
+          map.set(act.kode, {
+            kode: act.kode,
+            nama: act.nama,
+            modul: item.modul,
+            deskripsi: act.deskripsi,
+            jenis: "AKSI",
+          });
+        }
+      }
+    }
+  }
+
+  // Permission komposit / backend yang tetap dipertahankan untuk kompatibilitas API
+  const extraPerms: PermissionDefinition[] = [
+    {
+      kode: "master:read",
+      nama: "Lihat Master Data & Nomenklatur (API)",
+      modul: "master-data",
+      deskripsi: "Akses baca data referensi & nomenklatur master",
+      jenis: "AKSI",
+    },
+    {
+      kode: "apbd:manage",
+      nama: "Konsolidasi & Penetapan APBD",
+      modul: "perencanaan",
+      deskripsi: "Mengelola tahapan konsolidasi dan penetapan APBD",
+      jenis: "AKSI",
+    },
+  ];
+
+  for (const ep of extraPerms) {
+    if (!map.has(ep.kode)) {
+      map.set(ep.kode, ep);
+    }
+  }
+
+  return Array.from(map.values());
+}
+

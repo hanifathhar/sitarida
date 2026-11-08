@@ -1,0 +1,737 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum TahapAnggaran {
+  MURNI
+  PERGESERAN
+  PERUBAHAN
+}
+
+enum StatusTahunAnggaran {
+  PERSIAPAN
+  AKTIF
+  DITUTUP
+}
+
+enum KategoriRekening {
+  PENDAPATAN
+  BELANJA
+  PEMBIAYAAN
+}
+
+enum JenisStandarHarga {
+  SSH
+  SBU
+  HSPK
+  ASB
+}
+
+enum StatusDokumen {
+  DRAFT
+  DIAJUKAN
+  DIVERIFIKASI
+  DIREVISI
+  DISETUJUI
+  DITOLAK
+  DIKONSOLIDASIKAN
+  DITETAPKAN
+  DIBATALKAN
+}
+
+// ==========================================
+// 1. MASTER TAHUN ANGGARAN, OPD & UNIT KERJA
+// ==========================================
+
+model TahunAnggaran {
+  id          String              @id @default(uuid())
+  tahun       Int                 @unique
+  nama        String
+  tahapAktif  TahapAnggaran       @default(MURNI)
+  status      StatusTahunAnggaran @default(PERSIAPAN)
+  isDefault   Boolean             @default(false)
+  keterangan  String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  
+
+  @@index([tahun])
+  @@map("ms_tahun_anggaran")
+}
+
+model MsUrusan {
+  id         String   @id @default(uuid())
+  kd_urusan1 String
+  nm_urusan1 String
+  kd_urusan2 String   @unique
+  nm_urusan2 String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([kd_urusan1])
+  @@index([kd_urusan2])
+  @@map("ms_urusan")
+}
+
+model Opd {
+  id            String   @id @default(uuid())
+  kd_skpd       String   @unique
+  nm_skpd       String
+  singkatan     String?
+  kd_urusan     String?
+  nm_urusan     String?
+  kepalaNama    String?
+  kepalaNip     String?
+  kepalaJabatan String?
+  alamat        String?
+  telepon       String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  unitKerjas        UnitKerja[]
+  users             User[]
+  userRoleAssignments UserRoleAssignment[]
+  plafondAnggarans  PlafondAnggaran[]
+  anggaranKasList   AnggaranKas[]
+  spdList           Spd[]
+
+  @@index([kd_skpd])
+  @@index([nm_skpd])
+  @@map("ms_opd")
+}
+
+model UnitKerja {
+  id            String   @id @default(uuid())
+  opdId         String
+  kd_unit       String   @unique
+  nm_unit       String
+  skpdbank      String?
+  bank_penerima String?
+  rek_penerima  String?
+  nama_penerima String?
+  kepalaNama    String?
+  kepalaNip     String?
+  alamat        String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  opd               Opd               @relation(fields: [opdId], references: [id], onDelete: Cascade)
+  users             User[]
+  userRoleAssignments UserRoleAssignment[]
+  plafondAnggarans  PlafondAnggaran[]
+
+  @@index([opdId])
+  @@index([kd_unit])
+  @@map("ms_unit")
+}
+
+// ==========================================
+// 2. AUTENTIKASI, PENGGUNA & RBAC
+// ==========================================
+
+model Role {
+  id         String   @id @default(uuid())
+  kode       String   @unique
+  nama       String
+  deskripsi  String?
+  isCrossOpd Boolean  @default(false)
+  isSystem   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  users               User[]
+  userRoleAssignments UserRoleAssignment[]
+  permissions         RolePermission[]
+}
+
+model Permission {
+  id        String   @id @default(uuid())
+  kode      String   @unique
+  nama      String
+  modul     String
+  deskripsi String?
+  createdAt DateTime @default(now())
+
+  roles RolePermission[]
+}
+
+model RolePermission {
+  id           String @id @default(uuid())
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+model User {
+  id           String    @id @default(uuid())
+  username     String    @unique
+  email        String    @unique
+  passwordHash String
+  namaLengkap  String
+  nip          String?
+  jabatan      String?
+  roleId       String
+  opdId        String?
+  unitKerjaId  String?
+  isActive     Boolean   @default(true)
+  isLocked     Boolean   @default(false)
+  failedLogins Int       @default(0)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  role      Role       @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  opd       Opd?       @relation(fields: [opdId], references: [id], onDelete: SetNull)
+  unitKerja UnitKerja? @relation(fields: [unitKerjaId], references: [id], onDelete: SetNull)
+
+  roleAssignments UserRoleAssignment[]
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+  trskpdList      Trskpd[]             @relation("TrskpdPPTK")
+
+  @@index([roleId])
+  @@index([opdId])
+}
+
+model UserRoleAssignment {
+  id          String   @id @default(uuid())
+  userId      String
+  roleId      String
+  opdId       String?
+  unitKerjaId String?
+  jabatan     String?
+  isPrimary   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role       @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  opd       Opd?       @relation(fields: [opdId], references: [id], onDelete: SetNull)
+  unitKerja UnitKerja? @relation(fields: [unitKerjaId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([roleId])
+  @@index([opdId])
+  @@map("ms_user_role_assignments")
+}
+
+// ==========================================
+// 3. MASTER REKENING 6 LEVEL (ms_rek1 s/d ms_rek6 — LINTAS TAHUN)
+// ==========================================
+
+model MsRek1 {
+  id        String   @id @default(uuid())
+  kd_rek1   String   @unique // Contoh: "1" s/d "8"
+  nm_rek1   String   // Contoh: "ASET", "PENDAPATAN DAERAH", "BELANJA DAERAH"
+  kategori  String   @default("BELANJA")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rek2s MsRek2[]
+
+  @@index([kd_rek1])
+  @@map("ms_rek1")
+}
+
+model MsRek2 {
+  id        String   @id @default(uuid())
+  rek1Id    String
+  kd_rek2   String   @unique // Contoh: "5.1", "5.2"
+  nm_rek2   String   // Contoh: "BELANJA OPERASI", "BELANJA MODAL"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rek1  MsRek1   @relation(fields: [rek1Id], references: [id], onDelete: Restrict)
+  rek3s MsRek3[]
+
+  @@index([rek1Id])
+  @@index([kd_rek2])
+  @@map("ms_rek2")
+}
+
+model MsRek3 {
+  id        String   @id @default(uuid())
+  rek2Id    String
+  kd_rek3   String   @unique // Contoh: "5.1.01", "5.1.02"
+  nm_rek3   String   // Contoh: "Belanja Pegawai", "Belanja Barang dan Jasa"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rek2  MsRek2   @relation(fields: [rek2Id], references: [id], onDelete: Restrict)
+  rek4s MsRek4[]
+
+  @@index([rek2Id])
+  @@index([kd_rek3])
+  @@map("ms_rek3")
+}
+
+model MsRek4 {
+  id        String   @id @default(uuid())
+  rek3Id    String
+  kd_rek4   String   @unique // Contoh: "5.1.02.01"
+  nm_rek4   String   // Contoh: "Belanja Barang"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rek3  MsRek3   @relation(fields: [rek3Id], references: [id], onDelete: Restrict)
+  rek5s MsRek5[]
+
+  @@index([rek3Id])
+  @@index([kd_rek4])
+  @@map("ms_rek4")
+}
+
+model MsRek5 {
+  id        String   @id @default(uuid())
+  rek4Id    String
+  kd_rek5   String   @unique // Contoh: "5.1.02.01.01"
+  nm_rek5   String   // Contoh: "Belanja Barang Pakai Habis"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rek4  MsRek4   @relation(fields: [rek4Id], references: [id], onDelete: Restrict)
+  rek6s MsRek6[]
+
+  @@index([rek4Id])
+  @@index([kd_rek5])
+  @@map("ms_rek5")
+}
+
+model MsRek6 {
+  id              String   @id @default(uuid())
+  rek5Id          String
+  kd_rek6         String   @unique // Contoh: "5.1.02.01.01.0024"
+  nm_rek6         String   // Contoh: "Belanja Alat/Bahan untuk Kegiatan Kantor-Alat Tulis Kantor"
+  map_lo          String?
+  map_utang       String?
+  map_aset        String?
+  sumberReferensi String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  rek5 MsRek5 @relation(fields: [rek5Id], references: [id], onDelete: Restrict)
+
+  @@index([rek5Id])
+  @@index([kd_rek6])
+  @@map("ms_rek6")
+}
+
+// ==========================================
+// 4. MASTER PROGRAM, KEGIATAN, SUBKEGIATAN & SUMBER DANA (PER TAHUN ANGGARAN)
+// ==========================================
+
+model Program {
+  id              String   @id @default(uuid())
+  kd_program      String
+  nm_program      String
+  kd_urusan       String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  kegiatans       Kegiatan[]
+
+  @@unique([kd_program])
+  @@map("ms_program")
+}
+
+model Kegiatan {
+  id              String   @id @default(uuid())
+  programId       String
+  kd_kegiatan     String
+  nm_kegiatan     String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  program       Program       @relation(fields: [programId], references: [id], onDelete: Restrict)
+  subkegiatans  Subkegiatan[]
+
+  @@unique([kd_kegiatan])
+  @@index([programId])
+  @@map("ms_kegiatan")
+}
+
+model Subkegiatan {
+  id              String   @id @default(uuid())
+  kegiatanId      String
+  kd_sub_kegiatan String
+  nm_sub_kegiatan String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  kegiatan        Kegiatan         @relation(fields: [kegiatanId], references: [id], onDelete: Restrict)
+
+
+  @@unique([kd_sub_kegiatan])
+  @@index([kegiatanId])
+  @@map("ms_subkegiatan")
+}
+
+model SumberDana {
+  id              String   @id @default(uuid())
+  kd_sumdan       String
+  nm_sumdan       String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([kd_sumdan])
+  @@map("ms_sumber_dana")
+}
+
+model KelompokBarang {
+  id             String         @id @default(uuid())
+  kd_kelompok    String         @unique
+  uraianKelompok String
+  deskripsi      String?
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([kd_kelompok])
+  @@map("ms_kelompok_barang")
+}
+
+model StandarHarga {
+  id             String            @id @default(uuid())
+  tahunAnggaran  Int               @default(2027)
+  jenis          JenisStandarHarga // SSH, SBU, HSPK, ASB
+  kd_kelompok    String            // KODE KELOMPOK BARANG (cth: 1.1.12.01.01.0001)
+  kd_barang      String?           // KOMBINASI kd_kelompok + '.' + no_urut (cth: 1.1.12.01.01.0001.0001)
+  no_urut        Int?              // No urut item dalam kd_kelompok
+  uraianKelompok String?           // URAIAN KELOMPOK BARANG
+  uraianBarang   String            // URAIAN BARANG
+  spesifikasi    String?           // SPESIFIKASI
+  satuan         String            // SATUAN (Buah, Batang, M2, Kg, dsb)
+  hargaSatuan    Decimal           @db.Decimal(18, 2)
+  sumberFile     String?           @default("Draft Lampiran SHS 2027.xlsx")
+  isActive       Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([tahunAnggaran, jenis])
+  @@index([kd_kelompok])
+  @@index([kd_barang])
+  @@index([uraianBarang])
+  @@map("ms_standar_harga")
+}
+
+
+
+// ==========================================
+// 6. MODUL PERENCANAAN (PLAFOND, RKA, ANGGARAN KAS, SPD)
+// ==========================================
+
+model PlafondAnggaran {
+  id            String   @id @default(uuid())
+  tahunAnggaran Int      @default(2027)
+  opdId         String
+  unitKerjaId   String?
+  kd_skpd       String
+  nm_skpd       String
+  kd_unit       String?
+  nm_unit       String?
+  paguMurni     Decimal  @default(0) @db.Decimal(18, 2)
+  paguUbah      Decimal  @default(0) @db.Decimal(18, 2)
+  isLockedMurni Boolean  @default(false)
+  isLockedUbah  Boolean  @default(false)
+  keterangan    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  opd           Opd        @relation(fields: [opdId], references: [id], onDelete: Cascade)
+  unitKerja     UnitKerja? @relation(fields: [unitKerjaId], references: [id], onDelete: SetNull)
+
+  @@unique([tahunAnggaran, opdId, unitKerjaId])
+  @@index([tahunAnggaran, kd_skpd])
+  @@map("tr_plafond_anggaran")
+}
+
+model Trskpd {
+  id               String   @id @default(uuid())
+  tahunAnggaran    Int      @default(2027)
+  opdId            String
+  unitKerjaId      String?
+  kd_skpd          String
+  nm_skpd          String
+  kd_unit          String?
+  nm_unit          String?
+  kd_program       String
+  nm_program       String
+  kd_kegiatan      String
+  nm_kegiatan      String
+  kd_sub_kegiatan  String
+  nm_sub_kegiatan  String
+  sasaran_kegiatan String?
+  waktu_kegiatan   String?
+  capaian_kegiatan String?
+  lokasi_kegiatan  String?
+  pptkUserId       String?  // Singkron dengan User
+  pptkNama         String?
+  pptkNip          String?
+  totalAnggaran        Decimal  @default(0) @db.Decimal(18, 2)
+  totalAnggaran_ubah   Decimal? @default(0) @db.Decimal(18, 2)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  pptk             User?    @relation("TrskpdPPTK", fields: [pptkUserId], references: [id], onDelete: SetNull)
+  rkaRekening      Trdrka[]
+
+  @@unique([tahunAnggaran, kd_skpd, kd_sub_kegiatan])
+  @@index([tahunAnggaran, kd_skpd])
+  @@index([kd_sub_kegiatan])
+  @@map("trskpd")
+}
+
+model Trdrka {
+  id              String   @id @default(uuid())
+  tahunAnggaran   Int      @default(2027)
+  trskpdId        String
+  kd_skpd         String
+  nm_skpd         String
+  kd_unit         String?
+  nm_unit         String?
+  kd_program      String
+  nm_program      String
+  kd_kegiatan     String
+  nm_kegiatan     String
+  kd_sub_kegiatan String
+  nm_sub_kegiatan String
+  kd_rek6         String
+  nm_rek6         String
+  nilai           Decimal  @default(0) @db.Decimal(18, 2)
+  nilai_ubah      Decimal  @default(0) @db.Decimal(18, 2)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  trskpd          Trskpd   @relation(fields: [trskpdId], references: [id], onDelete: Cascade)
+  rincianObjek    Trdpo[]
+  anggaranKasRekening AnggaranKasRekening[]
+
+  @@index([trskpdId])
+  @@index([tahunAnggaran, kd_skpd])
+  @@index([kd_skpd])
+  @@index([kd_rek6])
+  @@unique([trskpdId, kd_rek6])
+  @@map("trdrka")
+}
+
+model Trdpo {
+  id              String   @id @default(uuid())
+  tahunAnggaran   Int      @default(2027)
+  trdrkaId        String
+  kd_skpd         String
+  nm_skpd         String
+  kd_unit         String?
+  nm_unit         String?
+  kd_program      String
+  nm_program      String
+  kd_kegiatan     String
+  nm_kegiatan     String
+  kd_sub_kegiatan String
+  nm_sub_kegiatan String
+  kd_rek6         String
+  nm_rek6         String
+  kd_barang       String?  // Relasi ms_standar_harga.kd_barang
+  uraian          String
+  satuan          String
+  satuan_ubah     String?
+  volume          Decimal  @default(1) @db.Decimal(12, 2)
+  volume_ubah     Decimal? @db.Decimal(12, 2)
+  harga           Decimal  @default(0) @db.Decimal(18, 2)
+  harga_ubah      Decimal? @db.Decimal(18, 2)
+  total           Decimal  @default(0) @db.Decimal(18, 2)
+  total_ubah      Decimal? @db.Decimal(18, 2)
+  kd_sumdan       String?  // Relasi SumberDana
+  catatan         String?
+  catatan_ubah    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  trdrka          Trdrka   @relation(fields: [trdrkaId], references: [id], onDelete: Cascade)
+
+  @@index([trdrkaId])
+  @@index([tahunAnggaran, kd_skpd])
+  @@index([kd_skpd])
+  @@index([kd_barang])
+  @@map("trdpo")
+}
+
+model AnggaranKas {
+  id            String   @id @default(uuid())
+  tahunAnggaran Int      @default(2027)
+  opdId         String
+  unitKerjaId   String?
+  kd_skpd       String
+  nm_skpd       String
+  kd_unit       String?
+  nm_unit       String?
+  triwulan1     Decimal  @default(0) @db.Decimal(18, 2)
+  triwulan2     Decimal  @default(0) @db.Decimal(18, 2)
+  triwulan3     Decimal  @default(0) @db.Decimal(18, 2)
+  triwulan4     Decimal  @default(0) @db.Decimal(18, 2)
+  totalKas      Decimal  @default(0) @db.Decimal(18, 2)
+  status        String   @default("DRAFT") // DRAFT, DISETUJUI
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  opd           Opd      @relation(fields: [opdId], references: [id], onDelete: Cascade)
+
+  @@unique([tahunAnggaran, opdId, unitKerjaId])
+  @@map("tr_anggaran_kas")
+}
+
+model AnggaranKasRekening {
+  id              String   @id @default(uuid())
+  tahunAnggaran   Int      @default(2027)
+  trdrkaId        String
+  trskpdId        String
+  opdId           String
+  unitKerjaId     String?
+  kd_skpd         String
+  nm_skpd         String
+  kd_unit         String?
+  nm_unit         String?
+  kd_sub_kegiatan String
+  nm_sub_kegiatan String
+  kd_rek6         String
+  nm_rek6         String
+
+  // Alokasi 12 Bulan (Penyusunan / Murni)
+  bulan1          Decimal  @default(0) @db.Decimal(18, 2)
+  bulan2          Decimal  @default(0) @db.Decimal(18, 2)
+  bulan3          Decimal  @default(0) @db.Decimal(18, 2)
+  bulan4          Decimal  @default(0) @db.Decimal(18, 2)
+  bulan5          Decimal  @default(0) @db.Decimal(18, 2)
+  bulan6          Decimal  @default(0) @db.Decimal(18, 2)
+  bulan7          Decimal  @default(0) @db.Decimal(18, 2)
+  bulan8          Decimal  @default(0) @db.Decimal(18, 2)
+  bulan9          Decimal  @default(0) @db.Decimal(18, 2)
+  bulan10         Decimal  @default(0) @db.Decimal(18, 2)
+  bulan11         Decimal  @default(0) @db.Decimal(18, 2)
+  bulan12         Decimal  @default(0) @db.Decimal(18, 2)
+  totalKas        Decimal  @default(0) @db.Decimal(18, 2)
+
+  // Alokasi 12 Bulan (RKA Perubahan)
+  bulan1_ubah     Decimal? @db.Decimal(18, 2)
+  bulan2_ubah     Decimal? @db.Decimal(18, 2)
+  bulan3_ubah     Decimal? @db.Decimal(18, 2)
+  bulan4_ubah     Decimal? @db.Decimal(18, 2)
+  bulan5_ubah     Decimal? @db.Decimal(18, 2)
+  bulan6_ubah     Decimal? @db.Decimal(18, 2)
+  bulan7_ubah     Decimal? @db.Decimal(18, 2)
+  bulan8_ubah     Decimal? @db.Decimal(18, 2)
+  bulan9_ubah     Decimal? @db.Decimal(18, 2)
+  bulan10_ubah    Decimal? @db.Decimal(18, 2)
+  bulan11_ubah    Decimal? @db.Decimal(18, 2)
+  bulan12_ubah    Decimal? @db.Decimal(18, 2)
+  totalKas_ubah   Decimal? @db.Decimal(18, 2)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  trdrka          Trdrka   @relation(fields: [trdrkaId], references: [id], onDelete: Cascade)
+
+  @@unique([tahunAnggaran, trdrkaId])
+  @@index([tahunAnggaran, kd_skpd])
+  @@index([trskpdId])
+  @@index([trdrkaId])
+  @@map("tr_anggaran_kas_rekening")
+}
+
+model Spd {
+  id            String   @id @default(uuid())
+  tahunAnggaran Int      @default(2027)
+  nomorSpd      String   @unique
+  tanggalSpd    DateTime @default(now())
+  opdId         String
+  unitKerjaId   String?
+  kd_skpd       String
+  nm_skpd       String
+  kd_unit       String?
+  nm_unit       String?
+  periode       String   // Triwulan I, Triwulan II, Triwulan III, Triwulan IV
+  jumlahSpd     Decimal  @default(0) @db.Decimal(18, 2)
+  keterangan    String?
+  status        String   @default("AKTIF")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  opd           Opd      @relation(fields: [opdId], references: [id], onDelete: Cascade)
+
+  @@index([tahunAnggaran, kd_skpd])
+  @@map("tr_spd")
+}
+
+model DocumentAttachment {
+  id           String   @id @default(uuid())
+  entitasTipe  String
+  entitasId    String
+  namaFile     String
+  ukuranBytes  Int
+  mimeType     String
+  urlPath      String
+  diunggahOleh String?
+  createdAt    DateTime @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  username    String?
+  userRole    String?
+  opdId       String?
+  aksi        String
+  modul       String
+  entitas     String
+  entitasId   String?
+  deskripsi   String
+  dataSebelum Json?
+  dataSesudah Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([modul, createdAt])
+  @@index([userId])
+  @@index([entitas, entitasId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  judul     String
+  pesan     String
+  tautan    String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}
