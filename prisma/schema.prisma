@@ -105,6 +105,8 @@ model Opd {
   plafondAnggarans  PlafondAnggaran[]
   anggaranKasList   AnggaranKas[]
   spdList           Spd[]
+  penetapanUpList   PenetapanUp[]
+  sppList           Trhspp[]
 
   @@index([kd_skpd])
   @@index([nm_skpd])
@@ -699,6 +701,107 @@ model Spd {
   @@index([tahunAnggaran, no_spd])
   @@index([tahunAnggaran, kd_skpd, kd_unit, triwulan])
   @@map("tr_spd")
+}
+
+// ==========================================
+// MODUL PENATAUSAHAAN: PENGATURAN UP & UP-KKPD
+// ==========================================
+
+model PenetapanUp {
+  id              String    @id @default(uuid())
+  tahunAnggaran   Int
+  opdId           String
+  kd_skpd         String
+  nm_skpd         String
+  no_sk           String?
+  tgl_sk          DateTime?
+  nominalUp       Decimal   @default(0) @db.Decimal(18, 2)
+  nominalKkpd     Decimal   @default(0) @db.Decimal(18, 2)
+  bankKkpd        String?   @default("Bank Sumut")
+  keterangan      String?
+  status          String    @default("DITETAPKAN") // DRAFT, DITETAPKAN
+  ditetapkanOleh  String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  opd             Opd       @relation(fields: [opdId], references: [id], onDelete: Cascade)
+
+  @@unique([tahunAnggaran, opdId])
+  @@index([tahunAnggaran])
+  @@index([kd_skpd])
+  @@map("tr_penetapan_up")
+}
+
+// ==========================================
+// MODUL PENATAUSAHAAN: SURAT PERMINTAAN PEMBAYARAN (SPP)
+// ==========================================
+
+model Trhspp {
+  id              String    @id @default(uuid())
+  tahunAnggaran   Int
+  no_spp          String
+  tgl_spp         DateTime
+  kd_skpd         String
+  nm_skpd         String
+  opdId           String
+  kd_unit         String?
+  nm_unit         String?
+  unitKerjaId     String?
+  jenis_spp       String    // UP, GU, TU, LS_GAJI, LS_BARANG_JASA, UP_KKPD, GU_KKPD
+  bulan           Int?
+  keperluan       String    @db.Text
+  nilai           Decimal   @default(0) @db.Decimal(18, 2)
+  no_spd          String?
+  tgl_spd         DateTime?
+  nama_penerima   String?
+  bank_penerima   String?
+  rek_penerima    String?
+  npwp_penerima   String?
+  bendaharaNama   String?
+  bendaharaNip    String?
+  pptkNama        String?
+  pptkNip         String?
+  paKpaNama       String?
+  paKpaNip        String?
+  status          String    @default("DRAFT") // DRAFT, DIAJUKAN, DIVERIFIKASI, DITOLAK
+  keterangan      String?   @db.Text
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  opd             Opd       @relation(fields: [opdId], references: [id], onDelete: Cascade)
+  rincian         Trdspp[]
+
+  @@unique([tahunAnggaran, no_spp])
+  @@index([tahunAnggaran, kd_skpd])
+  @@index([jenis_spp])
+  @@index([status])
+  @@map("trhspp")
+}
+
+model Trdspp {
+  id              String    @id @default(uuid())
+  sppId           String
+  tahunAnggaran   Int
+  kd_skpd         String
+  kd_unit         String?
+  kd_program      String
+  nm_program      String
+  kd_kegiatan     String
+  nm_kegiatan     String
+  kd_sub_kegiatan String
+  nm_sub_kegiatan String
+  kd_rek6         String
+  nm_rek6         String
+  nilai           Decimal   @default(0) @db.Decimal(18, 2)
+  sumberDana      String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  spp             Trhspp    @relation(fields: [sppId], references: [id], onDelete: Cascade)
+
+  @@index([sppId])
+  @@index([tahunAnggaran, kd_skpd, kd_sub_kegiatan, kd_rek6])
+  @@map("trdspp")
 }
 
 model DocumentAttachment {

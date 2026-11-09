@@ -194,8 +194,129 @@ export const RBAC_MODULE_GROUPS: MenuPermissionGroup[] = [
     ],
   },
   {
+    groupKey: "penatausahaan",
+    groupTitle: "3. Modul Penatausahaan Keuangan",
+    groupSubtitle: "Pengaturan Penatausahaan, Penetapan Besaran UP & UP-KKPD, SPP, SPM, dan SP2D",
+    items: [
+      {
+        menuKey: "pengaturan-penatausahaan",
+        menuLabel: "Besaran UP",
+        menuHref: "/penatausahaan/pengaturan",
+        menuPermKode: "menu:penatausahaan:pengaturan",
+        menuPermNama: "Tampilkan Menu Besaran UP",
+        modul: "penatausahaan",
+        actions: [
+          {
+            kode: "penatausahaan:up:read",
+            nama: "Lihat Ketetapan UP & UP-KKPD",
+            deskripsi: "Melihat daftar besaran Uang Persediaan (UP) Tunai dan UP-KKPD seluruh SKPD",
+          },
+          {
+            kode: "penatausahaan:up:manage",
+            nama: "Input, Ubah & Tetapkan Besaran UP & UP-KKPD",
+            deskripsi: "Menetapkan nomor SK, nominal UP tunai, UP-KKPD, dan Bank Penerbit KKPD",
+          },
+        ],
+      },
+      {
+        menuKey: "spp-up",
+        menuLabel: "SPP-UP",
+        menuHref: "/penatausahaan/spp/up",
+        menuPermKode: "menu:penatausahaan:spp-up",
+        menuPermNama: "Tampilkan Menu SPP-UP (Uang Persediaan)",
+        modul: "penatausahaan",
+        actions: [
+          {
+            kode: "spp:read",
+            nama: "Lihat Dokumen SPP",
+            deskripsi: "Melihat daftar dokumen SPP beserta rincian rekening belanjanya",
+          },
+          {
+            kode: "spp:write",
+            nama: "Input, Ubah & Hapus Dokumen SPP",
+            deskripsi: "Membuat dokumen SPP baru, mengubah data, dan mengisi rekening belanja",
+          },
+          {
+            kode: "spp:submit",
+            nama: "Ajukan SPP ke Pejabat Penguji (SPM)",
+            deskripsi: "Mengajukan dokumen SPP untuk diverifikasi dan diterbitkan SPM",
+          },
+        ],
+      },
+      {
+        menuKey: "spp-gu",
+        menuLabel: "SPP-GU",
+        menuHref: "/penatausahaan/spp/gu",
+        menuPermKode: "menu:penatausahaan:spp-gu",
+        menuPermNama: "Tampilkan Menu SPP-GU (Ganti Uang)",
+        modul: "penatausahaan",
+        actions: [],
+      },
+      {
+        menuKey: "spp-tu",
+        menuLabel: "SPP-TU",
+        menuHref: "/penatausahaan/spp/tu",
+        menuPermKode: "menu:penatausahaan:spp-tu",
+        menuPermNama: "Tampilkan Menu SPP-TU (Tambah Uang)",
+        modul: "penatausahaan",
+        actions: [],
+      },
+      {
+        menuKey: "spp-ls-gaji",
+        menuLabel: "SPP-LS Gaji",
+        menuHref: "/penatausahaan/spp/ls-gaji",
+        menuPermKode: "menu:penatausahaan:spp-ls-gaji",
+        menuPermNama: "Tampilkan Menu SPP-LS Gaji & Tunjangan",
+        modul: "penatausahaan",
+        actions: [],
+      },
+      {
+        menuKey: "spp-ls-barjas",
+        menuLabel: "SPP-LS Barang dan Jasa",
+        menuHref: "/penatausahaan/spp/ls-barang-jasa",
+        menuPermKode: "menu:penatausahaan:spp-ls-barjas",
+        menuPermNama: "Tampilkan Menu SPP-LS Barang dan Jasa",
+        modul: "penatausahaan",
+        actions: [],
+      },
+      {
+        menuKey: "spp-up-kkpd",
+        menuLabel: "SPP-UP KKPD",
+        menuHref: "/penatausahaan/spp/up-kkpd",
+        menuPermKode: "menu:penatausahaan:spp-up-kkpd",
+        menuPermNama: "Tampilkan Menu SPP-UP KKPD",
+        modul: "penatausahaan",
+        actions: [],
+      },
+      {
+        menuKey: "spp-gu-kkpd",
+        menuLabel: "SPP-GU KKPD",
+        menuHref: "/penatausahaan/spp/gu-kkpd",
+        menuPermKode: "menu:penatausahaan:spp-gu-kkpd",
+        menuPermNama: "Tampilkan Menu SPP-GU KKPD",
+        modul: "penatausahaan",
+        actions: [],
+      },
+      {
+        menuKey: "spp-register",
+        menuLabel: "Register SPP",
+        menuHref: "/penatausahaan/spp/register",
+        menuPermKode: "menu:penatausahaan:spp-register",
+        menuPermNama: "Tampilkan Menu Register SPP",
+        modul: "penatausahaan",
+        actions: [
+          {
+            kode: "spp:print",
+            nama: "Cetak Register & Dokumen SPP",
+            deskripsi: "Mencetak buku register SPP serta formulir kelengkapan SPP",
+          },
+        ],
+      },
+    ],
+  },
+  {
     groupKey: "masterRekeningOpd",
-    groupTitle: "3. Modul Master Data — Rekening & Organisasi",
+    groupTitle: "4. Modul Master Data — Rekening & Organisasi",
     groupSubtitle: "Master Rekening 6 Level, Master Perangkat Daerah (OPD), dan Master Unit Kerja",
     items: [
       {
@@ -241,7 +362,7 @@ export const RBAC_MODULE_GROUPS: MenuPermissionGroup[] = [
   },
   {
     groupKey: "masterNomenklatur",
-    groupTitle: "4. Modul Master Data — Nomenklatur & Dana",
+    groupTitle: "5. Modul Master Data — Nomenklatur & Dana",
     groupSubtitle: "Master Program, Kegiatan, Sub Kegiatan, dan Sumber Dana",
     items: [
       {
@@ -284,7 +405,7 @@ export const RBAC_MODULE_GROUPS: MenuPermissionGroup[] = [
   },
   {
     groupKey: "masterReferensi",
-    groupTitle: "5. Modul Master Data — Pengaturan Master",
+    groupTitle: "6. Modul Master Data — Pengaturan Master",
     groupSubtitle: "Tahun Anggaran, Standar Harga (SSH/SBU/HSPK/ASB), dan Import Template",
     items: [
       {
@@ -324,7 +445,7 @@ export const RBAC_MODULE_GROUPS: MenuPermissionGroup[] = [
   },
   {
     groupKey: "pengaturan",
-    groupTitle: "6. Modul Pengaturan & Administrasi Sistem",
+    groupTitle: "7. Modul Pengaturan & Administrasi Sistem",
     groupSubtitle: "Manajemen Pegawai/User Multi-Peran, Konfigurasi Role & Hak Akses, serta Audit Log",
     items: [
       {

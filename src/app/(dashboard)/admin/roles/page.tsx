@@ -462,8 +462,8 @@ export default function RolesPage() {
                     key={role.id}
                     onClick={() => handleSelectRole(role)}
                     className={`p-3.5 transition-all cursor-pointer ${isSelected
-                        ? "bg-red-50/80 border-l-4 border-l-[#991B1B]"
-                        : "bg-white hover:bg-slate-50"
+                      ? "bg-red-50/80 border-l-4 border-l-[#991B1B]"
+                      : "bg-white hover:bg-slate-50"
                       }`}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -554,8 +554,8 @@ export default function RolesPage() {
                         </h2>
                         <span
                           className={`text-[10px] px-2 py-0.5 rounded font-bold border ${activeRole.isCrossOpd
-                              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                              : "bg-red-50 text-[#991B1B] border-red-200"
+                            ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                            : "bg-red-50 text-[#991B1B] border-red-200"
                             }`}
                         >
                           {activeRole.isCrossOpd
@@ -587,10 +587,6 @@ export default function RolesPage() {
                   {/* Ringkasan & Tombol Cepat */}
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2 text-xs">
-                      <span className="px-2.5 py-1 rounded-lg bg-red-50 text-[#991B1B] border border-red-200 font-bold">
-                        Menu Tampil di Sidebar: {activeMenuCount} dari{" "}
-                        {totalCatalogMenus} Menu
-                      </span>
                       {isSuperadminRole && (
                         <span className="text-xs font-semibold text-emerald-700">
                           ✓ Role Superadmin memiliki akses penuh ke seluruh modul & menu.
@@ -683,11 +679,10 @@ export default function RolesPage() {
                             title={isCollapsed ? "Buka modul" : "Sembunyikan modul"}
                           >
                             <ChevronDown
-                              className={`w-4 h-4 transition-transform duration-200 ${
-                                isCollapsed
+                              className={`w-4 h-4 transition-transform duration-200 ${isCollapsed
                                   ? "-rotate-90 text-amber-300/70"
                                   : "rotate-0 text-amber-300"
-                              }`}
+                                }`}
                             />
                           </button>
 
@@ -698,11 +693,10 @@ export default function RolesPage() {
                                 <span>{group.groupTitle}</span>
                               </h3>
                               <span
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                                  activeCountInGroup > 0
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${activeCountInGroup > 0
                                     ? "bg-amber-400/20 text-amber-200 border-amber-300/40"
                                     : "bg-white/10 text-white/70 border-white/20"
-                                }`}
+                                  }`}
                               >
                                 {activeCountInGroup} dari {group.items.length} Menu Aktif
                               </span>
@@ -740,9 +734,8 @@ export default function RolesPage() {
                           >
                             <span>{isCollapsed ? "Buka Modul" : "Sembunyikan"}</span>
                             <ChevronDown
-                              className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                                isCollapsed ? "-rotate-90" : "rotate-0"
-                              }`}
+                              className={`w-3.5 h-3.5 transition-transform duration-200 ${isCollapsed ? "-rotate-90" : "rotate-0"
+                                }`}
                             />
                           </button>
                         </div>
@@ -752,122 +745,122 @@ export default function RolesPage() {
                       {!isCollapsed && (
                         <div className="p-4 space-y-3 divide-y divide-slate-100 animate-in fade-in duration-150">
                           {group.items.map((item) => {
-                          const menuChecked =
-                            isSuperadminRole ||
-                            checkedKodes.includes(item.menuPermKode);
+                            const menuChecked =
+                              isSuperadminRole ||
+                              checkedKodes.includes(item.menuPermKode);
 
-                          return (
-                            <div
-                              key={item.menuKey}
-                              className={`pt-3 first:pt-0 rounded-xl p-3.5 border transition-colors ${menuChecked
+                            return (
+                              <div
+                                key={item.menuKey}
+                                className={`pt-3 first:pt-0 rounded-xl p-3.5 border transition-colors ${menuChecked
                                   ? "bg-red-50/35 border-red-200"
                                   : "bg-slate-50/60 border-slate-200"
-                                }`}
-                            >
-                              {/* Baris Utama: Checkbox Tampilkan Menu di Sidebar */}
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                <label className="flex items-start sm:items-center gap-3 cursor-pointer select-none">
-                                  <input
-                                    type="checkbox"
-                                    disabled={isSuperadminRole}
-                                    checked={menuChecked}
-                                    onChange={() =>
-                                      toggleMenuPermission(
-                                        item.menuPermKode,
-                                        item.actions
-                                      )
-                                    }
-                                    className="w-4 h-4 rounded border-slate-300 text-[#991B1B] focus:ring-[#991B1B] mt-0.5 sm:mt-0"
-                                  />
-                                  <div>
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="text-sm font-extrabold text-slate-900">
-                                        {item.menuLabel}
-                                      </span>
-                                      <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-600">
-                                        {item.menuHref}
-                                      </span>
+                                  }`}
+                              >
+                                {/* Baris Utama: Checkbox Tampilkan Menu di Sidebar */}
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                  <label className="flex items-start sm:items-center gap-3 cursor-pointer select-none">
+                                    <input
+                                      type="checkbox"
+                                      disabled={isSuperadminRole}
+                                      checked={menuChecked}
+                                      onChange={() =>
+                                        toggleMenuPermission(
+                                          item.menuPermKode,
+                                          item.actions
+                                        )
+                                      }
+                                      className="w-4 h-4 rounded border-slate-300 text-[#991B1B] focus:ring-[#991B1B] mt-0.5 sm:mt-0"
+                                    />
+                                    <div>
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-sm font-extrabold text-slate-900">
+                                          {item.menuLabel}
+                                        </span>
+                                        <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-600">
+                                          {item.menuHref}
+                                        </span>
+                                      </div>
+                                      <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1">
+                                        <Eye className="w-3 h-3 text-[#991B1B]" />
+                                        <span>
+                                          {menuChecked
+                                            ? "Menu ditampilkan di Sidebar untuk Role ini"
+                                            : "Menu disembunyikan dari Sidebar untuk Role ini"}
+                                        </span>
+                                      </div>
                                     </div>
-                                    <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1">
-                                      <Eye className="w-3 h-3 text-[#991B1B]" />
-                                      <span>
-                                        {menuChecked
-                                          ? "Menu ditampilkan di Sidebar untuk Role ini"
-                                          : "Menu disembunyikan dari Sidebar untuk Role ini"}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </label>
+                                  </label>
 
-                                <span
-                                  className={`shrink-0 self-start sm:self-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${menuChecked
+                                  <span
+                                    className={`shrink-0 self-start sm:self-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${menuChecked
                                       ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
                                       : "bg-slate-200 text-slate-600"
-                                    }`}
-                                >
-                                  {menuChecked ? "MENU AKTIF" : "DISEMBUNYIKAN"}
-                                </span>
-                              </div>
+                                      }`}
+                                  >
+                                    {menuChecked ? "MENU AKTIF" : "DISEMBUNYIKAN"}
+                                  </span>
+                                </div>
 
-                              {/* Hak Aksi Spesifik di Dalam Menu (Jika Ada) */}
-                              {item.actions.length > 0 && (
-                                <div className="mt-3 pt-2.5 border-t border-slate-200/80 pl-0 sm:pl-7">
-                                  <div className="text-[11px] font-bold text-slate-600 mb-2 flex items-center gap-1">
-                                    <KeyRound className="w-3 h-3 text-[#991B1B]" />
-                                    <span>
-                                      Kewenangan Operasional / Aksi pada Menu{" "}
-                                      {item.menuLabel}:
-                                    </span>
-                                  </div>
+                                {/* Hak Aksi Spesifik di Dalam Menu (Jika Ada) */}
+                                {item.actions.length > 0 && (
+                                  <div className="mt-3 pt-2.5 border-t border-slate-200/80 pl-0 sm:pl-7">
+                                    <div className="text-[11px] font-bold text-slate-600 mb-2 flex items-center gap-1">
+                                      <KeyRound className="w-3 h-3 text-[#991B1B]" />
+                                      <span>
+                                        Kewenangan Operasional / Aksi pada Menu{" "}
+                                        {item.menuLabel}:
+                                      </span>
+                                    </div>
 
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    {item.actions.map((act) => {
-                                      const actChecked =
-                                        isSuperadminRole ||
-                                        checkedKodes.includes(act.kode);
-                                      return (
-                                        <label
-                                          key={act.kode}
-                                          className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition ${actChecked
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      {item.actions.map((act) => {
+                                        const actChecked =
+                                          isSuperadminRole ||
+                                          checkedKodes.includes(act.kode);
+                                        return (
+                                          <label
+                                            key={act.kode}
+                                            className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition ${actChecked
                                               ? "bg-white border-[#991B1B]/40 shadow-2xs"
                                               : "bg-white/60 border-slate-200 opacity-75 hover:opacity-100"
-                                            }`}
-                                        >
-                                          <input
-                                            type="checkbox"
-                                            disabled={isSuperadminRole}
-                                            checked={actChecked}
-                                            onChange={() =>
-                                              toggleActionPermission(
-                                                act.kode,
-                                                item.menuPermKode
-                                              )
-                                            }
-                                            className="mt-0.5 rounded border-slate-300 text-[#991B1B] focus:ring-[#991B1B]"
-                                          />
-                                          <div>
-                                            <div className="text-xs font-bold text-slate-800">
-                                              {act.nama}
+                                              }`}
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              disabled={isSuperadminRole}
+                                              checked={actChecked}
+                                              onChange={() =>
+                                                toggleActionPermission(
+                                                  act.kode,
+                                                  item.menuPermKode
+                                                )
+                                              }
+                                              className="mt-0.5 rounded border-slate-300 text-[#991B1B] focus:ring-[#991B1B]"
+                                            />
+                                            <div>
+                                              <div className="text-xs font-bold text-slate-800">
+                                                {act.nama}
+                                              </div>
+                                              <div className="text-[10px] text-slate-500 leading-snug mt-0.5">
+                                                {act.deskripsi}
+                                              </div>
+                                              <div className="text-[10px] font-mono text-[#991B1B] mt-0.5">
+                                                {act.kode}
+                                              </div>
                                             </div>
-                                            <div className="text-[10px] text-slate-500 leading-snug mt-0.5">
-                                              {act.deskripsi}
-                                            </div>
-                                            <div className="text-[10px] font-mono text-[#991B1B] mt-0.5">
-                                              {act.kode}
-                                            </div>
-                                          </div>
-                                        </label>
-                                      );
-                                    })}
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </>

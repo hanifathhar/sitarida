@@ -34,6 +34,7 @@ import {
   Printer,
   BookOpenText,
   FileSpreadsheet,
+  Coins,
 } from "lucide-react";
 import { SessionPayload } from "@/lib/session";
 
@@ -71,6 +72,15 @@ const PAGE_TITLES: Record<string, string> = {
   "/perencanaan/anggaran-kas": "ANGGARAN KAS BELANJA OPD",
   "/perencanaan/spd": "SURAT PENYEDIAAN DANA (SPD)",
   "/perencanaan/cetak-dokumen": "CETAK DOKUMEN ANGGARAN (PERMENDAGRI NO. 17 TAHUN 2026)",
+  "/penatausahaan/pengaturan": "PENETAPAN BESARAN UANG PERSEDIAAN (UP & UP-KKPD)",
+  "/penatausahaan/spp/up": "SURAT PERMINTAAN PEMBAYARAN - UANG PERSEDIAAN (SPP-UP)",
+  "/penatausahaan/spp/gu": "SURAT PERMINTAAN PEMBAYARAN - GANTI UANG (SPP-GU)",
+  "/penatausahaan/spp/tu": "SURAT PERMINTAAN PEMBAYARAN - TAMBAH UANG (SPP-TU)",
+  "/penatausahaan/spp/ls-gaji": "SURAT PERMINTAAN PEMBAYARAN - LS GAJI & TUNJANGAN (SPP-LS GAJI)",
+  "/penatausahaan/spp/ls-barang-jasa": "SURAT PERMINTAAN PEMBAYARAN - LS BARANG & JASA (SPP-LS BARJAS)",
+  "/penatausahaan/spp/up-kkpd": "SURAT PERMINTAAN PEMBAYARAN - UP KKPD (SPP-UP KKPD)",
+  "/penatausahaan/spp/gu-kkpd": "SURAT PERMINTAAN PEMBAYARAN - GU KKPD (SPP-GU KKPD)",
+  "/penatausahaan/spp/register": "BUKU REGISTER SURAT PERMINTAAN PEMBAYARAN (REGISTER SPP)",
   "/admin/users": "DATA PEGAWAI / PENGGUNA & PENUGASAN OPD",
   "/admin/roles": "MANAJEMEN ROLE & HAK AKSES",
   "/admin/audit-log": "LAPORAN JEJAK AUDIT (AUDIT LOG)",
@@ -90,6 +100,7 @@ export default function AppShell({
   function getActiveGroupByPath(path: string): Record<string, boolean> {
     return {
       perencanaan: path.startsWith("/perencanaan"),
+      penatausahaan: path.startsWith("/penatausahaan"),
       pengaturan: path.startsWith("/admin"),
       masterRekeningOpd: ["/master/rekening", "/master/opd", "/master/unit"].some(
         (p) => path.startsWith(p)
@@ -111,6 +122,9 @@ export default function AppShell({
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
     getActiveGroupByPath(pathname)
   );
+  const [sppDropdownOpen, setSppDropdownOpen] = useState(() =>
+    pathname.startsWith("/penatausahaan/spp")
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -118,11 +132,15 @@ export default function AppShell({
 
   useEffect(() => {
     setOpenGroups(getActiveGroupByPath(pathname));
+    if (pathname.startsWith("/penatausahaan/spp")) {
+      setSppDropdownOpen(true);
+    }
   }, [pathname]);
 
   function toggleGroup(key: string) {
     setOpenGroups((prev) => ({
       perencanaan: false,
+      penatausahaan: false,
       pengaturan: false,
       masterRekeningOpd: false,
       masterNomenklatur: false,
@@ -188,6 +206,71 @@ export default function AppShell({
         m.perm === "menu:perencanaan:rka-skpd" ||
         m.perm === "menu:perencanaan:dpa-skpd") &&
         (can("rka:read") || can("apbd:manage") || can("dashboard:view") || can("dpa:manage")))
+  );
+
+  const penatausahaanMenus = [
+    {
+      label: "Besaran UP",
+      href: "/penatausahaan/pengaturan",
+      icon: Coins,
+      perm: "menu:penatausahaan:pengaturan",
+    },
+  ].filter(
+    (m) =>
+      can(m.perm) ||
+      (m.perm === "menu:penatausahaan:pengaturan" &&
+        (can("penatausahaan:up:read") ||
+          can("penatausahaan:up:manage") ||
+          isSuperadmin))
+  );
+
+  const sppSubMenus = [
+    {
+      label: "SPP-UP",
+      href: "/penatausahaan/spp/up",
+      perm: "menu:penatausahaan:spp-up",
+    },
+    {
+      label: "SPP-GU",
+      href: "/penatausahaan/spp/gu",
+      perm: "menu:penatausahaan:spp-gu",
+    },
+    {
+      label: "SPP-TU",
+      href: "/penatausahaan/spp/tu",
+      perm: "menu:penatausahaan:spp-tu",
+    },
+    {
+      label: "SPP-LS Gaji",
+      href: "/penatausahaan/spp/ls-gaji",
+      perm: "menu:penatausahaan:spp-ls-gaji",
+    },
+    {
+      label: "SPP-LS Barang dan Jasa",
+      href: "/penatausahaan/spp/ls-barang-jasa",
+      perm: "menu:penatausahaan:spp-ls-barang-jasa",
+    },
+    {
+      label: "SPP-UP KKPD",
+      href: "/penatausahaan/spp/up-kkpd",
+      perm: "menu:penatausahaan:spp-up-kkpd",
+    },
+    {
+      label: "SPP-GU KKPD",
+      href: "/penatausahaan/spp/gu-kkpd",
+      perm: "menu:penatausahaan:spp-gu-kkpd",
+    },
+    {
+      label: "Register SPP",
+      href: "/penatausahaan/spp/register",
+      perm: "menu:penatausahaan:spp-register",
+    },
+  ].filter(
+    (m) =>
+      can(m.perm) ||
+      can("spp:read") ||
+      can("spp:write") ||
+      isSuperadmin
   );
 
   const pengaturanMenus = [
@@ -382,6 +465,108 @@ export default function AppShell({
                       </Link>
                     );
                   })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* MENU UTAMA: PENATAUSAHAAN */}
+          {(penatausahaanMenus.length > 0 || sppSubMenus.length > 0) && (
+            <div className="bg-[#8E1B24] rounded-xl p-2 space-y-1.5 shadow-sm border border-red-400/15">
+              <button
+                type="button"
+                suppressHydrationWarning
+                onClick={() => toggleGroup("penatausahaan")}
+                className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs font-bold text-white cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <Coins className="w-4 h-4 text-amber-300" />
+                  <span>Penatausahaan</span>
+                </div>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform ${
+                    openGroups.penatausahaan ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              {openGroups.penatausahaan && (
+                <div className="space-y-1.5 pt-0.5">
+                  {penatausahaanMenus.map((sub) => {
+                    const SubIcon = sub.icon;
+                    const active = pathname === sub.href;
+                    return (
+                      <Link
+                        key={sub.href}
+                        href={sub.href}
+                        onClick={() => setSidebarOpen(false)}
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${
+                          active
+                            ? "bg-white text-[#88131A] font-bold shadow-sm"
+                            : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                        }`}
+                      >
+                        <SubIcon
+                          className={`w-3.5 h-3.5 shrink-0 ${
+                            active ? "text-[#88131A]" : "text-amber-200"
+                          }`}
+                        />
+                        <span className="truncate">{sub.label}</span>
+                      </Link>
+                    );
+                  })}
+
+                  {/* SUB-MENU DROPDOWN SPP */}
+                  {sppSubMenus.length > 0 && (
+                    <div className="space-y-1 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setSppDropdownOpen((prev) => !prev)}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${
+                          pathname.startsWith("/penatausahaan/spp")
+                            ? "bg-[#7A121A] text-white font-bold"
+                            : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <FileText className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                          <span>SPP</span>
+                        </div>
+                        <ChevronDown
+                          className={`w-3 h-3 transition-transform ${
+                            sppDropdownOpen ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
+
+                      {sppDropdownOpen && (
+                        <div className="pl-3.5 space-y-1 border-l-2 border-red-300/20 ml-2 py-0.5">
+                          {sppSubMenus.map((sub) => {
+                            const active = pathname === sub.href;
+                            return (
+                              <Link
+                                key={sub.href}
+                                href={sub.href}
+                                onClick={() => setSidebarOpen(false)}
+                                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] transition-all ${
+                                  active
+                                    ? "bg-white text-[#88131A] font-bold shadow-sm"
+                                    : "text-red-100 hover:text-white hover:bg-[#7A121A] font-medium"
+                                }`}
+                              >
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                    active ? "bg-[#88131A]" : "bg-red-300/60"
+                                  }`}
+                                />
+                                <span className="truncate">{sub.label}</span>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
