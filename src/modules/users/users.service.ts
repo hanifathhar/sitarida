@@ -587,6 +587,26 @@ export async function updateRolePermissions(
     selectedKodes.add("spd:read");
   }
   if (
+    selectedKodes.has("menu:perencanaan:cetak-dokumen") ||
+    selectedKodes.has("apbd:print")
+  ) {
+    selectedKodes.add("rka:read");
+    selectedKodes.add("apbd:manage");
+  }
+  if (
+    selectedKodes.has("menu:perencanaan:rka-skpd") ||
+    selectedKodes.has("rka:print")
+  ) {
+    selectedKodes.add("rka:read");
+  }
+  if (
+    selectedKodes.has("menu:perencanaan:dpa-skpd") ||
+    selectedKodes.has("dpa:print")
+  ) {
+    selectedKodes.add("rka:read");
+    selectedKodes.add("dpa:manage");
+  }
+  if (
     selectedKodes.has("menu:admin:users") ||
     selectedKodes.has("menu:admin:roles") ||
     selectedKodes.has("users:manage")

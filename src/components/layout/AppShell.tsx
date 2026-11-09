@@ -31,6 +31,9 @@ import {
   FileCheck2,
   CalendarDays,
   FileText,
+  Printer,
+  BookOpenText,
+  FileSpreadsheet,
 } from "lucide-react";
 import { SessionPayload } from "@/lib/session";
 
@@ -63,8 +66,11 @@ const PAGE_TITLES: Record<string, string> = {
   "/master/import": "IMPORT & VALIDASI MASTER DATA",
   "/perencanaan/plafond": "PLAFOND ANGGARAN OPD & UNIT KERJA",
   "/perencanaan/rka": "RENCANA KERJA & ANGGARAN (RKA-SKPD)",
+  "/perencanaan/rka-skpd": "RENCANA KERJA DAN ANGGARAN SATUAN KERJA PERANGKAT DAERAH (RKA-SKPD)",
+  "/perencanaan/dpa-skpd": "DOKUMEN PELAKSANAAN ANGGARAN SATUAN KERJA PERANGKAT DAERAH (DPA-SKPD)",
   "/perencanaan/anggaran-kas": "ANGGARAN KAS BELANJA OPD",
   "/perencanaan/spd": "SURAT PENYEDIAAN DANA (SPD)",
+  "/perencanaan/cetak-dokumen": "CETAK DOKUMEN ANGGARAN (PERMENDAGRI NO. 17 TAHUN 2026)",
   "/admin/users": "DATA PEGAWAI / PENGGUNA & PENUGASAN OPD",
   "/admin/roles": "MANAJEMEN ROLE & HAK AKSES",
   "/admin/audit-log": "LAPORAN JEJAK AUDIT (AUDIT LOG)",
@@ -157,7 +163,32 @@ export default function AppShell({
       icon: FileCheck2,
       perm: "menu:perencanaan:spd",
     },
-  ].filter((m) => can(m.perm));
+    {
+      label: "Cetak Dokumen Anggaran",
+      href: "/perencanaan/cetak-dokumen",
+      icon: Printer,
+      perm: "menu:perencanaan:cetak-dokumen",
+    },
+    {
+      label: "RKA SKPD",
+      href: "/perencanaan/rka-skpd",
+      icon: BookOpenText,
+      perm: "menu:perencanaan:rka-skpd",
+    },
+    {
+      label: "DPA SKPD",
+      href: "/perencanaan/dpa-skpd",
+      icon: FileSpreadsheet,
+      perm: "menu:perencanaan:dpa-skpd",
+    },
+  ].filter(
+    (m) =>
+      can(m.perm) ||
+      ((m.perm === "menu:perencanaan:cetak-dokumen" ||
+        m.perm === "menu:perencanaan:rka-skpd" ||
+        m.perm === "menu:perencanaan:dpa-skpd") &&
+        (can("rka:read") || can("apbd:manage") || can("dashboard:view") || can("dpa:manage")))
+  );
 
   const pengaturanMenus = [
     {

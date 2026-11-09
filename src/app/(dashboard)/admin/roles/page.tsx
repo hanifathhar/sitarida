@@ -16,6 +16,8 @@ import {
   KeyRound,
   Building2,
   ShieldCheck,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { RBAC_MODULE_GROUPS } from "@/lib/rbac-catalog";
 import ActionBanner, { ActionFeedback } from "@/components/ui/ActionBanner";
@@ -70,6 +72,28 @@ export default function RolesPage() {
   const [deleteTarget, setDeleteTarget] = useState<RoleItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Fitur Hide Dropdown per Modul
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  const toggleGroupCollapse = (groupKey: string) => {
+    setCollapsedGroups((prev) => ({
+      ...prev,
+      [groupKey]: !prev[groupKey],
+    }));
+  };
+
+  const expandAllGroups = () => {
+    setCollapsedGroups({});
+  };
+
+  const collapseAllGroups = () => {
+    const allCollapsed: Record<string, boolean> = {};
+    for (const grp of RBAC_MODULE_GROUPS) {
+      allCollapsed[grp.groupKey] = true;
+    }
+    setCollapsedGroups(allCollapsed);
+  };
 
   const fetchData = useCallback(async (keepSelectedRoleId?: string) => {
     setLoading(true);
@@ -312,9 +336,8 @@ export default function RolesPage() {
       setFeedback({
         type: "success",
         title: editRoleItem ? "Role Diperbarui" : "Role Baru Ditambahkan",
-        message: `Role '${roleForm.nama}' (Kode: ${roleForm.kode}) berhasil ${
-          editRoleItem ? "diperbarui" : "ditambahkan"
-        }.`,
+        message: `Role '${roleForm.nama}' (Kode: ${roleForm.kode}) berhasil ${editRoleItem ? "diperbarui" : "ditambahkan"
+          }.`,
       });
       await fetchData(json.data?.id || selectedRoleId);
       router.refresh();
@@ -382,7 +405,7 @@ export default function RolesPage() {
         <div>
           <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
             <Shield className="w-5 h-5 text-[#991B1B]" />
-            <span>Manajemen Role, Pemetaan Modul & Menu Dinamis (RBAC)</span>
+            <span>Manajemen Role, Pemetaan Modul</span>
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
             Konfigurasikan secara dinamis menu apa saja yang tampil di Sidebar serta kewenangan aksi (Lihat, Input/Ubah, Kunci/Verifikasi) untuk setiap Peran User.
@@ -438,11 +461,10 @@ export default function RolesPage() {
                   <div
                     key={role.id}
                     onClick={() => handleSelectRole(role)}
-                    className={`p-3.5 transition-all cursor-pointer ${
-                      isSelected
+                    className={`p-3.5 transition-all cursor-pointer ${isSelected
                         ? "bg-red-50/80 border-l-4 border-l-[#991B1B]"
                         : "bg-white hover:bg-slate-50"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
@@ -451,9 +473,8 @@ export default function RolesPage() {
                             #{role.kode}
                           </span>
                           <span
-                            className={`font-extrabold text-xs ${
-                              isSelected ? "text-[#991B1B]" : "text-slate-900"
-                            }`}
+                            className={`font-extrabold text-xs ${isSelected ? "text-[#991B1B]" : "text-slate-900"
+                              }`}
                           >
                             {role.nama}
                           </span>
@@ -532,11 +553,10 @@ export default function RolesPage() {
                           {activeRole.nama}
                         </h2>
                         <span
-                          className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
-                            activeRole.isCrossOpd
+                          className={`text-[10px] px-2 py-0.5 rounded font-bold border ${activeRole.isCrossOpd
                               ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                               : "bg-red-50 text-[#991B1B] border-red-200"
-                          }`}
+                            }`}
                         >
                           {activeRole.isCrossOpd
                             ? "Default: Lintas OPD"
@@ -578,55 +598,126 @@ export default function RolesPage() {
                       )}
                     </div>
 
-                    {!isSuperadminRole && (
-                      <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Kontrol Hide / Expand Dropdown Semua Modul */}
+                      <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
                         <button
                           type="button"
-                          onClick={() => toggleAllCatalog(true)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition cursor-pointer"
+                          onClick={expandAllGroups}
+                          className="px-2.5 py-1 rounded text-slate-700 hover:text-slate-900 hover:bg-white text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                          title="Buka seluruh dropdown modul"
                         >
-                          <CheckSquare className="w-3.5 h-3.5 text-[#991B1B]" />
-                          Aktifkan Semua Modul
+                          <ChevronDown className="w-3.5 h-3.5 text-slate-600" />
+                          <span>Buka Semua</span>
                         </button>
                         <button
                           type="button"
-                          onClick={() => toggleAllCatalog(false)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
+                          onClick={collapseAllGroups}
+                          className="px-2.5 py-1 rounded text-slate-700 hover:text-slate-900 hover:bg-white text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                          title="Tutup / sembunyikan seluruh dropdown modul"
                         >
-                          <Square className="w-3.5 h-3.5 text-slate-500" />
-                          Kosongkan Semua
+                          <ChevronUp className="w-3.5 h-3.5 text-slate-600" />
+                          <span>Tutup Semua</span>
                         </button>
                       </div>
-                    )}
+
+                      {!isSuperadminRole && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleAllCatalog(true)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition cursor-pointer"
+                          >
+                            <CheckSquare className="w-3.5 h-3.5 text-[#991B1B]" />
+                            Aktifkan Semua Modul
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleAllCatalog(false)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
+                          >
+                            <Square className="w-3.5 h-3.5 text-slate-500" />
+                            Kosongkan Semua
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 {/* Daftar Kelompok Modul & Menu */}
                 {RBAC_MODULE_GROUPS.map((group) => {
+                  const isCollapsed = !!collapsedGroups[group.groupKey];
                   const allGroupMenuChecked = group.items.every(
                     (it) =>
                       isSuperadminRole || checkedKodes.includes(it.menuPermKode)
                   );
+                  const activeCountInGroup = group.items.filter(
+                    (it) =>
+                      isSuperadminRole || checkedKodes.includes(it.menuPermKode)
+                  ).length;
 
                   return (
                     <div
                       key={group.groupKey}
-                      className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden"
+                      className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden transition-all duration-200"
                     >
-                      {/* Header Modul */}
-                      <div className="px-5 py-3.5 bg-[#5E0E14] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div>
-                          <h3 className="text-xs sm:text-sm font-extrabold tracking-wide flex items-center gap-2">
-                            <Layers className="w-4 h-4 text-amber-300" />
-                            <span>{group.groupTitle}</span>
-                          </h3>
-                          <p className="text-[11px] text-red-100/90 mt-0.5">
-                            {group.groupSubtitle}
-                          </p>
+                      {/* Header Modul (Dapat diklik untuk Toggle / Hide Dropdown) */}
+                      <div
+                        onClick={() => toggleGroupCollapse(group.groupKey)}
+                        className="px-4 sm:px-5 py-3.5 bg-gradient-to-r from-[#46090E] via-[#5E0E14] to-[#781219] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer hover:brightness-105 select-none transition"
+                        title={
+                          isCollapsed
+                            ? "Klik untuk membuka modul ini"
+                            : "Klik untuk menyembunyikan modul ini"
+                        }
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleGroupCollapse(group.groupKey);
+                            }}
+                            className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-amber-300 transition shrink-0"
+                            title={isCollapsed ? "Buka modul" : "Sembunyikan modul"}
+                          >
+                            <ChevronDown
+                              className={`w-4 h-4 transition-transform duration-200 ${
+                                isCollapsed
+                                  ? "-rotate-90 text-amber-300/70"
+                                  : "rotate-0 text-amber-300"
+                              }`}
+                            />
+                          </button>
+
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="text-xs sm:text-sm font-extrabold tracking-wide flex items-center gap-2">
+                                <Layers className="w-4 h-4 text-amber-300" />
+                                <span>{group.groupTitle}</span>
+                              </h3>
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                  activeCountInGroup > 0
+                                    ? "bg-amber-400/20 text-amber-200 border-amber-300/40"
+                                    : "bg-white/10 text-white/70 border-white/20"
+                                }`}
+                              >
+                                {activeCountInGroup} dari {group.items.length} Menu Aktif
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-red-100/80 mt-0.5 truncate">
+                              {group.groupSubtitle}
+                            </p>
+                          </div>
                         </div>
 
-                        {!isSuperadminRole && (
-                          <div className="flex items-center gap-1.5 shrink-0">
+                        <div
+                          className="flex items-center gap-2 shrink-0 self-end sm:self-auto"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {!isSuperadminRole && (
                             <button
                               type="button"
                               onClick={() =>
@@ -638,16 +729,29 @@ export default function RolesPage() {
                               className="px-2.5 py-1 rounded bg-white/15 hover:bg-white/25 text-white text-[11px] font-bold transition cursor-pointer"
                             >
                               {allGroupMenuChecked
-                                ? "Nonaktifkan Modul Ini"
-                                : "Pilih Semua di Modul Ini"}
+                                ? "Nonaktifkan Semua"
+                                : "Pilih Semua"}
                             </button>
-                          </div>
-                        )}
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => toggleGroupCollapse(group.groupKey)}
+                            className="px-2.5 py-1 rounded bg-black/25 hover:bg-black/35 text-amber-200 text-[11px] font-semibold transition cursor-pointer flex items-center gap-1"
+                          >
+                            <span>{isCollapsed ? "Buka Modul" : "Sembunyikan"}</span>
+                            <ChevronDown
+                              className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                isCollapsed ? "-rotate-90" : "rotate-0"
+                              }`}
+                            />
+                          </button>
+                        </div>
                       </div>
 
-                      {/* Daftar Menu di dalam Modul */}
-                      <div className="p-4 space-y-3 divide-y divide-slate-100">
-                        {group.items.map((item) => {
+                      {/* Daftar Menu di dalam Modul (Hanya tampil jika tidak di-hide / collapse) */}
+                      {!isCollapsed && (
+                        <div className="p-4 space-y-3 divide-y divide-slate-100 animate-in fade-in duration-150">
+                          {group.items.map((item) => {
                           const menuChecked =
                             isSuperadminRole ||
                             checkedKodes.includes(item.menuPermKode);
@@ -655,11 +759,10 @@ export default function RolesPage() {
                           return (
                             <div
                               key={item.menuKey}
-                              className={`pt-3 first:pt-0 rounded-xl p-3.5 border transition-colors ${
-                                menuChecked
+                              className={`pt-3 first:pt-0 rounded-xl p-3.5 border transition-colors ${menuChecked
                                   ? "bg-red-50/35 border-red-200"
                                   : "bg-slate-50/60 border-slate-200"
-                              }`}
+                                }`}
                             >
                               {/* Baris Utama: Checkbox Tampilkan Menu di Sidebar */}
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -697,11 +800,10 @@ export default function RolesPage() {
                                 </label>
 
                                 <span
-                                  className={`shrink-0 self-start sm:self-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
-                                    menuChecked
+                                  className={`shrink-0 self-start sm:self-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${menuChecked
                                       ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
                                       : "bg-slate-200 text-slate-600"
-                                  }`}
+                                    }`}
                                 >
                                   {menuChecked ? "MENU AKTIF" : "DISEMBUNYIKAN"}
                                 </span>
@@ -726,11 +828,10 @@ export default function RolesPage() {
                                       return (
                                         <label
                                           key={act.kode}
-                                          className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition ${
-                                            actChecked
+                                          className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition ${actChecked
                                               ? "bg-white border-[#991B1B]/40 shadow-2xs"
                                               : "bg-white/60 border-slate-200 opacity-75 hover:opacity-100"
-                                          }`}
+                                            }`}
                                         >
                                           <input
                                             type="checkbox"
@@ -765,7 +866,8 @@ export default function RolesPage() {
                           );
                         })}
                       </div>
-                    </div>
+                    )}
+                  </div>
                   );
                 })}
               </>

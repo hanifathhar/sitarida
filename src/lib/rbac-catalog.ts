@@ -146,6 +146,51 @@ export const RBAC_MODULE_GROUPS: MenuPermissionGroup[] = [
           },
         ],
       },
+      {
+        menuKey: "cetak-dokumen",
+        menuLabel: "Cetak Dokumen Anggaran",
+        menuHref: "/perencanaan/cetak-dokumen",
+        menuPermKode: "menu:perencanaan:cetak-dokumen",
+        menuPermNama: "Tampilkan Menu Cetak Dokumen Anggaran (Permendagri 17/2026)",
+        modul: "perencanaan",
+        actions: [
+          {
+            kode: "apbd:print",
+            nama: "Cetak Dokumen APBD (Permendagri 17/2026)",
+            deskripsi: "Mencetak 9 dokumen resmi anggaran APBD sesuai Permendagri No. 17 Tahun 2026",
+          },
+        ],
+      },
+      {
+        menuKey: "rka-skpd",
+        menuLabel: "RKA SKPD",
+        menuHref: "/perencanaan/rka-skpd",
+        menuPermKode: "menu:perencanaan:rka-skpd",
+        menuPermNama: "Tampilkan Menu Formulir RKA SKPD",
+        modul: "perencanaan",
+        actions: [
+          {
+            kode: "rka:print",
+            nama: "Cetak Formulir Ringkasan RKA SKPD",
+            deskripsi: "Mencetak dokumen formulir resmi RKA SKPD per Organisasi / OPD",
+          },
+        ],
+      },
+      {
+        menuKey: "dpa-skpd",
+        menuLabel: "DPA SKPD",
+        menuHref: "/perencanaan/dpa-skpd",
+        menuPermKode: "menu:perencanaan:dpa-skpd",
+        menuPermNama: "Tampilkan Menu Formulir DPA SKPD",
+        modul: "perencanaan",
+        actions: [
+          {
+            kode: "dpa:print",
+            nama: "Cetak Formulir Ringkasan DPA SKPD",
+            deskripsi: "Mencetak dokumen formulir resmi DPA SKPD per Organisasi / OPD",
+          },
+        ],
+      },
     ],
   },
   {
