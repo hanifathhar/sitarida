@@ -216,12 +216,16 @@ export async function getUnitSpdData(params: {
 }) {
   const { tahunAnggaran, opdId, unitKerjaId } = params;
 
-  const [opd, unit, lockInfo] = await Promise.all([
+  const [opd, unit, lockInfo, bpkpadOpd] = await Promise.all([
     prisma.opd.findUnique({ where: { id: opdId } }),
     unitKerjaId
       ? prisma.unitKerja.findUnique({ where: { id: unitKerjaId } })
       : Promise.resolve(null),
     getAnggaranKasLockStatus({ tahunAnggaran, opdId, unitKerjaId }),
+    prisma.opd.findFirst({
+      where: { kd_skpd: { startsWith: "5.02" } },
+      select: { kepalaNama: true, kepalaNip: true, kepalaJabatan: true },
+    }),
   ]);
 
   if (!opd) throw new Error("OPD tidak ditemukan.");
@@ -525,6 +529,19 @@ export async function getUnitSpdData(params: {
     .map(({ subkegSet, ...rest }) => rest);
 
   return {
+    opdInfo: {
+      id: opd.id,
+      kd_skpd: opd.kd_skpd,
+      nm_skpd: opd.nm_skpd,
+      kepalaNama: opd.kepalaNama || "-",
+      kepalaNip: opd.kepalaNip || "-",
+      kepalaJabatan: opd.kepalaJabatan || `Kepala ${opd.nm_skpd}`,
+    },
+    ppkdInfo: {
+      nama: bpkpadOpd?.kepalaNama || "M. FRANANDA, S.E, M.M",
+      pangkat: "PEMBINA UTAMA MUDA",
+      nip: bpkpadOpd?.kepalaNip || "19800723 200312 1 002",
+    },
     isAnggaranKasLocked: lockInfo.isLocked,
     anggaranKasStatus: lockInfo.status,
     totalPaguRka,

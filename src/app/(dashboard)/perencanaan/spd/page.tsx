@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   FileCheck2,
   Building2,
@@ -19,6 +19,12 @@ import {
   Wallet,
   Eye,
   Edit3,
+  Printer,
+  FileText,
+  FileSpreadsheet,
+  ChevronDown,
+  SlidersHorizontal,
+  ExternalLink,
 } from "lucide-react";
 import ActionBanner from "@/components/ui/ActionBanner";
 import ConfirmDeleteDialog from "@/components/ui/ConfirmDeleteDialog";
@@ -141,6 +147,19 @@ interface SpdRow {
 }
 
 interface UnitSpdResponse {
+  opdInfo?: {
+    id: string;
+    kd_skpd: string;
+    nm_skpd: string;
+    kepalaNama: string;
+    kepalaNip: string;
+    kepalaJabatan: string;
+  };
+  ppkdInfo?: {
+    nama: string;
+    pangkat: string;
+    nip: string;
+  };
   isAnggaranKasLocked: boolean;
   anggaranKasStatus: string;
   totalPaguRka: number;
@@ -151,8 +170,27 @@ interface UnitSpdResponse {
   spdRows: SpdRow[];
 }
 
+const NAMA_BULAN_PENUH: Record<number, string> = {
+  1: "Januari",
+  2: "Februari",
+  3: "Maret",
+  4: "April",
+  5: "Mei",
+  6: "Juni",
+  7: "Juli",
+  8: "Agustus",
+  9: "September",
+  10: "Oktober",
+  11: "November",
+  12: "Desember",
+};
+
 function formatRupiah(val: number) {
   return "Rp " + Math.round(val || 0).toLocaleString("id-ID");
+}
+
+function formatAngkaTitik(val: number) {
+  return Math.round(val || 0).toLocaleString("id-ID");
 }
 
 function formatTanggal(dateStr: string) {
@@ -164,6 +202,115 @@ function formatTanggal(dateStr: string) {
     month: "short",
     year: "numeric",
   });
+}
+
+function formatTanggalLengkap(dateStr: string) {
+  if (!dateStr) return "-";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+/**
+ * Konversi angka menjadi kalimat Terbilang Bahasa Indonesia + "Rupiah"
+ */
+function terbilangKata(n: number): string {
+  const angka = Math.floor(Math.abs(n));
+  const satuan = [
+    "",
+    "Satu",
+    "Dua",
+    "Tiga",
+    "Empat",
+    "Lima",
+    "Enam",
+    "Tujuh",
+    "Delapan",
+    "Sembilan",
+    "Sepuluh",
+    "Sebelas",
+  ];
+
+  if (angka < 12) return satuan[angka];
+  if (angka < 20) return `${terbilangKata(angka - 10)} Belas`.trim();
+  if (angka < 100) {
+    return `${terbilangKata(Math.floor(angka / 10))} Puluh ${terbilangKata(
+      angka % 10
+    )}`.trim();
+  }
+  if (angka < 200) {
+    return `Seratus ${terbilangKata(angka - 100)}`.trim();
+  }
+  if (angka < 1000) {
+    return `${terbilangKata(Math.floor(angka / 100))} Ratus ${terbilangKata(
+      angka % 100
+    )}`.trim();
+  }
+  if (angka < 2000) {
+    return `Seribu ${terbilangKata(angka - 1000)}`.trim();
+  }
+  if (angka < 1_000_000) {
+    return `${terbilangKata(Math.floor(angka / 1000))} Ribu ${terbilangKata(
+      angka % 1000
+    )}`.trim();
+  }
+  if (angka < 1_000_000_000) {
+    return `${terbilangKata(
+      Math.floor(angka / 1_000_000)
+    )} Juta ${terbilangKata(angka % 1_000_000)}`.trim();
+  }
+  if (angka < 1_000_000_000_000) {
+    return `${terbilangKata(
+      Math.floor(angka / 1_000_000_000)
+    )} Milyar ${terbilangKata(angka % 1_000_000_000)}`.trim();
+  }
+  return `${terbilangKata(
+    Math.floor(angka / 1_000_000_000_000)
+  )} Trilyun ${terbilangKata(angka % 1_000_000_000_000)}`.trim();
+}
+
+function terbilangRupiah(val: number): string {
+  const bulat = Math.round(val || 0);
+  if (bulat <= 0) return "Nol Rupiah";
+  return `${terbilangKata(bulat).replace(/\s+/g, " ")} Rupiah`;
+}
+
+/**
+ * Ekstrak kode pendek Program (1.01.01), Kegiatan (1.01.01.2.01), dan Sub Kegiatan (1.01.01.2.01.01)
+ * seperti pada Lampiran SPD resmi
+ */
+function formatShortProgKegSubCodes(
+  kdProg: string,
+  kdKeg: string,
+  kdSub: string
+) {
+  const s = (kdSub || "").trim();
+  // Format gabungan: "1.01.1.01.2.22.0.00.01.00.01.2.01.01" (panjang >= 35)
+  if (s.length >= 35) {
+    const urusan = s.substring(0, 4); // contoh "1.01"
+    const tail = s.substring(26); // contoh "01.2.01.01"
+    const shortSub = `${urusan}.${tail}`;
+    const parts = tail.split(".");
+    const shortKeg =
+      parts.length >= 3
+        ? `${urusan}.${parts[0]}.${parts[1]}.${parts[2]}`
+        : kdKeg;
+    const shortProg = parts.length >= 1 ? `${urusan}.${parts[0]}` : kdProg;
+    return {
+      shortProg,
+      shortKeg,
+      shortSub,
+    };
+  }
+  return {
+    shortProg: kdProg,
+    shortKeg: kdKeg,
+    shortSub: kdSub,
+  };
 }
 
 export default function SpdPage() {
@@ -196,6 +343,42 @@ export default function SpdPage() {
     null
   );
   const [searchDetailRek, setSearchDetailRek] = useState("");
+
+  // Dropdown Cetak SPD (Fixed position agar tidak terpotong tabel)
+  const [printDropdown, setPrintDropdown] = useState<{
+    doc: SpdNomorSummary;
+    top: number;
+    left: number;
+  } | null>(null);
+
+  // Modal Report Preview SPD (1. Ringkasan SPD & 2. Lampiran SPD)
+  const [reportModal, setReportModal] = useState<{
+    doc: SpdNomorSummary;
+    type: "RINGKASAN" | "LAMPIRAN";
+  } | null>(null);
+  const [showReportFormConfig, setShowReportFormConfig] = useState(false);
+  const [reportForm, setReportForm] = useState({
+    nomorDpa: "",
+    kepalaSkpd: "",
+    tempatTtd: "Sipirok",
+    tanggalTtd: "",
+    ppkdNama: "M. FRANANDA, S.E, M.M",
+    ppkdPangkat: "PEMBINA UTAMA MUDA",
+    ppkdNip: "19800723 200312 1 002",
+  });
+  const reportIframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  // Tutup dropdown Cetak SPD saat klik di luar atau scroll
+  useEffect(() => {
+    if (!printDropdown) return;
+    const closeDropdown = () => setPrintDropdown(null);
+    window.addEventListener("click", closeDropdown);
+    window.addEventListener("scroll", closeDropdown, true);
+    return () => {
+      window.removeEventListener("click", closeDropdown);
+      window.removeEventListener("scroll", closeDropdown, true);
+    };
+  }, [printDropdown]);
 
   // Modal Input / Terbitkan SPD per 3 Bulan
   const [showModal, setShowModal] = useState(false);
@@ -335,7 +518,6 @@ export default function SpdPage() {
     if (spdData?.spdSummaryByNomor && Array.isArray(spdData.spdSummaryByNomor)) {
       return spdData.spdSummaryByNomor;
     }
-    // Fallback jika dikalkulasi dari spdRows
     const rows = spdData?.spdRows || [];
     const map = new Map<
       string,
@@ -440,6 +622,748 @@ export default function SpdPage() {
       nama.includes("bidang anggaran")
     );
   }, [scope]);
+
+  // =========================================================================
+  // PEMBUKA MODAL REPORT SPD & PEMBANGUN HTML (1. RINGKASAN & 2. LAMPIRAN)
+  // =========================================================================
+  function openSpdReportModal(
+    doc: SpdNomorSummary,
+    type: "RINGKASAN" | "LAMPIRAN"
+  ) {
+    const defaultNomorDpa = `DPA/A.1/${doc.kd_skpd}.0000/001/${tahun}`;
+    const defaultKepalaSkpd =
+      spdData?.opdInfo?.kepalaNama && spdData.opdInfo.kepalaNama !== "-"
+        ? spdData.opdInfo.kepalaNama
+        : `KEPALA ${doc.nm_skpd.toUpperCase()}`;
+    const defaultPpkdNama = spdData?.ppkdInfo?.nama || "M. FRANANDA, S.E, M.M";
+    const defaultPpkdPangkat =
+      spdData?.ppkdInfo?.pangkat || "PEMBINA UTAMA MUDA";
+    const defaultPpkdNip =
+      spdData?.ppkdInfo?.nip || "19800723 200312 1 002";
+
+    setReportForm({
+      nomorDpa: defaultNomorDpa,
+      kepalaSkpd: defaultKepalaSkpd,
+      tempatTtd: "Sipirok",
+      tanggalTtd: formatTanggalLengkap(doc.tgl_spd),
+      ppkdNama: defaultPpkdNama,
+      ppkdPangkat: defaultPpkdPangkat,
+      ppkdNip: defaultPpkdNip,
+    });
+    setPrintDropdown(null);
+    setReportModal({ doc, type });
+  }
+
+  function buildRingkasanSpdHtml(
+    doc: SpdNomorSummary,
+    cfg: typeof reportForm
+  ): string {
+    if (!spdData) return "";
+
+    const nomorDpa = cfg.nomorDpa || `DPA/A.1/${doc.kd_skpd}.0000/001/${tahun}`;
+    const kepalaSkpd = cfg.kepalaSkpd || `KEPALA ${doc.nm_skpd.toUpperCase()}`;
+    const ppkdNama = cfg.ppkdNama || "M. FRANANDA, S.E, M.M";
+    const ppkdPangkat = cfg.ppkdPangkat || "PEMBINA UTAMA MUDA";
+    const ppkdNip = cfg.ppkdNip || "19800723 200312 1 002";
+    const tempatTtd = cfg.tempatTtd || "Sipirok";
+    const tglCetak = cfg.tanggalTtd || formatTanggalLengkap(doc.tgl_spd);
+
+    const namaBulanAwal = NAMA_BULAN_PENUH[doc.bulan_awal] || "Januari";
+    const namaBulanAkhir = NAMA_BULAN_PENUH[doc.bulan_akhir] || "Maret";
+
+    const jumlahDanaDpa = spdData.totalPaguRka || 0;
+    const akumulasiSpdSebelumnya = (spdData.spdRows || [])
+      .filter((r) => r.triwulan < doc.triwulan)
+      .reduce((acc, r) => acc + (Number(r.nilai) || 0), 0);
+    const nilaiSpdSaatIni = doc.totalNilaiSpd || 0;
+    const sisaDanaDpa = Math.max(
+      0,
+      jumlahDanaDpa - akumulasiSpdSebelumnya - nilaiSpdSaatIni
+    );
+
+    const origin =
+      typeof window !== "undefined" ? window.location.origin : "";
+
+    return `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>Ringkasan SPD - ${doc.no_spd}</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 14mm 18mm 14mm 18mm;
+    }
+    body {
+      font-family: "Times New Roman", Times, serif;
+      font-size: 11pt;
+      line-height: 1.35;
+      color: #000;
+      background: #fff;
+      margin: 0;
+      padding: 12mm 14mm;
+    }
+    @media print {
+      body {
+        padding: 0;
+      }
+    }
+    .header-wrap {
+      position: relative;
+      text-align: center;
+      min-height: 85px;
+      margin-bottom: 10px;
+    }
+    .header-logo {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 66px;
+      height: auto;
+    }
+    .header-title {
+      font-weight: bold;
+      font-size: 11.5pt;
+      line-height: 1.3;
+      padding: 0 72px;
+    }
+    .sub-center-title {
+      text-align: center;
+      font-weight: bold;
+      margin: 10px 0 8px 0;
+    }
+    table.konsideran {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 6px;
+    }
+    table.konsideran td {
+      vertical-align: top;
+      padding: 2px 0;
+      text-align: justify;
+    }
+    table.memutuskan {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+    }
+    table.memutuskan td {
+      vertical-align: top;
+      padding: 2.5px 0;
+    }
+    .terbilang {
+      font-style: italic;
+      margin-top: 1px;
+      margin-bottom: 3px;
+    }
+    .ttd-wrap {
+      margin-top: 22px;
+      width: 100%;
+      display: flex;
+      justify-content: flex-end;
+    }
+    .ttd-box {
+      width: 310px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header-wrap">
+    <img src="${origin}/Logo-Tapsel.png" class="header-logo" alt="Logo Tapanuli Selatan" onerror="this.style.display='none'" />
+    <div class="header-title">
+      PEMERINTAH KABUPATEN TAPANULI SELATAN<br/>
+      PEJABAT PENGELOLA KEUANGAN DAERAH SELAKU BENDAHARA UMUM DAERAH<br/>
+      NOMOR : ${doc.no_spd}<br/>
+      TENTANG<br/>
+      SURAT PENYEDIAAN DANA ANGGARAN BELANJA DAERAH<br/>
+      TAHUN ANGGARAN ${tahun}
+    </div>
+  </div>
+
+  <div class="sub-center-title">PPKD SELAKU BUD</div>
+
+  <table class="konsideran">
+    <tr>
+      <td style="width: 92px; font-weight: bold;">Menimbang</td>
+      <td style="width: 14px;">:</td>
+      <td>
+        bahwa untuk melaksanakan anggaran belanja sub kegiatan Tahun Anggaran ${tahun} berdasarkan DPA-SKPD dan anggaran kas yang telah ditetapkan, perlu disediakan pendanaan dengan menerbitkan Surat Penyediaan Dana (SPD);
+      </td>
+    </tr>
+    <tr>
+      <td style="font-weight: bold; padding-top: 6px;">Mengingat</td>
+      <td style="padding-top: 6px;">:</td>
+      <td style="padding-top: 6px;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="width: 18px;">1.</td>
+            <td>Peraturan Daerah Kabupaten Tapanuli Selatan Nomor 5 Tahun 2020 tentang Pengelola Keuangan Daerah;</td>
+          </tr>
+          <tr>
+            <td>2.</td>
+            <td>Peraturan Daerah Kabupaten Tapanuli Selatan Nomor 2 Tahun 2023 tentang Perubahan Anggaran Pendapatan dan Belanja Daerah Tahun Anggaran ${tahun};</td>
+          </tr>
+          <tr>
+            <td>3.</td>
+            <td>Peraturan Bupati Tapanuli Selatan Nomor 29 Tahun 2023 tentang Penjabaran Perubahan Anggaran Pendapatan dan Belanja Daerah Tahun Anggaran 2023, sebagaimana telah diubah dengan Peraturan Bupati Tapanuli Selatan Nomor 33 Tahun 2023 tentang Perubahan Atas Peraturan Bupati Tapanuli Selatan Nomor 29 Tahun 2023 tentang Penjabaran Perubahan Anggaran Pendapatan dan Belanja Daerah Tahun Anggaran 2023;</td>
+          </tr>
+          <tr>
+            <td>4.</td>
+            <td>DPA-SKPD Kabupaten Tapanuli Selatan Nomor ${nomorDpa} TA. ${tahun};</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  <div class="sub-center-title">MEMUTUSKAN :</div>
+
+  <p style="margin: 4px 0 8px 0; text-align: justify;">
+    Berdasarkan Peraturan Daerah Kabupaten Tapanuli Selatan Nomor 2 Tahun 2023 tentang Perubahan Anggaran Pendapatan dan Belanja Daerah Tahun Anggaran ${tahun}, menetapkan/menyediakan kredit anggaran sebagai berikut :
+  </p>
+
+  <table class="memutuskan">
+    <tr>
+      <td style="width: 20px;">1.</td>
+      <td style="width: 255px;">Dasar penyediaan dana</td>
+      <td style="width: 14px;"></td>
+      <td></td>
+    </tr>
+    <tr>
+      <td></td>
+      <td style="padding-left: 12px;">DPA-SKPD</td>
+      <td>:</td>
+      <td>${nomorDpa}</td>
+    </tr>
+    <tr>
+      <td>2.</td>
+      <td>Ditujukan kepada SKPD</td>
+      <td>:</td>
+      <td>${doc.nm_skpd}</td>
+    </tr>
+    <tr>
+      <td>3.</td>
+      <td>Kepala SKPD</td>
+      <td>:</td>
+      <td>${kepalaSkpd}</td>
+    </tr>
+    <tr>
+      <td>4.</td>
+      <td>Jumlah penyediaan dana</td>
+      <td>:</td>
+      <td>
+        <div>Rp. ${formatAngkaTitik(nilaiSpdSaatIni)}</div>
+        <div class="terbilang">(${terbilangRupiah(nilaiSpdSaatIni)})</div>
+      </td>
+    </tr>
+    <tr>
+      <td>5.</td>
+      <td>Untuk kebutuhan</td>
+      <td>:</td>
+      <td>Bulan ${namaBulanAwal} s/d. ${namaBulanAkhir} ${tahun}</td>
+    </tr>
+    <tr>
+      <td>6.</td>
+      <td>Ikhtisar penyediaan dana</td>
+      <td></td>
+      <td></td>
+    </tr>
+    <tr>
+      <td></td>
+      <td style="padding-left: 12px;">a) Jumlah dana DPA-SKPD</td>
+      <td>:</td>
+      <td>
+        <div>Rp. ${formatAngkaTitik(jumlahDanaDpa)}</div>
+        <div class="terbilang">(${terbilangRupiah(jumlahDanaDpa)})</div>
+      </td>
+    </tr>
+    <tr>
+      <td></td>
+      <td style="padding-left: 12px;">b) Akumulasi SPD Sebelumnya</td>
+      <td>:</td>
+      <td>
+        <div>Rp. ${formatAngkaTitik(akumulasiSpdSebelumnya)}</div>
+        <div class="terbilang">(${terbilangRupiah(akumulasiSpdSebelumnya)})</div>
+      </td>
+    </tr>
+    <tr>
+      <td></td>
+      <td style="padding-left: 12px;">c) Jumlah dana yang di SPD kan saat ini</td>
+      <td>:</td>
+      <td>
+        <div>Rp. ${formatAngkaTitik(nilaiSpdSaatIni)}</div>
+        <div class="terbilang">(${terbilangRupiah(nilaiSpdSaatIni)})</div>
+      </td>
+    </tr>
+    <tr>
+      <td></td>
+      <td style="padding-left: 12px;">d) Sisa jumlah dana DPA-SKPD yang belum di-SPD-kan</td>
+      <td>:</td>
+      <td>
+        <div>Rp. ${formatAngkaTitik(sisaDanaDpa)}</div>
+        <div class="terbilang">(${terbilangRupiah(sisaDanaDpa)})</div>
+      </td>
+    </tr>
+    <tr>
+      <td>7.</td>
+      <td>Ketentuan-ketentuan lain</td>
+      <td>:</td>
+      <td>${doc.keterangan || "-"}</td>
+    </tr>
+  </table>
+
+  <div class="ttd-wrap">
+    <div class="ttd-box">
+      <div>Ditetapkan di ${tempatTtd}</div>
+      <div>pada tanggal ${tglCetak}</div>
+      <div style="font-weight: bold; margin-top: 8px;">
+        PEJABAT PENGELOLA KEUANGAN DAERAH<br/>
+        SELAKU BENDAHARA UMUM DAERAH,
+      </div>
+      <div style="height: 62px;"></div>
+      <div style="font-weight: bold;">${ppkdNama}</div>
+      <div style="font-weight: bold;">${ppkdPangkat}</div>
+      <div>NIP. ${ppkdNip}</div>
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
+  function buildLampiranSpdHtml(
+    doc: SpdNomorSummary,
+    cfg: typeof reportForm
+  ): string {
+    if (!spdData) return "";
+
+    const nomorDpa = cfg.nomorDpa || `DPA/A.1/${doc.kd_skpd}.0000/001/${tahun}`;
+    const ppkdNama = cfg.ppkdNama || "M. FRANANDA, S.E, M.M";
+    const ppkdPangkat = cfg.ppkdPangkat || "PEMBINA UTAMA MUDA";
+    const ppkdNip = cfg.ppkdNip || "19800723 200312 1 002";
+    const tempatTtd = cfg.tempatTtd || "Sipirok";
+    const tglCetak = cfg.tanggalTtd || formatTanggalLengkap(doc.tgl_spd);
+
+    const namaBulanAwal = NAMA_BULAN_PENUH[doc.bulan_awal] || "Januari";
+    const namaBulanAkhir = NAMA_BULAN_PENUH[doc.bulan_akhir] || "Maret";
+
+    const prevSpdByKey = new Map<string, number>();
+    for (const r of spdData.spdRows || []) {
+      if (r.triwulan < doc.triwulan) {
+        const key = `${r.kd_sub_kegiatan}__${r.kd_rek6}`;
+        prevSpdByKey.set(
+          key,
+          (prevSpdByKey.get(key) || 0) + (Number(r.nilai) || 0)
+        );
+      }
+    }
+
+    const currSpdByKey = new Map<string, number>();
+    for (const r of spdData.spdRows || []) {
+      if (r.no_spd === doc.no_spd) {
+        const key = `${r.kd_sub_kegiatan}__${r.kd_rek6}`;
+        currSpdByKey.set(
+          key,
+          (currSpdByKey.get(key) || 0) + (Number(r.nilai) || 0)
+        );
+      }
+    }
+
+    const baseItems =
+      spdData.triwulanSummaries?.[doc.triwulan as 1 | 2 | 3 | 4]?.items ||
+      spdData.triwulanSummaries?.[1]?.items ||
+      [];
+
+    interface RekNode {
+      kd_rek6: string;
+      nm_rek6: string;
+      anggaran: number;
+      akumulasiLalu: number;
+      spdIni: number;
+      sisa: number;
+    }
+    interface SubNode {
+      kode: string;
+      nama: string;
+      anggaran: number;
+      akumulasiLalu: number;
+      spdIni: number;
+      sisa: number;
+      rekenings: RekNode[];
+    }
+    interface KegNode {
+      kode: string;
+      nama: string;
+      anggaran: number;
+      akumulasiLalu: number;
+      spdIni: number;
+      sisa: number;
+      subs: Map<string, SubNode>;
+    }
+    interface ProgNode {
+      kode: string;
+      nama: string;
+      anggaran: number;
+      akumulasiLalu: number;
+      spdIni: number;
+      sisa: number;
+      kegs: Map<string, KegNode>;
+    }
+
+    const progMap = new Map<string, ProgNode>();
+
+    for (const item of baseItems) {
+      const { shortProg, shortKeg, shortSub } = formatShortProgKegSubCodes(
+        item.kd_program,
+        item.kd_kegiatan,
+        item.kd_sub_kegiatan
+      );
+      const key = `${item.kd_sub_kegiatan}__${item.kd_rek6}`;
+      const anggaran = Number(item.paguRka) || 0;
+      const akumulasiLalu = prevSpdByKey.get(key) || 0;
+      const spdIni = currSpdByKey.has(key)
+        ? currSpdByKey.get(key)!
+        : Number(item.nilai) || 0;
+      const sisa = anggaran - akumulasiLalu - spdIni;
+
+      if (!progMap.has(shortProg)) {
+        progMap.set(shortProg, {
+          kode: shortProg,
+          nama: item.nm_program,
+          anggaran: 0,
+          akumulasiLalu: 0,
+          spdIni: 0,
+          sisa: 0,
+          kegs: new Map(),
+        });
+      }
+      const pNode = progMap.get(shortProg)!;
+      pNode.anggaran += anggaran;
+      pNode.akumulasiLalu += akumulasiLalu;
+      pNode.spdIni += spdIni;
+      pNode.sisa += sisa;
+
+      if (!pNode.kegs.has(shortKeg)) {
+        pNode.kegs.set(shortKeg, {
+          kode: shortKeg,
+          nama: item.nm_kegiatan,
+          anggaran: 0,
+          akumulasiLalu: 0,
+          spdIni: 0,
+          sisa: 0,
+          subs: new Map(),
+        });
+      }
+      const kNode = pNode.kegs.get(shortKeg)!;
+      kNode.anggaran += anggaran;
+      kNode.akumulasiLalu += akumulasiLalu;
+      kNode.spdIni += spdIni;
+      kNode.sisa += sisa;
+
+      if (!kNode.subs.has(shortSub)) {
+        kNode.subs.set(shortSub, {
+          kode: shortSub,
+          nama: item.nm_sub_kegiatan,
+          anggaran: 0,
+          akumulasiLalu: 0,
+          spdIni: 0,
+          sisa: 0,
+          rekenings: [],
+        });
+      }
+      const sNode = kNode.subs.get(shortSub)!;
+      sNode.anggaran += anggaran;
+      sNode.akumulasiLalu += akumulasiLalu;
+      sNode.spdIni += spdIni;
+      sNode.sisa += sisa;
+
+      sNode.rekenings.push({
+        kd_rek6: item.kd_rek6,
+        nm_rek6: item.nm_rek6,
+        anggaran,
+        akumulasiLalu,
+        spdIni,
+        sisa,
+      });
+    }
+
+    let rowNumber = 1;
+    let tableRowsHtml = "";
+    let grandAnggaran = 0;
+    let grandLalu = 0;
+    let grandIni = 0;
+    let grandSisa = 0;
+
+    for (const p of progMap.values()) {
+      grandAnggaran += p.anggaran;
+      grandLalu += p.akumulasiLalu;
+      grandIni += p.spdIni;
+      grandSisa += p.sisa;
+
+      tableRowsHtml += `
+        <tr class="row-bold">
+          <td class="c-no">${rowNumber++}.</td>
+          <td class="c-kode">${p.kode}</td>
+          <td class="c-uraian">${(p.nama || "").toUpperCase()}</td>
+          <td class="c-num">${formatAngkaTitik(p.anggaran)}</td>
+          <td class="c-num">${formatAngkaTitik(p.akumulasiLalu)}</td>
+          <td class="c-num">${formatAngkaTitik(p.spdIni)}</td>
+          <td class="c-num">${formatAngkaTitik(p.sisa)}</td>
+        </tr>`;
+
+      for (const k of p.kegs.values()) {
+        tableRowsHtml += `
+          <tr class="row-bold">
+            <td class="c-no">${rowNumber++}.</td>
+            <td class="c-kode">${k.kode}</td>
+            <td class="c-uraian">${k.nama}</td>
+            <td class="c-num">${formatAngkaTitik(k.anggaran)}</td>
+            <td class="c-num">${formatAngkaTitik(k.akumulasiLalu)}</td>
+            <td class="c-num">${formatAngkaTitik(k.spdIni)}</td>
+            <td class="c-num">${formatAngkaTitik(k.sisa)}</td>
+          </tr>`;
+
+        for (const s of k.subs.values()) {
+          tableRowsHtml += `
+            <tr class="row-bold">
+              <td class="c-no">${rowNumber++}.</td>
+              <td class="c-kode">${s.kode}</td>
+              <td class="c-uraian">${s.nama}</td>
+              <td class="c-num">${formatAngkaTitik(s.anggaran)}</td>
+              <td class="c-num">${formatAngkaTitik(s.akumulasiLalu)}</td>
+              <td class="c-num">${formatAngkaTitik(s.spdIni)}</td>
+              <td class="c-num">${formatAngkaTitik(s.sisa)}</td>
+            </tr>`;
+
+          for (const r of s.rekenings) {
+            tableRowsHtml += `
+              <tr>
+                <td class="c-no">${rowNumber++}.</td>
+                <td class="c-kode">${r.kd_rek6}</td>
+                <td class="c-uraian">${r.nm_rek6}</td>
+                <td class="c-num">${formatAngkaTitik(r.anggaran)}</td>
+                <td class="c-num">${formatAngkaTitik(r.akumulasiLalu)}</td>
+                <td class="c-num">${formatAngkaTitik(r.spdIni)}</td>
+                <td class="c-num">${formatAngkaTitik(r.sisa)}</td>
+              </tr>`;
+          }
+        }
+      }
+    }
+
+    return `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>Lampiran SPD - ${doc.no_spd}</title>
+  <style>
+    @page {
+      size: A4 landscape;
+      margin: 12mm 14mm 12mm 14mm;
+    }
+    body {
+      font-family: "Times New Roman", Times, serif;
+      font-size: 10pt;
+      line-height: 1.3;
+      color: #000;
+      background: #fff;
+      margin: 0;
+      padding: 10mm 12mm;
+    }
+    @media print {
+      body {
+        padding: 0;
+      }
+    }
+    .header-center {
+      text-align: center;
+      font-weight: bold;
+      font-size: 11pt;
+      line-height: 1.28;
+      margin-bottom: 12px;
+    }
+    table.meta-info {
+      border-collapse: collapse;
+      margin-bottom: 10px;
+      font-size: 10pt;
+    }
+    table.meta-info td {
+      padding: 1.5px 4px 1.5px 0;
+      vertical-align: top;
+    }
+    table.grid-spd {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+    }
+    table.grid-spd th,
+    table.grid-spd td {
+      border: 1px solid #000;
+      padding: 4px 6px;
+      vertical-align: middle;
+    }
+    table.grid-spd thead th {
+      font-weight: bold;
+      text-align: center;
+      background: #fff;
+    }
+    tr.row-bold td {
+      font-weight: bold;
+    }
+    td.c-no {
+      width: 36px;
+      text-align: center;
+    }
+    td.c-kode {
+      width: 115px;
+      white-space: nowrap;
+    }
+    td.c-uraian {
+      width: auto;
+    }
+    td.c-num {
+      width: 130px;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .ttd-wrap {
+      margin-top: 18px;
+      width: 100%;
+      display: flex;
+      justify-content: flex-end;
+      page-break-inside: avoid;
+    }
+    .ttd-box {
+      width: 320px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header-center">
+    PEMERINTAH KABUPATEN TAPANULI SELATAN<br/>
+    PEJABAT PENGELOLA KEUANGAN DAERAH SELAKU BENDAHARA UMUM<br/>
+    DAERAH<br/>
+    NOMOR : ${doc.no_spd}<br/>
+    TENTANG<br/>
+    SURAT PENYEDIAAN DANA ANGGARAN BELANJA DAERAH<br/>
+    TAHUN ANGGARAN ${tahun}
+  </div>
+
+  <table class="meta-info">
+    <tr>
+      <td style="width: 150px;">LAMPIRAN</td>
+      <td style="width: 10px;">:</td>
+      <td>SURAT PENYEDIAAN DANA</td>
+    </tr>
+    <tr>
+      <td>NOMOR SPD</td>
+      <td>:</td>
+      <td>${doc.no_spd}</td>
+    </tr>
+    <tr>
+      <td>TANGGAL</td>
+      <td>:</td>
+      <td>${tglCetak}</td>
+    </tr>
+    <tr><td colspan="3" style="height: 6px;"></td></tr>
+    <tr>
+      <td>SKPD</td>
+      <td>:</td>
+      <td>${(doc.nm_skpd || "").toUpperCase()}</td>
+    </tr>
+    <tr>
+      <td>PERIODE BULAN</td>
+      <td>:</td>
+      <td>${namaBulanAwal} s/d. ${namaBulanAkhir}</td>
+    </tr>
+    <tr>
+      <td>TAHUN ANGGARAN</td>
+      <td>:</td>
+      <td>${tahun}</td>
+    </tr>
+    <tr>
+      <td>NOMOR DPA-SKPD</td>
+      <td>:</td>
+      <td>${nomorDpa}</td>
+    </tr>
+  </table>
+
+  <table class="grid-spd">
+    <thead>
+      <tr>
+        <th style="width: 36px;">No.</th>
+        <th colspan="2">Kode dan Nama Program, Kegiatan dan Sub Kegiatan</th>
+        <th style="width: 130px;">Anggaran</th>
+        <th style="width: 130px;">Akumulasi SPD<br/>Sebelumnya</th>
+        <th style="width: 130px;">Jumlah SPD<br/>Periode ini</th>
+        <th style="width: 130px;">Sisa Anggaran</th>
+      </tr>
+      <tr>
+        <th>1</th>
+        <th colspan="2">2</th>
+        <th>3</th>
+        <th>4</th>
+        <th>5</th>
+        <th>6=3-4-5</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRowsHtml}
+      <tr class="row-bold">
+        <td colspan="3" style="text-align: right;">JUMLAH TOTAL</td>
+        <td class="c-num">${formatAngkaTitik(grandAnggaran)}</td>
+        <td class="c-num">${formatAngkaTitik(grandLalu)}</td>
+        <td class="c-num">${formatAngkaTitik(grandIni)}</td>
+        <td class="c-num">${formatAngkaTitik(grandSisa)}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="ttd-wrap">
+    <div class="ttd-box">
+      <div>Ditetapkan di ${tempatTtd}</div>
+      <div>pada tanggal ${tglCetak}</div>
+      <div style="font-weight: bold; margin-top: 6px;">
+        PEJABAT PENGELOLA KEUANGAN DAERAH<br/>
+        SELAKU BENDAHARA UMUM DAERAH,
+      </div>
+      <div style="height: 55px;"></div>
+      <div style="font-weight: bold;">${ppkdNama}</div>
+      <div style="font-weight: bold;">${ppkdPangkat}</div>
+      <div>NIP. ${ppkdNip}</div>
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
+  const activeReportHtml = useMemo(() => {
+    if (!reportModal || !spdData) return "";
+    if (reportModal.type === "RINGKASAN") {
+      return buildRingkasanSpdHtml(reportModal.doc, reportForm);
+    }
+    return buildLampiranSpdHtml(reportModal.doc, reportForm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportModal, reportForm, spdData, tahun]);
+
+  function handlePrintActiveReport() {
+    const iframe = reportIframeRef.current;
+    if (iframe?.contentWindow) {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    }
+  }
+
+  function handleOpenReportNewTab() {
+    if (!activeReportHtml) return;
+    const win = window.open("", "_blank");
+    if (win) {
+      win.document.write(activeReportHtml);
+      win.document.close();
+      win.focus();
+    }
+  }
 
   // Handler Pilih OPD -> Langsung ke Tahap 2 (Daftar & Buat SPD)
   function handleSelectAndNextOpd(opd: OpdItem) {
@@ -879,7 +1803,6 @@ export default function SpdPage() {
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>Segarkan</span>
               </button>
-
             </div>
           </div>
 
@@ -953,109 +1876,6 @@ export default function SpdPage() {
             </div>
           )}
 
-          {/* Kartu Kontrol Penerbitan SPD Per 3 Bulan (Triwulan 1 - 4) */}
-          {loadingSpd || !spdData ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-xs text-slate-400">
-              Memuat ringkasan Anggaran Kas &amp; Dokumen SPD...
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
-              {([1, 2, 3, 4] as const).map((tw) => {
-                const summary = spdData.triwulanSummaries[tw];
-                const issuedDoc = spdData.spdByTriwulan[tw];
-
-                return (
-                  <div
-                    key={tw}
-                    className={`rounded-2xl border p-4 flex flex-col justify-between transition-all ${issuedDoc
-                      ? "bg-white border-emerald-300 shadow-xs"
-                      : "bg-white border-slate-200"
-                      }`}
-                  >
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="px-2.5 py-1 rounded-lg bg-[#5E0E14] text-white text-xs font-extrabold">
-                          {summary.shortLabel}
-                        </span>
-                        {issuedDoc ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                            <CheckCircle2 className="w-3 h-3" />
-                            SPD Terbit
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
-                            Belum Terbit
-                          </span>
-                        )}
-                      </div>
-
-                      <div>
-                        <div className="text-xs font-bold text-slate-800">
-                          {summary.namaBulan.join(" • ")}
-                        </div>
-                        <div className="text-[11px] text-slate-500">
-                          Bulan {summary.bulanAwal} s/d Bulan {summary.bulanAkhir} ({summary.jumlahRekening} Rekening)
-                        </div>
-                      </div>
-
-                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
-                        <div className="text-[10px] font-bold uppercase text-slate-400">
-                          Acuan Anggaran Kas 3 Bulan
-                        </div>
-                        <div className="text-sm font-extrabold font-mono text-[#5E0E14]">
-                          {formatRupiah(summary.totalKasTriwulan)}
-                        </div>
-                      </div>
-
-                      {issuedDoc && (
-                        <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200 text-[11px] space-y-0.5">
-                          <div className="font-mono font-bold text-emerald-950 truncate">
-                            No: {issuedDoc.no_spd}
-                          </div>
-                          <div className="text-emerald-800">
-                            Tgl: {formatTanggal(issuedDoc.tgl_spd)}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="pt-3 mt-3 border-t border-slate-100 flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openCreateSpdModal(tw)}
-                        className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold transition-all bg-[#5E0E14] hover:bg-[#7A141C] text-white shadow-xs cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>
-                          {issuedDoc
-                            ? `Perbarui SPD TW ${tw}`
-                            : `Buat SPD TW ${tw}`}
-                        </span>
-                      </button>
-
-                      {issuedDoc && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setDeleteTarget({
-                              no_spd: issuedDoc.no_spd,
-                              triwulan: issuedDoc.triwulan,
-                              periode: issuedDoc.periode,
-                              jumlahBaris: issuedDoc.jumlahBaris,
-                            })
-                          }
-                          title="Hapus SPD Triwulan ini"
-                          className="p-2 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
 
           {/* ===============================================================
               TABEL RINGKASAN DAFTAR SPD BERDASARKAN NOMOR SPD TERBIT
@@ -1108,9 +1928,8 @@ export default function SpdPage() {
                     <th className="py-3 px-3 font-bold">Tanggal SPD</th>
                     <th className="py-3 px-3 font-bold">Periode</th>
                     <th className="py-3 px-3 font-bold">SKPD</th>
-                    <th className="py-3 px-3 font-bold text-center">Cakupan Rincian</th>
-                    <th className="py-3 px-3 font-bold">Keterangan</th>
                     <th className="py-3 px-3 font-bold text-right">Total Nilai SPD (Rp)</th>
+                    <th className="py-3 px-3 font-bold text-center">Cetak</th>
                     <th className="py-3 px-3 font-bold text-center">Aksi</th>
                   </tr>
                 </thead>
@@ -1146,9 +1965,16 @@ export default function SpdPage() {
                           <div className="font-mono font-extrabold text-[#5E0E14] text-xs">
                             {doc.no_spd}
                           </div>
-                          <span className="inline-flex items-center gap-1 mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                            {doc.status || "AKTIF"}
-                          </span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                              {doc.status || "AKTIF"}
+                            </span>
+                            {doc.keterangan && (
+                              <span className="text-[10px] text-slate-500 truncate max-w-[180px]">
+                                • {doc.keterangan}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3 px-3 font-medium text-slate-800 whitespace-nowrap">
                           {formatTanggal(doc.tgl_spd)}
@@ -1157,9 +1983,6 @@ export default function SpdPage() {
                           <span className="px-2.5 py-1 rounded-lg bg-red-50 text-[#88131A] border border-red-200 font-extrabold text-[11px]">
                             {doc.periode} (TW {doc.triwulan})
                           </span>
-                          <div className="text-[10px] text-slate-500 mt-1">
-                            Bulan {doc.bulan_awal} s/d Bulan {doc.bulan_akhir}
-                          </div>
                         </td>
                         <td className="py-3 px-3">
                           <div className="font-mono font-bold text-slate-800 text-[11px]">
@@ -1169,22 +1992,43 @@ export default function SpdPage() {
                             {doc.nm_skpd}
                           </div>
                         </td>
-                        <td className="py-3 px-3 text-center">
-                          <div className="inline-flex flex-col items-center px-2.5 py-1 rounded-xl bg-slate-100 border border-slate-200 text-[11px]">
-                            <span className="font-extrabold text-slate-900">
-                              {doc.jumlahSubKegiatan} Sub Kegiatan
-                            </span>
-                            <span className="text-[10px] text-slate-600">
-                              {doc.jumlahBaris} Rekening Belanja
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-3 text-[11px] text-slate-600 max-w-xs">
-                          {doc.keterangan || "-"}
-                        </td>
                         <td className="py-3 px-3 text-right font-mono font-extrabold text-emerald-800 whitespace-nowrap text-xs">
                           {formatRupiah(doc.totalNilaiSpd)}
                         </td>
+
+                        {/* KOLOM CETAK SPD: DROPDOWN (1. Ringkasan SPD & 2. Lampiran SPD) */}
+                        <td className="py-3 px-3 text-center whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const rect =
+                                e.currentTarget.getBoundingClientRect();
+                              setPrintDropdown((prev) =>
+                                prev?.doc.no_spd === doc.no_spd
+                                  ? null
+                                  : {
+                                    doc,
+                                    top: rect.bottom + 6,
+                                    left: Math.max(12, rect.right - 250),
+                                  }
+                              );
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#5E0E14] to-[#991B1B] hover:from-[#46090E] hover:to-[#7F1D1D] text-white text-xs font-extrabold shadow-xs transition-all cursor-pointer"
+                            title="Pilih dokumen SPD yang akan ditampilkan & dicetak"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            <span>Cetak</span>
+                            <ChevronDown
+                              className={`w-3.5 h-3.5 transition-transform ${printDropdown?.doc.no_spd === doc.no_spd
+                                ? "rotate-180"
+                                : ""
+                                }`}
+                            />
+                          </button>
+                        </td>
+
+                        {/* KOLOM AKSI */}
                         <td className="py-3 px-3 text-center whitespace-nowrap">
                           <div className="inline-flex items-center gap-1.5">
                             <button
@@ -1211,7 +2055,6 @@ export default function SpdPage() {
                               title="Perbarui Nomor / Tanggal SPD"
                             >
                               <Edit3 className="w-3.5 h-3.5" />
-                              <span>Edit</span>
                             </button>
 
                             <button
@@ -1238,13 +2081,13 @@ export default function SpdPage() {
                 {filteredNomorSummaries.length > 0 && (
                   <tfoot>
                     <tr className="bg-slate-100 font-extrabold text-slate-900 border-t-2 border-slate-300">
-                      <td colSpan={7} className="py-3 px-3 text-right">
-                        TOTAL NILAI DOKUMEN SPD TERBIT ({filteredNomorSummaries.length} NOMOR SPD)
+                      <td colSpan={5} className="py-3 px-3 text-right">
+                        TOTAL NILAI SPD
                       </td>
                       <td className="py-3 px-3 text-right font-mono text-[#5E0E14]">
                         {formatRupiah(totalNilaiFilteredSpd)}
                       </td>
-                      <td />
+                      <td colSpan={2} />
                     </tr>
                   </tfoot>
                 )}
@@ -1276,31 +2119,28 @@ export default function SpdPage() {
               <div>
                 <h3 className="text-base font-extrabold flex items-center gap-2">
                   <Wallet className="w-4 h-4 text-amber-300" />
-                  <span>Rincian Dokumen SPD — Nomor: {detailNomorSpd.no_spd}</span>
+                  <span>Rincian Dokumen SPD - Nomor: {detailNomorSpd.no_spd}</span>
                 </h3>
                 <p className="text-[11px] text-amber-100 mt-0.5">
                   Tanggal: {formatTanggal(detailNomorSpd.tgl_spd)} •{" "}
                   {detailNomorSpd.periode} (Bulan {detailNomorSpd.bulan_awal} s/d{" "}
-                  {detailNomorSpd.bulan_akhir}) • [{detailNomorSpd.kd_skpd}]{" "}
-                  {detailNomorSpd.nm_skpd}
+                  {detailNomorSpd.bulan_akhir})
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setDetailNomorSpd(null)}
-                className="text-white/80 hover:text-white text-sm font-bold cursor-pointer"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDetailNomorSpd(null)}
+                  className="text-white/80 hover:text-white text-sm font-bold ml-2 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             <div className="p-5 space-y-4 overflow-y-auto flex-1">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="text-xs font-bold text-slate-700">
-                  Menampilkan {detailRowsForNomor.length} baris rincian tabel{" "}
-                  <code className="px-1.5 py-0.5 rounded bg-slate-100 text-[#991B1B]">
-                    tr_spd
-                  </code>{" "}
                   • Total Nilai:{" "}
                   <span className="font-mono font-extrabold text-emerald-800">
                     {formatRupiah(detailNomorSpd.totalNilaiSpd)}
@@ -1640,6 +2480,349 @@ export default function SpdPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================
+          DROPDOWN MENU PILIHAN CETAK SPD (1. RINGKASAN SPD / 2. LAMPIRAN SPD)
+          ================================================================= */}
+      {printDropdown && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: "fixed",
+            top: printDropdown.top,
+            left: printDropdown.left,
+          }}
+          className="z-60 w-68 rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        >
+          <div className="px-3.5 py-2.5 bg-slate-50 border-b border-slate-200/80">
+            <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+              Pilih Jenis Laporan SPD
+            </div>
+            <div className="font-mono text-[11px] font-bold text-[#5E0E14] truncate mt-0.5">
+              {printDropdown.doc.no_spd}
+            </div>
+          </div>
+
+          <div className="p-1.5 space-y-1">
+            <button
+              type="button"
+              onClick={() => openSpdReportModal(printDropdown.doc, "RINGKASAN")}
+              className="w-full flex items-start gap-2.5 p-2.5 rounded-xl hover:bg-red-50/80 text-left transition-colors group cursor-pointer"
+            >
+              <span className="p-2 rounded-lg bg-[#5E0E14] text-white shrink-0 group-hover:scale-105 transition-transform">
+                <FileText className="w-4 h-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-xs font-extrabold text-slate-900 group-hover:text-[#5E0E14]">
+                  1. Ringkasan SPD
+                </div>
+                <div className="text-[10px] text-slate-500 leading-snug mt-0.5">
+                  SK PPKD Selaku BUD &amp; Ikhtisar Penyediaan Dana (A4 Portrait)
+                </div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => openSpdReportModal(printDropdown.doc, "LAMPIRAN")}
+              className="w-full flex items-start gap-2.5 p-2.5 rounded-xl hover:bg-emerald-50/80 text-left transition-colors group cursor-pointer"
+            >
+              <span className="p-2 rounded-lg bg-emerald-700 text-white shrink-0 group-hover:scale-105 transition-transform">
+                <FileSpreadsheet className="w-4 h-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-xs font-extrabold text-slate-900 group-hover:text-emerald-800">
+                  2. Lampiran SPD
+                </div>
+                <div className="text-[10px] text-slate-500 leading-snug mt-0.5">
+                  Rincian Program, Kegiatan, Sub Kegiatan &amp; Rekening (A4 Landscape)
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================
+          FORM MODAL REPORT PRATINJAU & CETAK SPD (RINGKASAN & LAMPIRAN)
+          ================================================================= */}
+      {reportModal && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center bg-slate-950/75 backdrop-blur-xs p-3 sm:p-5 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full overflow-hidden border border-slate-300 h-[94vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            {/* Header Form Modal Report */}
+            <div className="bg-gradient-to-r from-[#46090E] via-[#5E0E14] to-[#88131A] text-white px-5 py-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="p-2.5 rounded-xl bg-white/15 text-amber-300 shrink-0">
+                  <Printer className="w-5 h-5" />
+                </span>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm sm:text-base font-extrabold tracking-tight">
+                      Report Dokumen Resmi SPD
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-md bg-amber-400/20 border border-amber-300/40 text-amber-200 font-mono text-[11px] font-bold">
+                      {reportModal.doc.no_spd}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-100/90 truncate mt-0.5">
+                    [{reportModal.doc.kd_skpd}] {reportModal.doc.nm_skpd} •{" "}
+                    {reportModal.doc.periode} (
+                    {NAMA_BULAN_PENUH[reportModal.doc.bulan_awal]} s/d.{" "}
+                    {NAMA_BULAN_PENUH[reportModal.doc.bulan_akhir]} {tahun})
+                  </p>
+                </div>
+              </div>
+
+              {/* Switcher Jenis Report & Tombol Aksi di Header Modal */}
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {/* Dropdown / Segmented Switcher Jenis Report di dalam Modal */}
+                <div className="inline-flex rounded-xl bg-black/25 p-1 border border-white/15">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setReportModal((prev) =>
+                        prev ? { ...prev, type: "RINGKASAN" } : null
+                      )
+                    }
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${reportModal.type === "RINGKASAN"
+                      ? "bg-white text-[#5E0E14] shadow-xs"
+                      : "text-white/80 hover:text-white"
+                      }`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>1. Ringkasan SPD</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setReportModal((prev) =>
+                        prev ? { ...prev, type: "LAMPIRAN" } : null
+                      )
+                    }
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${reportModal.type === "LAMPIRAN"
+                      ? "bg-emerald-500 text-white shadow-xs"
+                      : "text-white/80 hover:text-white"
+                      }`}
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    <span>2. Lampiran SPD</span>
+                  </button>
+                </div>
+
+                {/* Toggle Form Parameter Cetak */}
+                <button
+                  type="button"
+                  onClick={() => setShowReportFormConfig((v) => !v)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${showReportFormConfig
+                    ? "bg-amber-300 text-[#46090E] border-amber-300"
+                    : "bg-white/10 text-white border-white/20 hover:bg-white/20"
+                    }`}
+                  title="Sesuaikan Nomor DPA, Tanggal, atau Penandatangan sebelum cetak"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span>Parameter Cetak</span>
+                </button>
+
+                {/* Tombol Cetak / Simpan PDF Langsung */}
+                <button
+                  type="button"
+                  onClick={handlePrintActiveReport}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-[#46090E] text-xs font-extrabold shadow-sm cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Cetak / PDF</span>
+                </button>
+
+                {/* Tombol Tutup Modal */}
+                <button
+                  type="button"
+                  onClick={() => setReportModal(null)}
+                  className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold cursor-pointer"
+                  title="Tutup Modal Report"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Form Parameter Cetak & Penandatangan (Collapsible) */}
+            {showReportFormConfig && (
+              <div className="bg-amber-50/80 border-b border-amber-200 px-5 py-3.5 shrink-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <label className="block text-[11px] font-extrabold text-slate-700 mb-1">
+                      Nomor DPA-SKPD
+                    </label>
+                    <input
+                      type="text"
+                      value={reportForm.nomorDpa}
+                      onChange={(e) =>
+                        setReportForm((f) => ({
+                          ...f,
+                          nomorDpa: e.target.value,
+                        }))
+                      }
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white font-mono text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-extrabold text-slate-700 mb-1">
+                      Nama Kepala SKPD
+                    </label>
+                    <input
+                      type="text"
+                      value={reportForm.kepalaSkpd}
+                      onChange={(e) =>
+                        setReportForm((f) => ({
+                          ...f,
+                          kepalaSkpd: e.target.value,
+                        }))
+                      }
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-extrabold text-slate-700 mb-1">
+                      Tempat &amp; Tanggal Ditetapkan
+                    </label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={reportForm.tempatTtd}
+                        onChange={(e) =>
+                          setReportForm((f) => ({
+                            ...f,
+                            tempatTtd: e.target.value,
+                          }))
+                        }
+                        placeholder="Sipirok"
+                        className="w-28 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs"
+                      />
+                      <input
+                        type="text"
+                        value={reportForm.tanggalTtd}
+                        onChange={(e) =>
+                          setReportForm((f) => ({
+                            ...f,
+                            tanggalTtd: e.target.value,
+                          }))
+                        }
+                        placeholder="26 Oktober 2026"
+                        className="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-extrabold text-slate-700 mb-1">
+                      Pejabat PPKD Selaku BUD (Nama / NIP)
+                    </label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={reportForm.ppkdNama}
+                        onChange={(e) =>
+                          setReportForm((f) => ({
+                            ...f,
+                            ppkdNama: e.target.value,
+                          }))
+                        }
+                        placeholder="Nama PPKD"
+                        className="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-semibold"
+                      />
+                      <input
+                        type="text"
+                        value={reportForm.ppkdNip}
+                        onChange={(e) =>
+                          setReportForm((f) => ({
+                            ...f,
+                            ppkdNip: e.target.value,
+                          }))
+                        }
+                        placeholder="NIP PPKD"
+                        className="w-36 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Area Kanvas Pratinjau Kertas A4 (Portrait untuk Ringkasan, Landscape untuk Lampiran) */}
+            <div className="flex-1 bg-slate-800/95 overflow-auto p-4 sm:p-6 flex justify-center items-start">
+              <div
+                className={`bg-white shadow-2xl rounded-xs transition-all duration-200 overflow-hidden border border-slate-400 ${reportModal.type === "RINGKASAN"
+                  ? "w-full max-w-[820px] min-h-[1080px]"
+                  : "w-full max-w-[1120px] min-h-[790px]"
+                  }`}
+              >
+                <iframe
+                  ref={reportIframeRef}
+                  title={`Pratinjau ${reportModal.type === "RINGKASAN"
+                    ? "1. Ringkasan SPD"
+                    : "2. Lampiran SPD"
+                    }`}
+                  srcDoc={activeReportHtml}
+                  className={`w-full border-0 ${reportModal.type === "RINGKASAN"
+                    ? "h-[1080px]"
+                    : "h-[790px]"
+                    }`}
+                />
+              </div>
+            </div>
+
+            {/* Footer Form Modal Report */}
+            <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-2 text-xs text-slate-600">
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-600" />
+                <span>
+                  Mode Pratinjau:{" "}
+                  <strong className="text-slate-900">
+                    {reportModal.type === "RINGKASAN"
+                      ? "1. Ringkasan SPD (SK PPKD Selaku BUD — A4 Portrait)"
+                      : "2. Lampiran SPD (Rincian Program, Kegiatan, Sub Kegiatan & Rekening — A4 Landscape)"}
+                  </strong>
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenReportNewTab}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold cursor-pointer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Buka di Tab Baru</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePrintActiveReport}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#5E0E14] to-[#991B1B] hover:from-[#46090E] hover:to-[#7F1D1D] text-white text-xs font-extrabold shadow-sm cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>
+                    Cetak{" "}
+                    {reportModal.type === "RINGKASAN"
+                      ? "1. Ringkasan SPD"
+                      : "2. Lampiran SPD"}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setReportModal(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
