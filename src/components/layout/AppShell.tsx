@@ -81,20 +81,48 @@ export default function AppShell({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
 
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    perencanaan: true,
-    pengaturan: true,
-    masterRekeningOpd: true,
-    masterNomenklatur: true,
-    masterReferensi: true,
-  });
+  function getActiveGroupByPath(path: string): Record<string, boolean> {
+    return {
+      perencanaan: path.startsWith("/perencanaan"),
+      pengaturan: path.startsWith("/admin"),
+      masterRekeningOpd: ["/master/rekening", "/master/opd", "/master/unit"].some(
+        (p) => path.startsWith(p)
+      ),
+      masterNomenklatur: [
+        "/master/program",
+        "/master/kegiatan",
+        "/master/subkegiatan",
+        "/master/sumber-dana",
+      ].some((p) => path.startsWith(p)),
+      masterReferensi: [
+        "/master/tahun-anggaran",
+        "/master/standar-harga",
+        "/master/import",
+      ].some((p) => path.startsWith(p)),
+    };
+  }
+
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
+    getActiveGroupByPath(pathname)
+  );
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    setOpenGroups(getActiveGroupByPath(pathname));
+  }, [pathname]);
+
   function toggleGroup(key: string) {
-    setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }));
+    setOpenGroups((prev) => ({
+      perencanaan: false,
+      pengaturan: false,
+      masterRekeningOpd: false,
+      masterNomenklatur: false,
+      masterReferensi: false,
+      [key]: !prev[key],
+    }));
   }
 
   const isSuperadmin =
@@ -250,9 +278,8 @@ export default function AppShell({
 
       {/* SIDEBAR KIRI — GAYA CAKRA MERAH TUA (#5E0E14) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 bg-[#5E0E14] text-white flex flex-col transition-all duration-200 lg:static ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        } ${desktopCollapsed ? "lg:w-0 lg:overflow-hidden" : "w-64"}`}
+        className={`fixed inset-y-0 left-0 z-40 bg-[#5E0E14] text-white flex flex-col transition-all duration-200 lg:static ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+          } ${desktopCollapsed ? "lg:w-0 lg:overflow-hidden" : "w-64"}`}
       >
         {/* Logo & Brand Header */}
         <div className="h-14 px-4 bg-[#4A0A0F] border-b border-red-900/60 flex items-center gap-3 shrink-0">
@@ -272,11 +299,10 @@ export default function AppShell({
             <Link
               href="/dashboard"
               onClick={() => setSidebarOpen(false)}
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all shadow-sm ${
-                pathname === "/dashboard"
+              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all shadow-sm ${pathname === "/dashboard"
                   ? "bg-white text-[#88131A] font-bold"
                   : "bg-[#7A151D] hover:bg-[#991B1B] text-white"
-              }`}
+                }`}
             >
               <LayoutDashboard className="w-4 h-4 shrink-0" />
               <span>Dashboard (TA {activeTahun.tahun})</span>
@@ -297,9 +323,8 @@ export default function AppShell({
                   <span className="tracking-wide">Modul Perencanaan</span>
                 </div>
                 <ChevronDown
-                  className={`w-3.5 h-3.5 transition-transform ${
-                    openGroups.perencanaan ? "rotate-180" : ""
-                  }`}
+                  className={`w-3.5 h-3.5 transition-transform ${openGroups.perencanaan ? "rotate-180" : ""
+                    }`}
                 />
               </button>
 
@@ -313,16 +338,14 @@ export default function AppShell({
                         key={sub.href}
                         href={sub.href}
                         onClick={() => setSidebarOpen(false)}
-                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${
-                          active
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${active
                             ? "bg-white text-[#88131A] font-bold shadow-sm"
                             : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
-                        }`}
+                          }`}
                       >
                         <SubIcon
-                          className={`w-3.5 h-3.5 shrink-0 ${
-                            active ? "text-[#88131A]" : "text-amber-200"
-                          }`}
+                          className={`w-3.5 h-3.5 shrink-0 ${active ? "text-[#88131A]" : "text-amber-200"
+                            }`}
                         />
                         <span className="truncate">{sub.label}</span>
                       </Link>
@@ -347,9 +370,8 @@ export default function AppShell({
                   <span>Pengaturan</span>
                 </div>
                 <ChevronDown
-                  className={`w-3.5 h-3.5 transition-transform ${
-                    openGroups.pengaturan ? "rotate-180" : ""
-                  }`}
+                  className={`w-3.5 h-3.5 transition-transform ${openGroups.pengaturan ? "rotate-180" : ""
+                    }`}
                 />
               </button>
 
@@ -363,11 +385,10 @@ export default function AppShell({
                         key={sub.href}
                         href={sub.href}
                         onClick={() => setSidebarOpen(false)}
-                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${
-                          active
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${active
                             ? "bg-white text-[#88131A] font-bold shadow-sm"
                             : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
-                        }`}
+                          }`}
                       >
                         <SubIcon className="w-3.5 h-3.5 shrink-0" />
                         <span className="truncate">{sub.label}</span>
@@ -382,7 +403,7 @@ export default function AppShell({
           {hasAnyMasterSection && (
             <div className="pt-2 px-1">
               <div className="text-[11px] text-red-200/90 font-medium">
-                Master Data Penganggaran
+                Master Data
               </div>
               <div className="flex items-center justify-between text-xs font-bold text-white mt-1.5 px-1">
                 <div className="flex items-center gap-2">
@@ -408,9 +429,8 @@ export default function AppShell({
                   <span>Rekening & Organisasi</span>
                 </div>
                 <ChevronDown
-                  className={`w-3.5 h-3.5 transition-transform ${
-                    openGroups.masterRekeningOpd ? "rotate-180" : ""
-                  }`}
+                  className={`w-3.5 h-3.5 transition-transform ${openGroups.masterRekeningOpd ? "rotate-180" : ""
+                    }`}
                 />
               </button>
 
@@ -424,11 +444,10 @@ export default function AppShell({
                         key={sub.href}
                         href={sub.href}
                         onClick={() => setSidebarOpen(false)}
-                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${
-                          active
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${active
                             ? "bg-white text-[#88131A] font-bold shadow-sm"
                             : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
-                        }`}
+                          }`}
                       >
                         <SubIcon className="w-3.5 h-3.5 shrink-0" />
                         <span className="truncate">{sub.label}</span>
@@ -454,9 +473,8 @@ export default function AppShell({
                   <span>Nomenklatur & Dana</span>
                 </div>
                 <ChevronDown
-                  className={`w-3.5 h-3.5 transition-transform ${
-                    openGroups.masterNomenklatur ? "rotate-180" : ""
-                  }`}
+                  className={`w-3.5 h-3.5 transition-transform ${openGroups.masterNomenklatur ? "rotate-180" : ""
+                    }`}
                 />
               </button>
 
@@ -470,11 +488,10 @@ export default function AppShell({
                         key={sub.href}
                         href={sub.href}
                         onClick={() => setSidebarOpen(false)}
-                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${
-                          active
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${active
                             ? "bg-white text-[#88131A] font-bold shadow-sm"
                             : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
-                        }`}
+                          }`}
                       >
                         <SubIcon className="w-3.5 h-3.5 shrink-0" />
                         <span className="truncate">{sub.label}</span>
@@ -500,9 +517,8 @@ export default function AppShell({
                   <span>Pengaturan Master</span>
                 </div>
                 <ChevronDown
-                  className={`w-3.5 h-3.5 transition-transform ${
-                    openGroups.masterReferensi ? "rotate-180" : ""
-                  }`}
+                  className={`w-3.5 h-3.5 transition-transform ${openGroups.masterReferensi ? "rotate-180" : ""
+                    }`}
                 />
               </button>
 
@@ -516,11 +532,10 @@ export default function AppShell({
                         key={sub.href}
                         href={sub.href}
                         onClick={() => setSidebarOpen(false)}
-                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${
-                          active
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${active
                             ? "bg-white text-[#88131A] font-bold shadow-sm"
                             : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
-                        }`}
+                          }`}
                       >
                         <SubIcon className="w-3.5 h-3.5 shrink-0" />
                         <span className="truncate">{sub.label}</span>

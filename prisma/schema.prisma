@@ -663,26 +663,41 @@ model AnggaranKasRekening {
 }
 
 model Spd {
-  id            String   @id @default(uuid())
-  tahunAnggaran Int      @default(2027)
-  nomorSpd      String   @unique
-  tanggalSpd    DateTime @default(now())
-  opdId         String
-  unitKerjaId   String?
-  kd_skpd       String
-  nm_skpd       String
-  kd_unit       String?
-  nm_unit       String?
-  periode       String   // Triwulan I, Triwulan II, Triwulan III, Triwulan IV
-  jumlahSpd     Decimal  @default(0) @db.Decimal(18, 2)
-  keterangan    String?
-  status        String   @default("AKTIF")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id              String   @id @default(uuid())
+  tahunAnggaran   Int      @default(2027)
+  no_spd          String
+  tgl_spd         DateTime @default(now())
+  opdId           String
+  unitKerjaId     String?
+  trskpdId        String?
+  trdrkaId        String?
+  kd_skpd         String
+  nm_skpd         String
+  kd_unit         String?
+  nm_unit         String?
+  kd_program      String
+  nm_program      String
+  kd_kegiatan     String
+  nm_kegiatan     String
+  kd_sub_kegiatan String
+  nm_sub_kegiatan String
+  kd_rek6         String
+  nm_rek6         String
+  nilai           Decimal  @default(0) @db.Decimal(18, 2)
+  triwulan        Int      @default(1) // 1 (Jan-Mar), 2 (Apr-Jun), 3 (Jul-Sep), 4 (Okt-Des)
+  periode         String   @default("Triwulan I")
+  bulan_awal      Int      @default(1)
+  bulan_akhir     Int      @default(3)
+  keterangan      String?
+  status          String   @default("AKTIF")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  opd           Opd      @relation(fields: [opdId], references: [id], onDelete: Cascade)
+  opd             Opd      @relation(fields: [opdId], references: [id], onDelete: Cascade)
 
   @@index([tahunAnggaran, kd_skpd])
+  @@index([tahunAnggaran, no_spd])
+  @@index([tahunAnggaran, kd_skpd, kd_unit, triwulan])
   @@map("tr_spd")
 }
 
