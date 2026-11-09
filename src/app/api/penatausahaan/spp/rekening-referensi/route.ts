@@ -5,6 +5,7 @@ import {
   getPenetapanUpForSpp,
   getSpdTerbitList,
   getPetugasPenandatanganByOpd,
+  getNextSppSequence,
 } from "@/modules/penatausahaan/spp.service";
 
 export async function GET(req: NextRequest) {
@@ -56,6 +57,21 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: true, data });
     }
 
+    // 2.5 Nomor urut SPP berikutnya (Format: 900/no_urut/kd_unit/SPP/jns_spp/tahun)
+    if (type === "next-no") {
+      if (!kd_skpd) {
+        return NextResponse.json(
+          { success: false, error: "Parameter kd_skpd wajib disertakan" },
+          { status: 400 }
+        );
+      }
+      const nextSeq = await getNextSppSequence({
+        tahunAnggaran,
+        kd_skpd,
+      });
+      return NextResponse.json({ success: true, data: { nextSeq } });
+    }
+
     // 3. Daftar SPD yang terbit
     if (type === "spd-terbit") {
       if (!kd_skpd) {
@@ -68,6 +84,7 @@ export async function GET(req: NextRequest) {
         tahunAnggaran,
         kd_skpd,
         kd_unit,
+        excludeSppId,
       });
       return NextResponse.json({ success: true, data });
     }

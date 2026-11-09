@@ -213,6 +213,14 @@ export default function SppManagementView({
   const [loadingSpdList, setLoadingSpdList] = useState(false);
   const [spdTerbitList, setSpdTerbitList] = useState<any[]>([]);
   const [searchSpdModal, setSearchSpdModal] = useState("");
+  const [selectedSpdInfo, setSelectedSpdInfo] = useState<{
+    no_spd: string;
+    totalNilai: number;
+    nilaiSpd: number;
+    akumulasiSpd: number;
+    totalSppKeluar: number;
+    sisaSpd: number;
+  } | null>(null);
 
   // Data Petugas Penandatangan per Role OPD
   const [petugasData, setPetugasData] = useState<{
@@ -479,6 +487,9 @@ export default function SppManagementView({
       if (selectedUnit) {
         params.append("kd_unit", selectedUnit.kd_unit);
       }
+      if (editingSppId) {
+        params.append("excludeSppId", editingSppId);
+      }
       const res = await fetch(
         `/api/penatausahaan/spp/rekening-referensi?${params.toString()}`
       );
@@ -499,6 +510,15 @@ export default function SppManagementView({
       no_spd: spd.no_spd,
       tgl_spd: spd.tgl_spd || prev.tgl_spd,
     }));
+    setSelectedSpdInfo({
+      no_spd: spd.no_spd,
+      totalNilai: Number(spd.totalNilai || spd.nilaiSpd) || 0,
+      nilaiSpd: Number(spd.nilaiSpd || spd.totalNilai) || 0,
+      akumulasiSpd: Number(spd.akumulasiSpd) || 0,
+      totalSppKeluar: Number(spd.totalSppKeluar || spd.usedNilai) || 0,
+      sisaSpd:
+        Number(spd.sisaSpd !== undefined ? spd.sisaSpd : spd.sisaNilai) || 0,
+    });
     setShowSpdModal(false);
   }
 
@@ -512,13 +532,47 @@ export default function SppManagementView({
     const defaultPptk = petugas?.pptkList?.[0];
     const defaultPa = petugas?.paKpaList?.[0];
 
-    // Nomor urut perkiraan
-    const count = sppList.length + 1;
-    const padded = String(count).padStart(5, "0");
-    const autoNo = `${padded}/SPP-${jenisSpp.replace("_", "-")}/${selectedOpd.kd_skpd
-      }/${tahunAnggaran}`;
+    // Format nomor SPP: 900/no_urut/kd_unit/SPP/jns_spp/tahun
+    // Contoh: 900/00003/5.02.0.00.0.00.03.00/SPP/UP/2026
+    let nextSeq = 1;
+    try {
+      const res = await fetch(
+        `/api/penatausahaan/spp/rekening-referensi?type=next-no&tahun=${tahunAnggaran}&kd_skpd=${selectedOpd.kd_skpd}`
+      );
+      const json = await res.json();
+      if (json.success && json.data?.nextSeq) {
+        nextSeq = json.data.nextSeq;
+      } else {
+        let maxSeq = 0;
+        for (const spp of sppList) {
+          const parts = spp.no_spp.split("/");
+          if (parts.length >= 2 && parts[0] === "900") {
+            const num = parseInt(parts[1], 10);
+            if (!isNaN(num) && num > maxSeq) maxSeq = num;
+          }
+        }
+        nextSeq = maxSeq > 0 ? maxSeq + 1 : sppList.length + 1;
+      }
+    } catch {
+      let maxSeq = 0;
+      for (const spp of sppList) {
+        const parts = spp.no_spp.split("/");
+        if (parts.length >= 2 && parts[0] === "900") {
+          const num = parseInt(parts[1], 10);
+          if (!isNaN(num) && num > maxSeq) maxSeq = num;
+        }
+      }
+      nextSeq = maxSeq > 0 ? maxSeq + 1 : sppList.length + 1;
+    }
+
+    const paddedNoUrut = String(nextSeq).padStart(5, "0");
+    const kdUnitTarget =
+      selectedUnit?.kd_unit || availableUnits[0]?.kd_unit || selectedOpd.kd_skpd;
+    const jnsSppCode = jenisSpp.replace(/_/g, "-");
+    const autoNo = `900/${paddedNoUrut}/${kdUnitTarget}/SPP/${jnsSppCode}/${tahunAnggaran}`;
 
     setEditingSppId(null);
+    setSelectedSpdInfo(null);
     setFormHeader({
       no_spp: autoNo,
       tgl_spp: new Date().toISOString().split("T")[0],
@@ -639,6 +693,49 @@ export default function SppManagementView({
             sumberDana: r.sumberDana,
           }))
         );
+
+        // Muat info pagu SPD jika dokumen SPP memiliki nomor SPD
+        if (d.no_spd && selectedOpd) {
+          try {
+            const params = new URLSearchParams({
+              type: "spd-terbit",
+              tahun: tahunAnggaran.toString(),
+              kd_skpd: selectedOpd.kd_skpd,
+              excludeSppId: d.id,
+            });
+            if (selectedUnit) params.append("kd_unit", selectedUnit.kd_unit);
+            const spdRes = await fetch(
+              `/api/penatausahaan/spp/rekening-referensi?${params.toString()}`
+            );
+            const spdJson = await spdRes.json();
+            if (spdJson.success && Array.isArray(spdJson.data)) {
+              const match = spdJson.data.find(
+                (s: any) => s.no_spd === d.no_spd
+              );
+              if (match) {
+                setSelectedSpdInfo({
+                  no_spd: match.no_spd,
+                  totalNilai: Number(match.totalNilai || match.nilaiSpd) || 0,
+                  nilaiSpd: Number(match.nilaiSpd || match.totalNilai) || 0,
+                  akumulasiSpd: Number(match.akumulasiSpd) || 0,
+                  totalSppKeluar:
+                    Number(match.totalSppKeluar || match.usedNilai) || 0,
+                  sisaSpd:
+                    Number(
+                      match.sisaSpd !== undefined
+                        ? match.sisaSpd
+                        : match.sisaNilai
+                    ) || 0,
+                });
+              }
+            }
+          } catch (e) {
+            console.error("Gagal load info SPD terpasang:", e);
+          }
+        } else {
+          setSelectedSpdInfo(null);
+        }
+
         setCurrentStep(4);
       } else {
         setBanner({
@@ -742,6 +839,12 @@ export default function SppManagementView({
     );
   }, [formRincian]);
 
+  // Validasi apakah nilai SPP melebihi sisa SPD yang tersedia
+  const isOverSpdLimit = useMemo(() => {
+    if (!formHeader.no_spd?.trim() || !selectedSpdInfo) return false;
+    return totalFormNilai > selectedSpdInfo.sisaSpd;
+  }, [formHeader.no_spd, selectedSpdInfo, totalFormNilai]);
+
   // Simpan Dokumen SPP (Draft / Ajukan)
   async function handleSaveSpp(statusTarget: "DRAFT" | "DIAJUKAN") {
     if (!selectedOpd) return;
@@ -778,6 +881,28 @@ export default function SppManagementView({
       setBanner({
         type: "error",
         message: "Setiap rekening belanja harus memiliki nilai lebih dari 0.",
+      });
+      return;
+    }
+
+    // Validasi batas sisa SPD jika no_spd disertakan
+    if (
+      formHeader.no_spd.trim() &&
+      selectedSpdInfo &&
+      totalFormNilai > selectedSpdInfo.sisaSpd
+    ) {
+      setBanner({
+        type: "error",
+        title: "Pembuatan SPP Tidak Dapat Dilanjutkan",
+        message: `Nilai SPP (${formatRupiah(
+          totalFormNilai
+        )}) melebihi sisa dana SPD ${formHeader.no_spd.trim()} yang tersedia (${formatRupiah(
+          selectedSpdInfo.sisaSpd
+        )}). Akumulasi seluruh SPD s.d. nomor ini adalah ${formatRupiah(
+          selectedSpdInfo.akumulasiSpd
+        )} dikurangi total seluruh SPP keluar sebesar ${formatRupiah(
+          selectedSpdInfo.totalSppKeluar
+        )}. Pembuatan SPP tidak dapat dilanjutkan. Silakan sesuaikan rincian belanja.`,
       });
       return;
     }
@@ -1200,7 +1325,7 @@ export default function SppManagementView({
                 Tidak ada Sub Unit yang sesuai dengan pencarian &quot;{searchUnit}&quot;.
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[460px] overflow-y-auto p-1">
+              <div className="grid grid-cols-1 md:grid-cols-1 gap-3 max-h-[460px] overflow-y-auto p-1">
                 {filteredSubUnits.map((unit) => {
                   const isSelected = selectedUnit?.id === unit.id;
                   return (
@@ -1388,7 +1513,8 @@ export default function SppManagementView({
                   <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold uppercase text-[10px] tracking-wider">
                     <tr>
                       <th className="py-3.5 px-4 w-12 text-center">No</th>
-                      <th className="py-3.5 px-4">Nomor & Tanggal SPP</th>
+                      <th className="py-3.5 px-4">Nomor</th>
+                      <th className="py-3.5 px-4">Tanggal SPP</th>
                       <th className="py-3.5 px-4">Keperluan Pembayaran</th>
                       <th className="py-3.5 px-4">Penerima & Rekening</th>
                       <th className="py-3.5 px-4 text-right">Nilai SPP (Rp)</th>
@@ -1411,15 +1537,9 @@ export default function SppManagementView({
                             <div className="font-bold text-slate-900 font-mono">
                               {item.no_spp}
                             </div>
-                            <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
-                              <Calendar className="w-3 h-3 text-slate-400" />
-                              <span>{item.tgl_spp}</span>
-                              {item.no_spd && (
-                                <span className="bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded text-[10px]">
-                                  SPD: {item.no_spd}
-                                </span>
-                              )}
-                            </div>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span>{item.tgl_spp}</span>
                           </td>
                           <td className="py-3.5 px-4">
                             <div className="text-slate-800 line-clamp-2 max-w-md font-medium">
@@ -1635,24 +1755,20 @@ export default function SppManagementView({
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-slate-700">
-                    Dasar SPD (Nomor)
+                    Nomor SPD
                   </label>
-                  <button
-                    type="button"
-                    onClick={handleOpenSpdModal}
-                    className="text-[11px] font-bold text-[#88131A] hover:text-[#5E0E14] flex items-center gap-1 hover:underline cursor-pointer"
-                  >
-                    <Search className="w-3 h-3" />
-                    <span>Pilih SPD Terbit</span>
-                  </button>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <input
                     type="text"
                     value={formHeader.no_spd}
-                    onChange={(e) =>
-                      setFormHeader({ ...formHeader, no_spd: e.target.value })
-                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormHeader({ ...formHeader, no_spd: val });
+                      if (!val.trim()) {
+                        setSelectedSpdInfo(null);
+                      }
+                    }}
                     placeholder="Pilih nomor SPD dari daftar terbit..."
                     className="w-full px-3 py-2 text-xs font-mono font-bold rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A]"
                   />
@@ -1662,7 +1778,7 @@ export default function SppManagementView({
                     className="px-3 py-2 bg-[#5E0E14] hover:bg-[#46090E] text-white rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer"
                     title="Buka dialog pilih SPD terbit"
                   >
-                    Pilih SPD
+                    <Search className="w-3 h-3" />
                   </button>
                 </div>
               </div>
@@ -1680,6 +1796,75 @@ export default function SppManagementView({
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A]"
                 />
               </div>
+
+              {/* Box Informasi Akumulasi Pagu dan Sisa SPD Terpilih */}
+              {formHeader.no_spd && selectedSpdInfo && (
+                <div className="md:col-span-3 p-4 rounded-xl border border-blue-200 bg-blue-50/70 space-y-2.5">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs">
+                    <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-[#88131A]" />
+                      <span>
+                        Penyediaan Dana (SPD):{" "}
+                        <strong className="font-mono text-[#88131A]">
+                          {selectedSpdInfo.no_spd}
+                        </strong>
+                      </span>
+                    </span>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="text-slate-600">
+                        Nilai SPD Ini:{" "}
+                        <strong className="font-mono text-slate-900">
+                          {formatRupiah(selectedSpdInfo.totalNilai)}
+                        </strong>
+                      </span>
+                      <span className="text-slate-600">
+                        Akumulasi SPD (Awal s.d. Ini):{" "}
+                        <strong className="font-mono text-blue-900 font-bold">
+                          {formatRupiah(selectedSpdInfo.akumulasiSpd)}
+                        </strong>
+                      </span>
+                      <span className="text-slate-600">
+                        Seluruh SPP Keluar:{" "}
+                        <strong className="font-mono text-slate-900">
+                          {formatRupiah(selectedSpdInfo.totalSppKeluar)}
+                        </strong>
+                      </span>
+                      <span
+                        className={`px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 ${selectedSpdInfo.sisaSpd <= 0
+                          ? "bg-red-100 text-red-800 border border-red-200"
+                          : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                          }`}
+                      >
+                        <span>Sisa Nilai SPD:</span>
+                        <strong className="font-mono">
+                          {formatRupiah(selectedSpdInfo.sisaSpd)}
+                        </strong>
+                      </span>
+                    </div>
+                  </div>
+
+                  {totalFormNilai > selectedSpdInfo.sisaSpd && (
+                    <div className="p-3 rounded-lg bg-red-100 border border-red-300 text-red-900 text-xs flex items-center gap-2.5 animate-in fade-in">
+                      <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+                      <div>
+                        <div className="font-black text-red-950">
+                          Peringatan: Nilai SPP Melebihi Sisa SPD!
+                        </div>
+                        <div className="mt-0.5 text-red-800 leading-relaxed">
+                          Total nilai SPP saat ini (
+                          <strong>{formatRupiah(totalFormNilai)}</strong>) melebihi
+                          sisa nilai SPD yang tersedia (
+                          <strong>{formatRupiah(selectedSpdInfo.sisaSpd)}</strong>
+                          ). Perhitungan sisa SPD: Akumulasi seluruh SPD dari nomor awal s.d. nomor terpilih (
+                          <strong>{formatRupiah(selectedSpdInfo.akumulasiSpd)}</strong>) dikurangi nilai seluruh SPP yang telah keluar (
+                          <strong>{formatRupiah(selectedSpdInfo.totalSppKeluar)}</strong>). Pembuatan SPP <u>tidak dapat dilanjutkan</u>. Silakan
+                          sesuaikan rincian belanja atau pilih SPD lainnya.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -1992,8 +2177,7 @@ export default function SppManagementView({
                       Penetapan Nilai Uang Persediaan ({badgeLabel})
                     </div>
                     <div className="text-[11px] text-amber-800">
-                      Nilai otomatis ditarik dari tabel penetapan UP SKPD dengan kode rekening{" "}
-                      <strong className="font-mono text-amber-950">1.1.01.03.01.0001 - Kas di Bendahara Pengeluaran</strong>.
+                      Nilai otomatis ditarik dari tabel penetapan UP SKPD.
                     </div>
                   </div>
                 </div>
@@ -2116,21 +2300,32 @@ export default function SppManagementView({
               Batal & Kembali
             </button>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+
               <button
                 type="button"
-                disabled={savingSpp}
+                disabled={savingSpp || isOverSpdLimit}
                 onClick={() => handleSaveSpp("DRAFT")}
-                className="px-4 py-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+                className="px-4 py-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                title={
+                  isOverSpdLimit
+                    ? "Nilai SPP melebihi sisa SPD yang tersedia. Pembuatan SPP tidak dapat dilanjutkan."
+                    : ""
+                }
               >
                 {savingSpp ? "Menyimpan..." : "Simpan sebagai Draft"}
               </button>
 
               <button
                 type="button"
-                disabled={savingSpp}
+                disabled={savingSpp || isOverSpdLimit}
                 onClick={() => handleSaveSpp("DIAJUKAN")}
-                className="px-5 py-2.5 text-xs font-bold text-white bg-[#5E0E14] hover:bg-[#46090E] rounded-xl transition-colors cursor-pointer shadow-md disabled:opacity-50 flex items-center gap-2"
+                className="px-5 py-2.5 text-xs font-bold text-white bg-[#5E0E14] hover:bg-[#46090E] rounded-xl transition-colors cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                title={
+                  isOverSpdLimit
+                    ? "Nilai SPP melebihi sisa SPD yang tersedia. Pembuatan SPP tidak dapat dilanjutkan."
+                    : ""
+                }
               >
                 <CheckCircle2 className="w-4 h-4" />
                 {savingSpp ? "Memproses..." : "Simpan & Ajukan SPP"}
@@ -2303,48 +2498,87 @@ export default function SppManagementView({
                   </p>
                 </div>
               ) : (
-                filteredSpdTerbit.map((spd, idx) => (
-                  <div
-                    key={idx}
-                    className="py-3 px-3 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-slate-50 rounded-xl transition-colors"
-                  >
-                    <div className="space-y-1 flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-black text-[#88131A]">
-                          {spd.no_spd}
-                        </span>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
-                          {spd.periode || `Triwulan ${spd.triwulan}`}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-500 flex items-center gap-2">
-                        <span>Tanggal SPD: <strong>{spd.tgl_spd || "-"}</strong></span>
-                        {spd.countRekening && (
-                          <span>• {spd.countRekening} Rekening</span>
-                        )}
-                      </div>
-                      {spd.keterangan && (
-                        <div className="text-xs text-slate-700 font-medium line-clamp-1">
-                          {spd.keterangan}
+                filteredSpdTerbit.map((spd, idx) => {
+                  const sisa =
+                    spd.sisaNilai !== undefined ? spd.sisaNilai : spd.totalNilai;
+                  const isHabis = sisa <= 0;
+                  return (
+                    <div
+                      key={idx}
+                      className="py-3.5 px-3 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-slate-50 rounded-xl transition-colors"
+                    >
+                      <div className="space-y-1.5 flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-black text-[#88131A]">
+                            {spd.no_spd}
+                          </span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                            {spd.periode || `Triwulan ${spd.triwulan}`}
+                          </span>
+                          {isHabis && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">
+                              Pagu Habis
+                            </span>
+                          )}
                         </div>
-                      )}
-                      <div className="text-xs font-black font-mono text-slate-900 pt-0.5">
-                        Total Pagu SPD: {formatRupiah(spd.totalNilai)}
+                        <div className="text-[11px] text-slate-500 flex items-center gap-2">
+                          <span>
+                            Tanggal SPD: <strong>{spd.tgl_spd || "-"}</strong>
+                          </span>
+                          {spd.countRekening && (
+                            <span>• {spd.countRekening} Rekening</span>
+                          )}
+                        </div>
+                        {spd.keterangan && (
+                          <div className="text-xs text-slate-700 font-medium line-clamp-1">
+                            {spd.keterangan}
+                          </div>
+                        )}
+                        <div className="flex flex-wrap items-center gap-3 text-xs pt-1 font-mono">
+                          <span className="text-slate-600">
+                            Nilai SPD Ini:{" "}
+                            <strong className="text-slate-900">
+                              {formatRupiah(spd.totalNilai || spd.nilaiSpd)}
+                            </strong>
+                          </span>
+                          <span className="text-blue-900 font-semibold">
+                            Akumulasi SPD (Awal s.d. Ini):{" "}
+                            <strong className="font-bold">
+                              {formatRupiah(spd.akumulasiSpd || spd.totalNilai)}
+                            </strong>
+                          </span>
+                          <span className="text-slate-500">
+                            Seluruh SPP Keluar:{" "}
+                            <strong className="text-slate-900">
+                              {formatRupiah(
+                                spd.totalSppKeluar || spd.usedNilai || 0
+                              )}
+                            </strong>
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded font-bold ${isHabis
+                              ? "bg-red-100 text-red-800 border border-red-200"
+                              : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                              }`}
+                          >
+                            Sisa Nilai SPD: {formatRupiah(sisa)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 flex items-center justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectSpd(spd)}
+                          className="px-3.5 py-1.5 bg-[#5E0E14] hover:bg-[#46090E] text-white rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          Pilih SPD Ini
+                        </button>
                       </div>
                     </div>
-
-                    <div className="shrink-0 flex items-center justify-end">
-                      <button
-                        type="button"
-                        onClick={() => handleSelectSpd(spd)}
-                        className="px-3.5 py-1.5 bg-[#5E0E14] hover:bg-[#46090E] text-white rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        Pilih SPD Ini
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

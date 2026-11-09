@@ -300,6 +300,40 @@ export async function saveSpp(data: SaveSppPayload, userNama?: string) {
   // Hitung total nilai dari rincian
   const totalNilai = rincian.reduce((acc, curr) => acc + (Number(curr.nilai) || 0), 0);
 
+  // Validasi batas sisa SPD jika no_spd diisi:
+  // Sisa nilai SPD adalah akumulasi seluruh SPD dari nomor awal sampai nomor terakhir yang dipilih dikurangi nilai seluruh SPP yang keluar
+  if (no_spd && no_spd.trim()) {
+    const spdTerbitList = await getSpdTerbitList({
+      tahunAnggaran,
+      kd_skpd: opd.kd_skpd,
+      kd_unit: unitInfo.kd_unit,
+      excludeSppId: id || undefined,
+    });
+
+    const targetSpd = spdTerbitList.find((s) => s.no_spd === no_spd.trim());
+    if (targetSpd) {
+      const sisaSpd = targetSpd.sisaSpd;
+      if (totalNilai > sisaSpd) {
+        throw new Error(
+          `Nilai SPP (${new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(
+            totalNilai
+          )}) melebihi sisa dana SPD ${no_spd.trim()} yang tersedia (${new Intl.NumberFormat("id-ID", {
+            style: "currency",
+            currency: "IDR",
+          }).format(
+            sisaSpd
+          )}). Akumulasi SPD s.d. nomor ini adalah ${new Intl.NumberFormat("id-ID", {
+            style: "currency",
+            currency: "IDR",
+          }).format(targetSpd.akumulasiSpd)} dikurangi total seluruh SPP keluar sebesar ${new Intl.NumberFormat(
+            "id-ID",
+            { style: "currency", currency: "IDR" }
+          ).format(targetSpd.totalSppKeluar)}. Pembuatan SPP tidak dapat dilanjutkan.`
+        );
+      }
+    }
+  }
+
   const result = await prisma.$transaction(async (tx) => {
     let header;
     if (id) {
@@ -576,15 +610,19 @@ export async function getPenetapanUpForSpp(params: {
 }
 
 /**
- * Mengambil daftar SPD unik yang telah terbit (tr_spd) untuk dipilih dalam modal SPP
+ * Mengambil daftar SPD unik yang telah terbit (tr_spd) untuk dipilih dalam modal SPP.
+ * Aturan perhitungan sisa SPD:
+ * Akumulasi seluruh SPD dari nomor awal sampai nomor terakhir yang dipilih dikurangi nilai seluruh SPP yang keluar.
  */
 export async function getSpdTerbitList(params: {
   tahunAnggaran: number;
   kd_skpd: string;
   kd_unit?: string | null;
+  excludeSppId?: string | null;
 }) {
-  const { tahunAnggaran, kd_skpd, kd_unit } = params;
+  const { tahunAnggaran, kd_skpd, kd_unit, excludeSppId } = params;
 
+  // 1. Ambil seluruh baris SPD aktif terurut dari awal secara kronologis (triwulan & tanggal terawal)
   const spdRows = await prisma.spd.findMany({
     where: {
       tahunAnggaran,
@@ -592,51 +630,127 @@ export async function getSpdTerbitList(params: {
       status: "AKTIF",
       ...(kd_unit ? { kd_unit } : {}),
     },
-    orderBy: [{ tgl_spd: "desc" }, { no_spd: "desc" }],
+    orderBy: [
+      { triwulan: "asc" },
+      { tgl_spd: "asc" },
+      { no_spd: "asc" },
+    ],
   });
 
-  const spdGroupMap = new Map<
-    string,
-    {
-      no_spd: string;
-      tgl_spd: string;
-      triwulan: number;
-      periode: string;
-      totalNilai: number;
-      keterangan: string | null;
-      kd_skpd: string;
-      nm_skpd: string;
-      kd_unit: string | null;
-      nm_unit: string | null;
-      countRekening: number;
-    }
-  >();
+  // 2. Ambil total akumulasi seluruh SPP yang telah keluar untuk SKPD ini (yang tidak ditolak)
+  const sppAgg = await prisma.trhspp.aggregate({
+    where: {
+      tahunAnggaran,
+      kd_skpd,
+      status: { not: "DITOLAK" },
+      ...(excludeSppId ? { id: { not: excludeSppId } } : {}),
+    },
+    _sum: {
+      nilai: true,
+    },
+  });
+  const totalSppKeluar = Number(sppAgg._sum.nilai) || 0;
+
+  // 3. Kelompokkan per no_spd secara terurut dari nomor awal ke nomor berikutnya
+  const spdOrderedList: {
+    no_spd: string;
+    tgl_spd: string;
+    triwulan: number;
+    periode: string;
+    totalNilai: number;     // Nilai lembar SPD ini
+    nilaiSpd: number;       // Alias nilai lembar SPD
+    akumulasiSpd: number;   // Akumulasi SPD dari nomor awal s.d. nomor ini
+    totalSppKeluar: number; // Nilai seluruh SPP yang keluar
+    sisaSpd: number;        // Sisa nilai SPD = akumulasiSpd - totalSppKeluar
+    usedNilai: number;      // Kompatibilitas alias untuk totalSppKeluar
+    sisaNilai: number;      // Kompatibilitas alias untuk sisaSpd
+    keterangan: string | null;
+    kd_skpd: string;
+    nm_skpd: string;
+    kd_unit: string | null;
+    nm_unit: string | null;
+    countRekening: number;
+  }[] = [];
+
+  const spdMap = new Map<string, (typeof spdOrderedList)[0]>();
 
   for (const s of spdRows) {
     const key = s.no_spd;
-    const existing = spdGroupMap.get(key);
     const val = Number(s.nilai) || 0;
+    const existing = spdMap.get(key);
     if (existing) {
       existing.totalNilai += val;
+      existing.nilaiSpd += val;
       existing.countRekening += 1;
     } else {
-      spdGroupMap.set(key, {
+      const item = {
         no_spd: s.no_spd,
         tgl_spd: s.tgl_spd ? s.tgl_spd.toISOString().split("T")[0] : "",
         triwulan: s.triwulan,
         periode: s.periode,
         totalNilai: val,
+        nilaiSpd: val,
+        akumulasiSpd: 0,
+        totalSppKeluar: totalSppKeluar,
+        sisaSpd: 0,
+        usedNilai: totalSppKeluar,
+        sisaNilai: 0,
         keterangan: s.keterangan || null,
         kd_skpd: s.kd_skpd,
         nm_skpd: s.nm_skpd,
         kd_unit: s.kd_unit,
         nm_unit: s.nm_unit,
         countRekening: 1,
-      });
+      };
+      spdMap.set(key, item);
+      spdOrderedList.push(item);
     }
   }
 
-  return Array.from(spdGroupMap.values());
+  // 4. Hitung akumulasi SPD dari nomor awal sampai nomor berjalan,
+  // dan hitung sisa nilai SPD = akumulasiSpd - totalSppKeluar
+  let runningAkumulasi = 0;
+  for (const item of spdOrderedList) {
+    runningAkumulasi += item.nilaiSpd;
+    item.akumulasiSpd = runningAkumulasi;
+    item.totalSppKeluar = totalSppKeluar;
+    item.usedNilai = totalSppKeluar;
+    item.sisaSpd = Math.max(0, runningAkumulasi - totalSppKeluar);
+    item.sisaNilai = item.sisaSpd;
+  }
+
+  return spdOrderedList;
+}
+
+/**
+ * Menghitung nomor urut SPP berikutnya berdasarkan format:
+ * 900/no_urut/kd_unit/SPP/jns_spp/tahun
+ */
+export async function getNextSppSequence(params: {
+  tahunAnggaran: number;
+  kd_skpd: string;
+}) {
+  const rows = await prisma.trhspp.findMany({
+    where: {
+      tahunAnggaran: params.tahunAnggaran,
+      kd_skpd: params.kd_skpd,
+    },
+    select: { no_spp: true },
+  });
+
+  let maxSeq = 0;
+  for (const r of rows) {
+    // Format: 900/00003/...
+    const parts = r.no_spp.split("/");
+    if (parts.length >= 2 && parts[0] === "900") {
+      const num = parseInt(parts[1], 10);
+      if (!isNaN(num) && num > maxSeq) {
+        maxSeq = num;
+      }
+    }
+  }
+
+  return maxSeq + 1;
 }
 
 /**
