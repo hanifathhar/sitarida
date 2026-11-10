@@ -81,6 +81,13 @@ const PAGE_TITLES: Record<string, string> = {
   "/penatausahaan/spp/up-kkpd": "SURAT PERMINTAAN PEMBAYARAN - UP KKPD (SPP-UP KKPD)",
   "/penatausahaan/spp/gu-kkpd": "SURAT PERMINTAAN PEMBAYARAN - GU KKPD (SPP-GU KKPD)",
   "/penatausahaan/spp/register": "BUKU REGISTER SURAT PERMINTAAN PEMBAYARAN (REGISTER SPP)",
+  "/penatausahaan/spm/up": "SURAT PERINTAH MEMBAYAR - UANG PERSEDIAAN (SPM-UP)",
+  "/penatausahaan/spm/gu": "SURAT PERINTAH MEMBAYAR - GANTI UANG (SPM-GU)",
+  "/penatausahaan/spm/tu": "SURAT PERINTAH MEMBAYAR - TAMBAH UANG (SPM-TU)",
+  "/penatausahaan/spm/ls-gaji": "SURAT PERINTAH MEMBAYAR - LS GAJI & TUNJANGAN (SPM-LS GAJI)",
+  "/penatausahaan/spm/ls-barang-jasa": "SURAT PERINTAH MEMBAYAR - LS BARANG & JASA (SPM-LS BARJAS)",
+  "/penatausahaan/spm/up-kkpd": "SURAT PERINTAH MEMBAYAR - UP KKPD (SPM-UP KKPD)",
+  "/penatausahaan/spm/gu-kkpd": "SURAT PERINTAH MEMBAYAR - GU KKPD (SPM-GU KKPD)",
   "/admin/users": "DATA PEGAWAI / PENGGUNA & PENUGASAN OPD",
   "/admin/roles": "MANAJEMEN ROLE & HAK AKSES",
   "/admin/audit-log": "LAPORAN JEJAK AUDIT (AUDIT LOG)",
@@ -125,6 +132,9 @@ export default function AppShell({
   const [sppDropdownOpen, setSppDropdownOpen] = useState(() =>
     pathname.startsWith("/penatausahaan/spp")
   );
+  const [spmDropdownOpen, setSpmDropdownOpen] = useState(() =>
+    pathname.startsWith("/penatausahaan/spm")
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -134,6 +144,9 @@ export default function AppShell({
     setOpenGroups(getActiveGroupByPath(pathname));
     if (pathname.startsWith("/penatausahaan/spp")) {
       setSppDropdownOpen(true);
+    }
+    if (pathname.startsWith("/penatausahaan/spm")) {
+      setSpmDropdownOpen(true);
     }
   }, [pathname]);
 
@@ -268,6 +281,52 @@ export default function AppShell({
   ].filter(
     (m) =>
       can(m.perm) ||
+      can("spp:read") ||
+      can("spp:write") ||
+      isSuperadmin
+  );
+
+  const spmSubMenus = [
+    {
+      label: "SPM-UP",
+      href: "/penatausahaan/spm/up",
+      perm: "menu:penatausahaan:spm-up",
+    },
+    {
+      label: "SPM-GU",
+      href: "/penatausahaan/spm/gu",
+      perm: "menu:penatausahaan:spm-gu",
+    },
+    {
+      label: "SPM-TU",
+      href: "/penatausahaan/spm/tu",
+      perm: "menu:penatausahaan:spm-tu",
+    },
+    {
+      label: "SPM-LS Gaji",
+      href: "/penatausahaan/spm/ls-gaji",
+      perm: "menu:penatausahaan:spm-ls-gaji",
+    },
+    {
+      label: "SPM-LS Barang dan Jasa",
+      href: "/penatausahaan/spm/ls-barang-jasa",
+      perm: "menu:penatausahaan:spm-ls-barjas",
+    },
+    {
+      label: "SPM-UP KKPD",
+      href: "/penatausahaan/spm/up-kkpd",
+      perm: "menu:penatausahaan:spm-up-kkpd",
+    },
+    {
+      label: "SPM-GU KKPD",
+      href: "/penatausahaan/spm/gu-kkpd",
+      perm: "menu:penatausahaan:spm-gu-kkpd",
+    },
+  ].filter(
+    (m) =>
+      can(m.perm) ||
+      can("spm:read") ||
+      can("spm:write") ||
       can("spp:read") ||
       can("spp:write") ||
       isSuperadmin
@@ -542,6 +601,58 @@ export default function AppShell({
                       {sppDropdownOpen && (
                         <div className="pl-3.5 space-y-1 border-l-2 border-red-300/20 ml-2 py-0.5">
                           {sppSubMenus.map((sub) => {
+                            const active = pathname === sub.href;
+                            return (
+                              <Link
+                                key={sub.href}
+                                href={sub.href}
+                                onClick={() => setSidebarOpen(false)}
+                                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] transition-all ${
+                                  active
+                                    ? "bg-white text-[#88131A] font-bold shadow-sm"
+                                    : "text-red-100 hover:text-white hover:bg-[#7A121A] font-medium"
+                                }`}
+                              >
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                    active ? "bg-[#88131A]" : "bg-red-300/60"
+                                  }`}
+                                />
+                                <span className="truncate">{sub.label}</span>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* SUB-MENU DROPDOWN SPM */}
+                  {spmSubMenus.length > 0 && (
+                    <div className="space-y-1 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setSpmDropdownOpen((prev) => !prev)}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${
+                          pathname.startsWith("/penatausahaan/spm")
+                            ? "bg-[#7A121A] text-white font-bold"
+                            : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <FileCheck2 className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                          <span>SPM</span>
+                        </div>
+                        <ChevronDown
+                          className={`w-3 h-3 transition-transform ${
+                            spmDropdownOpen ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
+
+                      {spmDropdownOpen && (
+                        <div className="pl-3.5 space-y-1 border-l-2 border-red-300/20 ml-2 py-0.5">
+                          {spmSubMenus.map((sub) => {
                             const active = pathname === sub.href;
                             return (
                               <Link

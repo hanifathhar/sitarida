@@ -128,11 +128,26 @@ export async function listSppByScope(params: SppFilterParams) {
   }
 
   if (jenisSpp && jenisSpp !== "ALL") {
-    where.jenis_spp = jenisSpp;
+    const variants = [
+      jenisSpp,
+      jenisSpp.replace(/_/g, "-"),
+      jenisSpp.replace(/-/g, "_"),
+    ];
+    where.jenis_spp = { in: Array.from(new Set(variants)) };
   }
 
   if (status && status !== "ALL") {
-    where.status = status;
+    if (status === "TELAH DIBUAT SPM") {
+      where.OR = [
+        { status: "TELAH DIBUAT SPM" },
+        { spmList: { some: {} } },
+      ];
+    } else if (status === "DIAJUKAN") {
+      where.status = "DIAJUKAN";
+      where.spmList = { none: {} };
+    } else {
+      where.status = status;
+    }
   }
 
   if (search && search.trim()) {
@@ -152,6 +167,14 @@ export async function listSppByScope(params: SppFilterParams) {
       _count: {
         select: { rincian: true },
       },
+      spmList: {
+        select: {
+          id: true,
+          no_spm: true,
+          tgl_spm: true,
+          status: true,
+        },
+      },
     },
   });
 
@@ -159,6 +182,10 @@ export async function listSppByScope(params: SppFilterParams) {
   const items = rows.map((r) => {
     const val = Number(r.nilai) || 0;
     totalNilai += val;
+    const spmDoc = r.spmList && r.spmList.length > 0 ? r.spmList[0] : null;
+    const isLocked = r.status === "TELAH DIBUAT SPM" || Boolean(spmDoc);
+    const finalStatus = isLocked ? "TELAH DIBUAT SPM" : r.status;
+
     return {
       id: r.id,
       tahunAnggaran: r.tahunAnggaran,
@@ -189,7 +216,11 @@ export async function listSppByScope(params: SppFilterParams) {
       pptkNip: r.pptkNip || r.kasubagNip || null,
       paKpaNama: r.paKpaNama,
       paKpaNip: r.paKpaNip,
-      status: r.status,
+      status: finalStatus,
+      isLocked,
+      spmId: spmDoc?.id || null,
+      spmNo: spmDoc?.no_spm || null,
+      spmTgl: spmDoc?.tgl_spm ? spmDoc.tgl_spm.toISOString().split("T")[0] : null,
       keterangan: r.keterangan,
       rekeningCount: r._count.rincian,
       createdAt: r.createdAt,
@@ -213,6 +244,14 @@ export async function getSppDetail(id: string) {
           { kd_sub_kegiatan: "asc" },
           { kd_rek6: "asc" },
         ],
+      },
+      spmList: {
+        select: {
+          id: true,
+          no_spm: true,
+          tgl_spm: true,
+          status: true,
+        },
       },
       opd: {
         select: {
@@ -337,8 +376,17 @@ export async function getSppDetail(id: string) {
     kasubagJabatan = "Kasubag Keuangan";
   }
 
+  const spmDoc = spp.spmList && spp.spmList.length > 0 ? spp.spmList[0] : null;
+  const isLocked = spp.status === "TELAH DIBUAT SPM" || Boolean(spmDoc);
+  const finalStatus = isLocked ? "TELAH DIBUAT SPM" : spp.status;
+
   return {
     ...spp,
+    status: finalStatus,
+    isLocked,
+    spmId: spmDoc?.id || null,
+    spmNo: spmDoc?.no_spm || null,
+    spmTgl: spmDoc?.tgl_spm ? spmDoc.tgl_spm.toISOString().split("T")[0] : null,
     kasubagNama,
     kasubagNip,
     kasubagJabatan,
@@ -415,6 +463,27 @@ export async function saveSpp(data: SaveSppPayload, userNama?: string) {
     });
     if (unit) {
       unitInfo = { kd_unit: unit.kd_unit, nm_unit: unit.nm_unit };
+    }
+  }
+
+  // Validasi jika SPP telah diterbitkan SPM maka data dikunci
+  if (id) {
+    const existing = await prisma.trhspp.findUnique({
+      where: { id },
+      include: {
+        spmList: { select: { id: true, no_spm: true } },
+      },
+    });
+    if (
+      existing &&
+      (existing.status === "TELAH DIBUAT SPM" || existing.spmList.length > 0)
+    ) {
+      const spmNo = existing.spmList[0]?.no_spm || "";
+      throw new Error(
+        `Dokumen SPP telah diterbitkan SPM${
+          spmNo ? ` (${spmNo})` : ""
+        }. Data telah dikunci dan tidak dapat diubah.`
+      );
     }
   }
 
@@ -584,12 +653,24 @@ export async function saveSpp(data: SaveSppPayload, userNama?: string) {
 export async function deleteSpp(id: string) {
   const spp = await prisma.trhspp.findUnique({
     where: { id },
+    include: {
+      spmList: { select: { id: true, no_spm: true } },
+    },
   });
   if (!spp) {
     throw new Error("Dokumen SPP tidak ditemukan");
   }
-  if (spp.status === "DIVERIFIKASI") {
-    throw new Error("Dokumen SPP yang sudah diverifikasi / diterbitkan SPM tidak dapat dihapus");
+  if (
+    spp.status === "TELAH DIBUAT SPM" ||
+    spp.status === "DIVERIFIKASI" ||
+    spp.spmList.length > 0
+  ) {
+    const spmNo = spp.spmList[0]?.no_spm || "";
+    throw new Error(
+      `Dokumen SPP tidak dapat dihapus karena telah diterbitkan SPM${
+        spmNo ? ` (${spmNo})` : ""
+      }. Data telah dikunci.`
+    );
   }
 
   await prisma.trhspp.delete({
@@ -1034,11 +1115,26 @@ export async function getRegisterSppData(params: {
   }
 
   if (jenisSpp && jenisSpp !== "ALL") {
-    where.jenis_spp = jenisSpp;
+    const variants = [
+      jenisSpp,
+      jenisSpp.replace(/_/g, "-"),
+      jenisSpp.replace(/-/g, "_"),
+    ];
+    where.jenis_spp = { in: Array.from(new Set(variants)) };
   }
 
   if (status && status !== "ALL") {
-    where.status = status;
+    if (status === "TELAH DIBUAT SPM") {
+      where.OR = [
+        { status: "TELAH DIBUAT SPM" },
+        { spmList: { some: {} } },
+      ];
+    } else if (status === "DIAJUKAN") {
+      where.status = "DIAJUKAN";
+      where.spmList = { none: {} };
+    } else {
+      where.status = status;
+    }
   }
 
   if (tglMulai && tglSelesai) {

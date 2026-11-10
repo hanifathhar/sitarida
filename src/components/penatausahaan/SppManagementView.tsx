@@ -115,6 +115,9 @@ interface SppHeaderItem {
   paKpaNama?: string | null;
   paKpaNip?: string | null;
   status: string;
+  isLocked?: boolean;
+  spmNo?: string | null;
+  spmId?: string | null;
   keterangan?: string | null;
   rekeningCount: number;
   createdAt: string;
@@ -204,6 +207,8 @@ export default function SppManagementView({
     paKpaNip: "",
     status: "DRAFT",
     keterangan: "",
+    isLocked: false,
+    spmNo: null as string | null,
   });
   const [formRincian, setFormRincian] = useState<SppRincianItem[]>([]);
   const [loadingForm, setLoadingForm] = useState(false);
@@ -610,6 +615,8 @@ export default function SppManagementView({
       paKpaNip: defaultPa?.nip || selectedOpd.kepalaNip || "",
       status: "DRAFT",
       keterangan: "",
+      isLocked: false,
+      spmNo: null,
     });
 
     // KHUSUS SPP-UP & SPP-UP KKPD: Otomatis tarik nilai UP dari tr_penetapan_up, set rekening 1.1.01.03.01.0001,
@@ -688,6 +695,8 @@ export default function SppManagementView({
         const petugas = await loadPetugasOpd(d.opdId || selectedOpd?.id || "");
         const defaultKasubag = petugas?.kasubagList?.[0];
 
+        const isLockedDoc = Boolean(d.isLocked || d.status === "TELAH DIBUAT SPM");
+
         setEditingSppId(d.id);
         setFormHeader({
           no_spp: d.no_spp,
@@ -711,6 +720,8 @@ export default function SppManagementView({
           paKpaNip: d.paKpaNip || "",
           status: d.status || "DRAFT",
           keterangan: d.keterangan || "",
+          isLocked: isLockedDoc,
+          spmNo: d.spmNo || null,
         });
         setFormRincian(
           (d.rincian || []).map((r: any) => ({
@@ -899,6 +910,16 @@ export default function SppManagementView({
   // Simpan Dokumen SPP (Draft / Ajukan)
   async function handleSaveSpp(statusTarget: "DRAFT" | "DIAJUKAN") {
     if (!selectedOpd) return;
+
+    if (formHeader.isLocked) {
+      setBanner({
+        type: "error",
+        title: "Dokumen Terkunci",
+        message:
+          "Dokumen SPP ini telah diterbitkan Surat Perintah Membayar (SPM). Data telah dikunci dan tidak dapat diubah.",
+      });
+      return;
+    }
 
     if (!formHeader.no_spp.trim()) {
       setBanner({ type: "error", message: "Nomor SPP wajib diisi." });
@@ -1498,7 +1519,7 @@ export default function SppManagementView({
                 <span className="text-xs font-medium text-slate-500">
                   Status:
                 </span>
-                {["ALL", "DRAFT", "DIAJUKAN", "DIVERIFIKASI"].map((st) => (
+                {["ALL", "DRAFT", "DIAJUKAN", "TELAH DIBUAT SPM", "DIVERIFIKASI"].map((st) => (
                   <button
                     key={st}
                     type="button"
@@ -1508,7 +1529,11 @@ export default function SppManagementView({
                       : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                       }`}
                   >
-                    {st === "ALL" ? "Semua" : st}
+                    {st === "ALL"
+                      ? "Semua"
+                      : st === "TELAH DIBUAT SPM"
+                      ? "Telah SPM"
+                      : st}
                   </button>
                 ))}
               </div>
@@ -1609,16 +1634,30 @@ export default function SppManagementView({
                             {formatRupiah(item.nilai)}
                           </td>
                           <td className="py-3.5 px-4 text-center">
-                            <span
-                              className={`inline-block px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${item.status === "DIVERIFIKASI"
-                                ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                                : item.status === "DIAJUKAN"
-                                  ? "bg-sky-100 text-sky-800 border border-sky-200"
-                                  : "bg-slate-100 text-slate-700 border border-slate-200"
-                                }`}
-                            >
-                              {item.status}
-                            </span>
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span
+                                className={`inline-block px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${item.status === "TELAH DIBUAT SPM" || item.isLocked
+                                  ? "bg-purple-100 text-purple-800 border border-purple-200"
+                                  : item.status === "DIVERIFIKASI"
+                                    ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                    : item.status === "DIAJUKAN"
+                                      ? "bg-sky-100 text-sky-800 border border-sky-200"
+                                      : "bg-slate-100 text-slate-700 border border-slate-200"
+                                  }`}
+                              >
+                                {item.status === "TELAH DIBUAT SPM" || item.isLocked
+                                  ? "TELAH DIBUAT SPM"
+                                  : item.status}
+                              </span>
+                              {item.spmNo && (
+                                <span
+                                  className="text-[10px] font-mono text-purple-700 font-bold"
+                                  title={`Nomor SPM: ${item.spmNo}`}
+                                >
+                                  {item.spmNo}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="py-3.5 px-4 text-center">
                             <div className="flex items-center justify-center gap-1">
@@ -1632,23 +1671,46 @@ export default function SppManagementView({
                                 <Printer className="w-4 h-4" />
                               </button>
 
-                              {/* Edit */}
-                              <button
-                                type="button"
-                                title="Edit Dokumen SPP"
-                                onClick={() => handleEditSpp(item)}
-                                className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </button>
+                              {/* Edit / Lihat Detail */}
+                              {item.isLocked || item.status === "TELAH DIBUAT SPM" ? (
+                                <button
+                                  type="button"
+                                  title="Lihat Dokumen SPP (Telah Dibuat SPM - Terkunci)"
+                                  onClick={() => handleEditSpp(item)}
+                                  className="p-1.5 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  title="Edit Dokumen SPP"
+                                  onClick={() => handleEditSpp(item)}
+                                  className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                              )}
 
                               {/* Hapus */}
                               <button
                                 type="button"
-                                title="Hapus Dokumen SPP"
-                                disabled={item.status === "DIVERIFIKASI"}
+                                title={
+                                  item.isLocked || item.status === "TELAH DIBUAT SPM"
+                                    ? "Tidak dapat dihapus karena telah diterbitkan SPM"
+                                    : item.status === "DIVERIFIKASI"
+                                      ? "Tidak dapat dihapus karena telah diverifikasi"
+                                      : "Hapus Dokumen SPP"
+                                }
+                                disabled={Boolean(
+                                  item.isLocked ||
+                                  item.status === "TELAH DIBUAT SPM" ||
+                                  item.status === "DIVERIFIKASI"
+                                )}
                                 onClick={() => setDeleteTarget(item)}
-                                className={`p-1.5 rounded-lg transition-colors ${item.status === "DIVERIFIKASI"
+                                className={`p-1.5 rounded-lg transition-colors ${item.isLocked ||
+                                  item.status === "TELAH DIBUAT SPM" ||
+                                  item.status === "DIVERIFIKASI"
                                   ? "text-slate-300 cursor-not-allowed"
                                   : "text-red-500 hover:text-red-700 hover:bg-red-50 cursor-pointer"
                                   }`}
@@ -1725,6 +1787,27 @@ export default function SppManagementView({
                 </button>
               </div>
             </div>
+
+            {/* Banner Dokumen Terkunci Jika Telah Diterbitkan SPM */}
+            {formHeader.isLocked && (
+              <div className="p-4 bg-purple-50 border border-purple-200 rounded-2xl flex items-start gap-3 text-purple-900 animate-in fade-in">
+                <ShieldCheck className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-1">
+                  <div className="font-extrabold text-purple-950 flex flex-wrap items-center gap-2">
+                    <span>DOKUMEN TERKUNCI — TELAH DITERBITKAN SPM</span>
+                    {formHeader.spmNo && (
+                      <span className="font-mono bg-purple-200/80 px-2 py-0.5 rounded text-[11px] text-purple-950">
+                        No. SPM: {formHeader.spmNo}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-purple-800 leading-relaxed">
+                    Dokumen SPP ini dalam mode lihat (Read-Only) dan tidak dapat diubah atau dihapus karena telah diterbitkan Surat Perintah Membayar (SPM).
+                    Jika ingin melakukan perbaikan data SPP, silakan hapus terlebih dahulu dokumen SPM terkait pada sub menu SPM.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Form Fields: Header SPP */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -2251,7 +2334,12 @@ export default function SppManagementView({
                 </p>
               </div>
 
-              {jenisSpp === "UP" || jenisSpp === "UP_KKPD" ? (
+              {formHeader.isLocked ? (
+                <div className="px-3.5 py-2 bg-purple-50 text-purple-800 border border-purple-200 rounded-xl text-xs font-bold flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-purple-600" />
+                  <span>Rincian Belanja Terkunci</span>
+                </div>
+              ) : jenisSpp === "UP" || jenisSpp === "UP_KKPD" ? (
                 <button
                   type="button"
                   onClick={handleReloadPenetapanUp}
@@ -2417,6 +2505,7 @@ export default function SppManagementView({
                           <input
                             type="number"
                             min="0"
+                            disabled={formHeader.isLocked}
                             value={item.nilai || ""}
                             onChange={(e) =>
                               handleChangeRincianNilai(
@@ -2424,11 +2513,19 @@ export default function SppManagementView({
                                 Number(e.target.value) || 0
                               )
                             }
-                            className="w-full px-3 py-1.5 text-xs text-right font-black font-mono rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A]"
+                            className={`w-full px-3 py-1.5 text-xs text-right font-black font-mono rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A] ${
+                              formHeader.isLocked
+                                ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                                : ""
+                            }`}
                           />
                         </td>
                         <td className="py-3 px-3 text-center">
-                          {jenisSpp === "UP" || jenisSpp === "UP_KKPD" || jenisSpp === "TU" ? (
+                          {formHeader.isLocked ? (
+                            <span className="text-[10px] text-purple-600 font-semibold bg-purple-50 px-2 py-1 rounded border border-purple-100">
+                              Terkunci
+                            </span>
+                          ) : jenisSpp === "UP" || jenisSpp === "UP_KKPD" || jenisSpp === "TU" ? (
                             <span className="text-[10px] text-slate-400 font-semibold bg-slate-100 px-2 py-1 rounded">
                               Otomatis
                             </span>
@@ -2483,35 +2580,43 @@ export default function SppManagementView({
             </button>
 
             <div className="flex flex-wrap items-center gap-3">
+              {formHeader.isLocked ? (
+                <div className="px-4 py-2.5 bg-purple-100 text-purple-900 border border-purple-200 rounded-xl text-xs font-extrabold flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-purple-600" />
+                  <span>Dokumen Terkunci — Telah Diterbitkan SPM</span>
+                </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={savingSpp || isOverSpdLimit}
+                    onClick={() => handleSaveSpp("DRAFT")}
+                    className="px-4 py-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                    title={
+                      isOverSpdLimit
+                        ? "Nilai SPP melebihi sisa SPD yang tersedia. Pembuatan SPP tidak dapat dilanjutkan."
+                        : ""
+                    }
+                  >
+                    {savingSpp ? "Menyimpan..." : "Simpan sebagai Draft"}
+                  </button>
 
-              <button
-                type="button"
-                disabled={savingSpp || isOverSpdLimit}
-                onClick={() => handleSaveSpp("DRAFT")}
-                className="px-4 py-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                title={
-                  isOverSpdLimit
-                    ? "Nilai SPP melebihi sisa SPD yang tersedia. Pembuatan SPP tidak dapat dilanjutkan."
-                    : ""
-                }
-              >
-                {savingSpp ? "Menyimpan..." : "Simpan sebagai Draft"}
-              </button>
-
-              <button
-                type="button"
-                disabled={savingSpp || isOverSpdLimit}
-                onClick={() => handleSaveSpp("DIAJUKAN")}
-                className="px-5 py-2.5 text-xs font-bold text-white bg-[#5E0E14] hover:bg-[#46090E] rounded-xl transition-colors cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
-                title={
-                  isOverSpdLimit
-                    ? "Nilai SPP melebihi sisa SPD yang tersedia. Pembuatan SPP tidak dapat dilanjutkan."
-                    : ""
-                }
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                {savingSpp ? "Memproses..." : "Simpan & Ajukan SPP"}
-              </button>
+                  <button
+                    type="button"
+                    disabled={savingSpp || isOverSpdLimit}
+                    onClick={() => handleSaveSpp("DIAJUKAN")}
+                    className="px-5 py-2.5 text-xs font-bold text-white bg-[#5E0E14] hover:bg-[#46090E] rounded-xl transition-colors cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                    title={
+                      isOverSpdLimit
+                        ? "Nilai SPP melebihi sisa SPD yang tersedia. Pembuatan SPP tidak dapat dilanjutkan."
+                        : ""
+                    }
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    {savingSpp ? "Memproses..." : "Simpan & Ajukan SPP"}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
