@@ -31,6 +31,7 @@ import { formatRupiah, terbilang } from "@/lib/utils";
 import ActionBanner, { ActionFeedback } from "@/components/ui/ActionBanner";
 import PaginationBar from "@/components/ui/PaginationBar";
 import ConfirmDeleteDialog from "@/components/ui/ConfirmDeleteDialog";
+import SppPrintModal from "@/components/penatausahaan/SppPrintModal";
 
 export type JenisSppType =
   | "UP"
@@ -106,6 +107,9 @@ interface SppHeaderItem {
   npwp_penerima?: string | null;
   bendaharaNama?: string | null;
   bendaharaNip?: string | null;
+  kasubagNama?: string | null;
+  kasubagNip?: string | null;
+  kasubagJabatan?: string | null;
   pptkNama?: string | null;
   pptkNip?: string | null;
   paKpaNama?: string | null;
@@ -191,6 +195,9 @@ export default function SppManagementView({
     npwp_penerima: "",
     bendaharaNama: "",
     bendaharaNip: "",
+    kasubagNama: "",
+    kasubagNip: "",
+    kasubagJabatan: "Kasubag Keuangan",
     pptkNama: "",
     pptkNip: "",
     paKpaNama: "",
@@ -225,10 +232,12 @@ export default function SppManagementView({
   // Data Petugas Penandatangan per Role OPD
   const [petugasData, setPetugasData] = useState<{
     bendaharaList: { id: string; nama: string; nip: string; jabatan?: string }[];
+    kasubagList: { id: string; nama: string; nip: string; jabatan?: string }[];
     pptkList: { id: string; nama: string; nip: string; jabatan?: string }[];
     paKpaList: { id: string; nama: string; nip: string; jabatan?: string }[];
   }>({
     bendaharaList: [],
+    kasubagList: [],
     pptkList: [],
     paKpaList: [],
   });
@@ -241,7 +250,6 @@ export default function SppManagementView({
   // Print Modal
   const [printTarget, setPrintTarget] = useState<any | null>(null);
   const [loadingPrint, setLoadingPrint] = useState(false);
-  const reportIframeRef = useRef<HTMLIFrameElement>(null);
 
   // Notification Banner
   const [banner, setBanner] = useState<ActionFeedback | null>(null);
@@ -404,6 +412,7 @@ export default function SppManagementView({
       if (json.success && json.data) {
         setPetugasData({
           bendaharaList: json.data.bendaharaList || [],
+          kasubagList: json.data.kasubagList || [],
           pptkList: json.data.pptkList || [],
           paKpaList: json.data.paKpaList || [],
         });
@@ -529,6 +538,7 @@ export default function SppManagementView({
     // Ambil daftar petugas penandatangan OPD terlebih dahulu
     const petugas = await loadPetugasOpd(selectedOpd.id);
     const defaultBendahara = petugas?.bendaharaList?.[0];
+    const defaultKasubag = petugas?.kasubagList?.[0];
     const defaultPptk = petugas?.pptkList?.[0];
     const defaultPa = petugas?.paKpaList?.[0];
 
@@ -581,7 +591,7 @@ export default function SppManagementView({
       no_spd: "",
       tgl_spd: "",
       nama_penerima:
-        jenisSpp.startsWith("UP") || jenisSpp.startsWith("GU")
+        jenisSpp.startsWith("UP") || jenisSpp.startsWith("GU") || jenisSpp === "TU"
           ? defaultBendahara?.nama
             ? `Bendahara Pengeluaran (${defaultBendahara.nama})`
             : "Bendahara Pengeluaran " + selectedOpd.nm_skpd
@@ -591,8 +601,11 @@ export default function SppManagementView({
       npwp_penerima: "",
       bendaharaNama: defaultBendahara?.nama || "",
       bendaharaNip: defaultBendahara?.nip || "",
-      pptkNama: defaultPptk?.nama || "",
-      pptkNip: defaultPptk?.nip || "",
+      kasubagNama: defaultKasubag?.nama || defaultPptk?.nama || "",
+      kasubagNip: defaultKasubag?.nip || defaultPptk?.nip || "",
+      kasubagJabatan: defaultKasubag?.jabatan || "Kasubag Keuangan",
+      pptkNama: defaultPptk?.nama || defaultKasubag?.nama || "",
+      pptkNip: defaultPptk?.nip || defaultKasubag?.nip || "",
       paKpaNama: defaultPa?.nama || selectedOpd.kepalaNama || "",
       paKpaNip: defaultPa?.nip || selectedOpd.kepalaNip || "",
       status: "DRAFT",
@@ -639,6 +652,21 @@ export default function SppManagementView({
           },
         ]);
       }
+    } else if (jenisSpp === "TU") {
+      // KHUSUS SPP-TU: Otomatis pada rekening 1.1.01.03.01.0001 Kas di Bendahara Pengeluaran, nilai input manual
+      setFormRincian([
+        {
+          kd_program: "",
+          nm_program: "",
+          kd_kegiatan: "",
+          nm_kegiatan: "",
+          kd_sub_kegiatan: "",
+          nm_sub_kegiatan: "",
+          kd_rek6: "1.1.01.03.01.0001",
+          nm_rek6: "Kas di Bendahara Pengeluaran",
+          nilai: 0,
+        },
+      ]);
     } else {
       setFormRincian([]);
     }
@@ -657,6 +685,9 @@ export default function SppManagementView({
       const json = await res.json();
       if (json.success && json.data) {
         const d = json.data;
+        const petugas = await loadPetugasOpd(d.opdId || selectedOpd?.id || "");
+        const defaultKasubag = petugas?.kasubagList?.[0];
+
         setEditingSppId(d.id);
         setFormHeader({
           no_spp: d.no_spp,
@@ -671,6 +702,9 @@ export default function SppManagementView({
           npwp_penerima: d.npwp_penerima || "",
           bendaharaNama: d.bendaharaNama || "",
           bendaharaNip: d.bendaharaNip || "",
+          kasubagNama: d.kasubagNama || defaultKasubag?.nama || "",
+          kasubagNip: d.kasubagNip || defaultKasubag?.nip || "",
+          kasubagJabatan: d.kasubagJabatan || defaultKasubag?.jabatan || "Kasubag Keuangan",
           pptkNama: d.pptkNama || "",
           pptkNip: d.pptkNip || "",
           paKpaNama: d.paKpaNama || "",
@@ -693,6 +727,23 @@ export default function SppManagementView({
             sumberDana: r.sumberDana,
           }))
         );
+
+        // Jika SPP-TU belum memiliki rincian, set otomatis ke 1.1.01.03.01.0001 Kas di Bendahara Pengeluaran
+        if (d.jenis_spp === "TU" && (!d.rincian || d.rincian.length === 0)) {
+          setFormRincian([
+            {
+              kd_program: "",
+              nm_program: "",
+              kd_kegiatan: "",
+              nm_kegiatan: "",
+              kd_sub_kegiatan: "",
+              nm_sub_kegiatan: "",
+              kd_rek6: "1.1.01.03.01.0001",
+              nm_rek6: "Kas di Bendahara Pengeluaran",
+              nilai: Number(d.nilai) || 0,
+            },
+          ]);
+        }
 
         // Muat info pagu SPD jika dokumen SPP memiliki nomor SPD
         if (d.no_spd && selectedOpd) {
@@ -927,8 +978,11 @@ export default function SppManagementView({
         npwp_penerima: formHeader.npwp_penerima.trim() || null,
         bendaharaNama: formHeader.bendaharaNama.trim() || null,
         bendaharaNip: formHeader.bendaharaNip.trim() || null,
-        pptkNama: formHeader.pptkNama.trim() || null,
-        pptkNip: formHeader.pptkNip.trim() || null,
+        kasubagNama: formHeader.kasubagNama.trim() || null,
+        kasubagNip: formHeader.kasubagNip.trim() || null,
+        kasubagJabatan: formHeader.kasubagJabatan.trim() || null,
+        pptkNama: formHeader.pptkNama.trim() || formHeader.kasubagNama.trim() || null,
+        pptkNip: formHeader.pptkNip.trim() || formHeader.kasubagNip.trim() || null,
         paKpaNama: formHeader.paKpaNama.trim() || null,
         paKpaNip: formHeader.paKpaNip.trim() || null,
         status: statusTarget,
@@ -1018,15 +1072,6 @@ export default function SppManagementView({
       console.error("Error open print modal:", err);
     } finally {
       setLoadingPrint(false);
-    }
-  }
-
-  // Print via iframe
-  function handlePrintAction() {
-    const iframe = reportIframeRef.current;
-    if (iframe?.contentWindow) {
-      iframe.contentWindow.focus();
-      iframe.contentWindow.print();
     }
   }
 
@@ -1659,14 +1704,26 @@ export default function SppManagementView({
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setCurrentStep(3)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer w-fit"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Kembali ke Daftar SPP
-              </button>
+              <div className="flex items-center gap-2">
+                {editingSppId && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenPrintModal({ id: editingSppId } as any)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-[#88131A] bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl transition-colors cursor-pointer w-fit"
+                  >
+                    <Printer className="w-4 h-4" />
+                    Cetak SPP Ini
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(3)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer w-fit"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Kembali ke Daftar SPP
+                </button>
+              </div>
             </div>
 
             {/* Form Fields: Header SPP */}
@@ -2007,30 +2064,57 @@ export default function SppManagementView({
                     />
                   </div>
 
-                  {/* PPTK */}
+                  {/* Kasubag Keuangan (Peneliti Kelengkapan Dokumen SPP) */}
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-bold text-[#88131A]">
-                        Pejabat Pelaksana Teknis (PPTK)
+                        Kasubag Keuangan (Peneliti Dokumen)
                       </span>
-                      <span className="text-[10px] text-slate-400 font-medium">Role: PPTK</span>
+                      <span className="text-[10px] text-slate-400 font-medium">Role: Kasubag Keuangan</span>
                     </div>
 
-                    {petugasData.pptkList.length > 0 ? (
+                    {petugasData.kasubagList.length > 0 ? (
                       <select
-                        value={formHeader.pptkNama}
+                        value={formHeader.kasubagNama}
                         onChange={(e) => {
                           const val = e.target.value;
-                          const found = petugasData.pptkList.find((x) => x.nama === val);
+                          const found = petugasData.kasubagList.find((x) => x.nama === val);
                           setFormHeader((prev) => ({
                             ...prev,
+                            kasubagNama: val,
+                            kasubagNip: found?.nip || prev.kasubagNip,
+                            kasubagJabatan: found?.jabatan || "Kasubag Keuangan",
                             pptkNama: val,
                             pptkNip: found?.nip || prev.pptkNip,
                           }));
                         }}
                         className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white font-medium"
                       >
-                        <option value="">-- Pilih Petugas PPTK --</option>
+                        <option value="">-- Pilih Kasubag Keuangan --</option>
+                        {petugasData.kasubagList.map((x) => (
+                          <option key={x.id} value={x.nama}>
+                            {x.nama} {x.nip ? `(NIP. ${x.nip})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    ) : petugasData.pptkList.length > 0 ? (
+                      <select
+                        value={formHeader.kasubagNama}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const found = petugasData.pptkList.find((x) => x.nama === val);
+                          setFormHeader((prev) => ({
+                            ...prev,
+                            kasubagNama: val,
+                            kasubagNip: found?.nip || prev.kasubagNip,
+                            kasubagJabatan: found?.jabatan || "Kasubag Keuangan",
+                            pptkNama: val,
+                            pptkNip: found?.nip || prev.pptkNip,
+                          }));
+                        }}
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white font-medium"
+                      >
+                        <option value="">-- Pilih Petugas Verifikator / PPTK --</option>
                         {petugasData.pptkList.map((x) => (
                           <option key={x.id} value={x.nama}>
                             {x.nama} {x.nip ? `(NIP. ${x.nip})` : ""}
@@ -2040,11 +2124,12 @@ export default function SppManagementView({
                     ) : (
                       <input
                         type="text"
-                        placeholder="Nama PPTK"
-                        value={formHeader.pptkNama}
+                        placeholder="Nama Kasubag Keuangan"
+                        value={formHeader.kasubagNama}
                         onChange={(e) =>
                           setFormHeader({
                             ...formHeader,
+                            kasubagNama: e.target.value,
                             pptkNama: e.target.value,
                           })
                         }
@@ -2052,18 +2137,33 @@ export default function SppManagementView({
                       />
                     )}
 
-                    <input
-                      type="text"
-                      placeholder="NIP PPTK"
-                      value={formHeader.pptkNip}
-                      onChange={(e) =>
-                        setFormHeader({
-                          ...formHeader,
-                          pptkNip: e.target.value,
-                        })
-                      }
-                      className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-200 bg-white"
-                    />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder="NIP Kasubag Keuangan"
+                        value={formHeader.kasubagNip}
+                        onChange={(e) =>
+                          setFormHeader({
+                            ...formHeader,
+                            kasubagNip: e.target.value,
+                            pptkNip: e.target.value,
+                          })
+                        }
+                        className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-200 bg-white"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Jabatan"
+                        value={formHeader.kasubagJabatan}
+                        onChange={(e) =>
+                          setFormHeader({
+                            ...formHeader,
+                            kasubagJabatan: e.target.value,
+                          })
+                        }
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white"
+                      />
+                    </div>
                   </div>
 
                   {/* PA / KPA */}
@@ -2135,11 +2235,18 @@ export default function SppManagementView({
               <div>
                 <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
                   <Layers className="w-5 h-5 text-[#88131A]" />
-                  <span>Rincian Rekening {jenisSpp === "UP" || jenisSpp === "UP_KKPD" ? "Uang Persediaan" : "Belanja"}</span>
+                  <span>
+                    Rincian Rekening{" "}
+                    {jenisSpp === "UP" || jenisSpp === "UP_KKPD" || jenisSpp === "TU"
+                      ? "Kas di Bendahara Pengeluaran"
+                      : "Belanja"}
+                  </span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {jenisSpp === "UP" || jenisSpp === "UP_KKPD"
                     ? "Nilai Uang Persediaan ditarik otomatis dari Penetapan UP SKPD"
+                    : jenisSpp === "TU"
+                    ? "Rincian otomatis diset ke rekening 1.1.01.03.01.0001 (Kas di Bendahara Pengeluaran), masukkan nilai nominal secara manual"
                     : "Pilih rekening belanja dari DPA yang telah tersedia alokasi dana pada SPD"}
                 </p>
               </div>
@@ -2152,6 +2259,29 @@ export default function SppManagementView({
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   Tarik Ulang Nilai UP SKPD
+                </button>
+              ) : jenisSpp === "TU" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormRincian([
+                      {
+                        kd_program: "",
+                        nm_program: "",
+                        kd_kegiatan: "",
+                        nm_kegiatan: "",
+                        kd_sub_kegiatan: "",
+                        nm_sub_kegiatan: "",
+                        kd_rek6: "1.1.01.03.01.0001",
+                        nm_rek6: "Kas di Bendahara Pengeluaran",
+                        nilai: formRincian[0]?.nilai || 0,
+                      },
+                    ]);
+                  }}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Reset Rekening Kas
                 </button>
               ) : (
                 <button
@@ -2184,16 +2314,62 @@ export default function SppManagementView({
               </div>
             )}
 
+            {/* Banner Penjelasan Khusus SPP-TU */}
+            {jenisSpp === "TU" && (
+              <div className="p-3.5 rounded-xl bg-blue-50/80 border border-blue-200 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 rounded-lg bg-blue-100 text-blue-900 shrink-0">
+                    <Wallet className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-blue-950">
+                      Rincian Rekening Tambah Uang Persediaan (SPP-TU)
+                    </div>
+                    <div className="text-[11px] text-blue-800">
+                      Rincian otomatis diset ke rekening <strong>1.1.01.03.01.0001 - Kas di Bendahara Pengeluaran</strong>. Silakan masukkan nilai nominal SPP-TU secara manual pada kolom input nilai di bawah.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {formRincian.length === 0 ? (
-              <div className="py-12 text-center space-y-2 border-2 border-dashed border-slate-200 rounded-xl">
+              <div className="py-12 text-center space-y-3 border-2 border-dashed border-slate-200 rounded-xl">
                 <Layers className="w-8 h-8 text-slate-300 mx-auto" />
                 <div className="text-xs font-bold text-slate-600">
-                  Belum ada rekening belanja yang ditambahkan
+                  {jenisSpp === "TU"
+                    ? "Rekening Kas di Bendahara Pengeluaran belum terpasang"
+                    : "Belum ada rekening belanja yang ditambahkan"}
                 </div>
                 <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
-                  Klik tombol "Tambah Rekening Belanja" untuk memilih sub
-                  kegiatan dan kode rekening belanja yang akan dibayarkan.
+                  {jenisSpp === "TU"
+                    ? "Klik tombol di bawah untuk memasang rekening 1.1.01.03.01.0001 - Kas di Bendahara Pengeluaran."
+                    : 'Klik tombol "Tambah Rekening Belanja" untuk memilih sub kegiatan dan kode rekening belanja yang akan dibayarkan.'}
                 </p>
+                {jenisSpp === "TU" && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormRincian([
+                        {
+                          kd_program: "",
+                          nm_program: "",
+                          kd_kegiatan: "",
+                          nm_kegiatan: "",
+                          kd_sub_kegiatan: "",
+                          nm_sub_kegiatan: "",
+                          kd_rek6: "1.1.01.03.01.0001",
+                          nm_rek6: "Kas di Bendahara Pengeluaran",
+                          nilai: 0,
+                        },
+                      ])
+                    }
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#5E0E14] hover:bg-[#46090E] text-white rounded-xl text-xs font-bold shadow-sm cursor-pointer mx-auto"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Pasang Rekening Kas di Bendahara Pengeluaran
+                  </button>
+                )}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -2252,13 +2428,19 @@ export default function SppManagementView({
                           />
                         </td>
                         <td className="py-3 px-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveRincian(idx)}
-                            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {jenisSpp === "UP" || jenisSpp === "UP_KKPD" || jenisSpp === "TU" ? (
+                            <span className="text-[10px] text-slate-400 font-semibold bg-slate-100 px-2 py-1 rounded">
+                              Otomatis
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveRincian(idx)}
+                              className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -2586,278 +2768,14 @@ export default function SppManagementView({
       )}
 
       {/* ============================================================== */}
-      {/* MODAL PREVIEW & CETAK DOKUMEN SPP                              */}
+      {/* MODAL CETAK DOKUMEN RESMI (5 Format Laporan sesuai Folder SPP) */}
       {/* ============================================================== */}
-      {printTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <div className="flex items-center gap-2">
-                <Printer className="w-5 h-5 text-[#88131A]" />
-                <h3 className="text-sm font-extrabold text-slate-900">
-                  Pratinjau Cetak {printTarget.no_spp}
-                </h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handlePrintAction}
-                  className="px-3 py-1.5 bg-[#5E0E14] hover:bg-[#46090E] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  Cetak Sekarang
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPrintTarget(null)}
-                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Iframe Document Paper */}
-            <div className="flex-1 p-6 bg-slate-200/50 overflow-y-auto flex justify-center">
-              <div className="bg-white shadow-lg p-8 w-full max-w-[210mm] min-h-[297mm] text-slate-900 font-serif text-[12px] leading-relaxed">
-                {/* Kop Surat SKPD */}
-                <div className="text-center border-b-2 border-black pb-3 mb-4 space-y-1">
-                  <div className="font-bold text-sm tracking-wider uppercase">
-                    PEMERINTAH KABUPATEN / KOTA
-                  </div>
-                  <div className="font-extrabold text-base uppercase">
-                    {printTarget.nm_skpd}
-                  </div>
-                  <div className="text-[11px] font-sans">
-                    SURAT PERMINTAAN PEMBAYARAN ({printTarget.jenis_spp})
-                  </div>
-                  <div className="text-xs font-bold font-mono">
-                    NOMOR: {printTarget.no_spp}
-                  </div>
-                </div>
-
-                {/* Ringkasan Header */}
-                <div className="space-y-1 mb-4 font-sans text-xs">
-                  <div className="grid grid-cols-4 gap-1">
-                    <div className="font-bold">Tanggal SPP</div>
-                    <div className="col-span-3">: {printTarget.tgl_spp}</div>
-                  </div>
-                  <div className="grid grid-cols-4 gap-1">
-                    <div className="font-bold">SKPD</div>
-                    <div className="col-span-3">
-                      : [{printTarget.kd_skpd}] {printTarget.nm_skpd}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-4 gap-1">
-                    <div className="font-bold">Keperluan</div>
-                    <div className="col-span-3">
-                      : {printTarget.keperluan}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-4 gap-1">
-                    <div className="font-bold">Dasar SPD</div>
-                    <div className="col-span-3">
-                      : {printTarget.no_spd || "-"}{" "}
-                      {printTarget.tgl_spd
-                        ? `(Tgl: ${printTarget.tgl_spd})`
-                        : ""}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-4 gap-1">
-                    <div className="font-bold">Penerima</div>
-                    <div className="col-span-3">
-                      : {printTarget.nama_penerima || "-"} / Bank:{" "}
-                      {printTarget.bank_penerima || "-"} (Rek:{" "}
-                      {printTarget.rek_penerima || "-"})
-                    </div>
-                  </div>
-                </div>
-
-                {/* Tabel Rincian Belanja */}
-                <table className="w-full border-collapse border border-black text-xs font-sans mb-4">
-                  <thead>
-                    <tr className="bg-slate-100 text-center font-bold">
-                      <th className="border border-black p-1.5 w-8">No</th>
-                      <th className="border border-black p-1.5">
-                        Kode Sub Kegiatan & Rekening
-                      </th>
-                      <th className="border border-black p-1.5">Uraian</th>
-                      <th className="border border-black p-1.5 w-32 text-right">
-                        Jumlah (Rp)
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(printTarget.rincian || []).map((r: any, i: number) => (
-                      <tr key={i}>
-                        <td className="border border-black p-1.5 text-center">
-                          {i + 1}
-                        </td>
-                        <td className="border border-black p-1.5 font-mono text-[11px]">
-                          {r.kd_sub_kegiatan ? (
-                            <>
-                              {r.kd_sub_kegiatan} <br />
-                            </>
-                          ) : null}
-                          {r.kd_rek6}
-                        </td>
-                        <td className="border border-black p-1.5">
-                          {r.nm_sub_kegiatan ? (
-                            <>
-                              {r.nm_sub_kegiatan} <br />
-                            </>
-                          ) : null}
-                          <span className="font-semibold">{r.nm_rek6}</span>
-                        </td>
-                        <td className="border border-black p-1.5 text-right font-mono font-bold">
-                          {formatRupiah(r.nilai)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="font-bold bg-slate-50">
-                      <td
-                        colSpan={3}
-                        className="border border-black p-1.5 text-right"
-                      >
-                        JUMLAH
-                      </td>
-                      <td className="border border-black p-1.5 text-right font-mono font-black">
-                        {formatRupiah(printTarget.nilai)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-
-                <div className="mb-6 font-sans text-xs italic">
-                  Terbilang: {terbilang(printTarget.nilai)} rupiah
-                </div>
-
-                {/* Lembar Tanda Tangan */}
-                <div className="grid grid-cols-2 gap-8 text-center font-sans text-xs pt-4">
-                  <div>
-                    <div className="text-slate-600">Mengetahui / Menyetujui,</div>
-                    <div className="font-bold">
-                      Pengguna Anggaran / Kuasa PA
-                    </div>
-                    <div className="h-16"></div>
-                    <div className="font-bold underline">
-                      {printTarget.paKpaNama || "(....................................)"}
-                    </div>
-                    <div>NIP. {printTarget.paKpaNip || "...................................."}</div>
-                  </div>
-
-                  <div>
-                    <div className="text-slate-600">
-                      Tanggal: {printTarget.tgl_spp}
-                    </div>
-                    <div className="font-bold">Bendahara Pengeluaran</div>
-                    <div className="h-16"></div>
-                    <div className="font-bold underline">
-                      {printTarget.bendaharaNama || "(....................................)"}
-                    </div>
-                    <div>
-                      NIP. {printTarget.bendaharaNip || "...................................."}
-                    </div>
-                  </div>
-                </div>
-
-                <iframe
-                  ref={reportIframeRef}
-                  className="hidden"
-                  srcDoc={`
-                    <!DOCTYPE html>
-                    <html>
-                      <head>
-                        <title>Cetak SPP - ${printTarget.no_spp}</title>
-                        <style>
-                          @page { size: A4; margin: 15mm; }
-                          body { font-family: serif; font-size: 12px; margin: 0; padding: 0; }
-                          table { width: 100%; border-collapse: collapse; margin-top: 10px; font-family: sans-serif; font-size: 11px; }
-                          th, td { border: 1px solid black; padding: 6px; }
-                          .text-center { text-align: center; }
-                          .text-right { text-align: right; }
-                          .font-mono { font-family: monospace; }
-                          .font-bold { font-weight: bold; }
-                        </style>
-                      </head>
-                      <body>
-                        <div class="text-center" style="border-bottom: 2px solid black; padding-bottom: 8px; margin-bottom: 12px;">
-                          <div style="font-size: 14px; font-weight: bold;">PEMERINTAH KABUPATEN / KOTA</div>
-                          <div style="font-size: 16px; font-weight: bold;">${printTarget.nm_skpd}</div>
-                          <div style="font-size: 12px;">SURAT PERMINTAAN PEMBAYARAN (${printTarget.jenis_spp})</div>
-                          <div style="font-size: 12px; font-weight: bold; font-family: monospace;">NOMOR: ${printTarget.no_spp}</div>
-                        </div>
-
-                        <div style="font-family: sans-serif; font-size: 11px; line-height: 1.6; margin-bottom: 12px;">
-                          <div><strong>Tanggal SPP:</strong> ${printTarget.tgl_spp}</div>
-                          <div><strong>SKPD:</strong> [${printTarget.kd_skpd}] ${printTarget.nm_skpd}</div>
-                          <div><strong>Keperluan:</strong> ${printTarget.keperluan}</div>
-                          <div><strong>Dasar SPD:</strong> ${printTarget.no_spd || "-"}</div>
-                          <div><strong>Penerima:</strong> ${printTarget.nama_penerima || "-"} / Bank: ${printTarget.bank_penerima || "-"}</div>
-                        </div>
-
-                        <table>
-                          <thead>
-                            <tr style="background-color: #f2f2f2;">
-                              <th class="text-center" style="width: 30px;">No</th>
-                              <th>Kode Sub Kegiatan & Rekening</th>
-                              <th>Uraian</th>
-                              <th class="text-right" style="width: 140px;">Jumlah (Rp)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            ${(printTarget.rincian || [])
-                      .map(
-                        (r: any, idx: number) => `
-                              <tr>
-                                <td class="text-center">${idx + 1}</td>
-                                <td class="font-mono">${r.kd_sub_kegiatan ? r.kd_sub_kegiatan + '<br/>' : ''}${r.kd_rek6}</td>
-                                <td>${r.nm_sub_kegiatan ? r.nm_sub_kegiatan + '<br/>' : ''}<strong>${r.nm_rek6}</strong></td>
-                                <td class="text-right font-mono font-bold">${formatRupiah(r.nilai)}</td>
-                              </tr>
-                            `
-                      )
-                      .join("")}
-                          </tbody>
-                          <tfoot>
-                            <tr style="font-weight: bold; background-color: #f9f9f9;">
-                              <td colspan="3" class="text-right">JUMLAH</td>
-                              <td class="text-right font-mono font-bold">${formatRupiah(printTarget.nilai)}</td>
-                            </tr>
-                          </tfoot>
-                        </table>
-
-                        <div style="margin-top: 8px; font-style: italic; font-size: 11px; font-family: sans-serif;">
-                          Terbilang: ${terbilang(printTarget.nilai)} rupiah
-                        </div>
-
-                        <div style="display: flex; justify-content: space-between; margin-top: 35px; font-family: sans-serif; font-size: 11px; text-align: center;">
-                          <div style="width: 45%;">
-                            <div>Mengetahui / Menyetujui,</div>
-                            <div style="font-weight: bold;">Pengguna Anggaran / Kuasa PA</div>
-                            <div style="height: 60px;"></div>
-                            <div style="font-weight: bold; text-decoration: underline;">${printTarget.paKpaNama || "(....................................)"}</div>
-                            <div>NIP. ${printTarget.paKpaNip || "...................................."}</div>
-                          </div>
-                          <div style="width: 45%;">
-                            <div>Tanggal: ${printTarget.tgl_spp}</div>
-                            <div style="font-weight: bold;">Bendahara Pengeluaran</div>
-                            <div style="height: 60px;"></div>
-                            <div style="font-weight: bold; text-decoration: underline;">${printTarget.bendaharaNama || "(....................................)"}</div>
-                            <div>NIP. ${printTarget.bendaharaNip || "...................................."}</div>
-                          </div>
-                        </div>
-                      </body>
-                    </html>
-                  `}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <SppPrintModal
+        isOpen={Boolean(printTarget)}
+        onClose={() => setPrintTarget(null)}
+        sppData={printTarget}
+        loading={loadingPrint}
+      />
 
       {/* Dialog Konfirmasi Hapus */}
       <ConfirmDeleteDialog

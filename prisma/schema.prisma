@@ -761,6 +761,9 @@ model Trhspp {
   bendaharaNip    String?
   pptkNama        String?
   pptkNip         String?
+  kasubagNama     String?
+  kasubagNip      String?
+  kasubagJabatan  String?
   paKpaNama       String?
   paKpaNip        String?
   status          String    @default("DRAFT") // DRAFT, DIAJUKAN, DIVERIFIKASI, DITOLAK

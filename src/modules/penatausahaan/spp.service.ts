@@ -42,6 +42,9 @@ export interface SaveSppPayload {
   npwp_penerima?: string | null;
   bendaharaNama?: string | null;
   bendaharaNip?: string | null;
+  kasubagNama?: string | null;
+  kasubagNip?: string | null;
+  kasubagJabatan?: string | null;
   pptkNama?: string | null;
   pptkNip?: string | null;
   paKpaNama?: string | null;
@@ -179,8 +182,11 @@ export async function listSppByScope(params: SppFilterParams) {
       npwp_penerima: r.npwp_penerima,
       bendaharaNama: r.bendaharaNama,
       bendaharaNip: r.bendaharaNip,
-      pptkNama: r.pptkNama,
-      pptkNip: r.pptkNip,
+      kasubagNama: r.kasubagNama || r.pptkNama || null,
+      kasubagNip: r.kasubagNip || r.pptkNip || null,
+      kasubagJabatan: r.kasubagJabatan || "Kasubag Keuangan",
+      pptkNama: r.pptkNama || r.kasubagNama || null,
+      pptkNip: r.pptkNip || r.kasubagNip || null,
       paKpaNama: r.paKpaNama,
       paKpaNip: r.paKpaNip,
       status: r.status,
@@ -213,6 +219,8 @@ export async function getSppDetail(id: string) {
           id: true,
           kd_skpd: true,
           nm_skpd: true,
+          kd_urusan: true,
+          nm_urusan: true,
           kepalaNama: true,
           kepalaNip: true,
           kepalaJabatan: true,
@@ -223,8 +231,119 @@ export async function getSppDetail(id: string) {
 
   if (!spp) return null;
 
+  // 1. Ambil Total Pagu Belanja DPA (Akun 5) dari trdrka
+  const dpaAgg = await prisma.trdrka.aggregate({
+    where: {
+      kd_skpd: spp.kd_skpd,
+      tahunAnggaran: spp.tahunAnggaran,
+      kd_rek6: { startsWith: "5" },
+    },
+    _sum: {
+      nilai: true,
+    },
+  });
+  const totalDpa = Number(dpaAgg._sum.nilai) || 0;
+
+  // 2. Ambil daftar SPD yang terbit
+  const spdList = await getSpdTerbitList({
+    tahunAnggaran: spp.tahunAnggaran,
+    kd_skpd: spp.kd_skpd,
+    kd_unit: spp.kd_unit,
+    excludeSppId: spp.id,
+  });
+
+  const targetSpd = spdList.find((s) => s.no_spd === spp.no_spd) || null;
+  const sisaSpd = targetSpd ? targetSpd.sisaSpd : 0;
+  const akumulasiSpd = targetSpd ? targetSpd.akumulasiSpd : 0;
+
+  // Daftar SPD s.d. nomor terpilih untuk tabel RINGKASAN SPD
+  const targetIndex = targetSpd
+    ? spdList.findIndex((s) => s.no_spd === spp.no_spd)
+    : -1;
+  const ringkasanSpdList =
+    targetIndex >= 0 ? spdList.slice(0, targetIndex + 1) : spdList;
+  const totalSpdRingkasan = ringkasanSpdList.reduce(
+    (acc, curr) => acc + (curr.totalNilai || curr.nilaiSpd || 0),
+    0
+  );
+
+  // 3. Ringkasan Belanja per jenis SPP yang telah dikeluarkan
+  const allSppInOpd = await prisma.trhspp.findMany({
+    where: {
+      tahunAnggaran: spp.tahunAnggaran,
+      kd_skpd: spp.kd_skpd,
+      status: { not: "DITOLAK" },
+    },
+    select: {
+      id: true,
+      jenis_spp: true,
+      nilai: true,
+    },
+  });
+
+  let belanjaUpGu = 0;
+  let belanjaTu = 0;
+  let belanjaLs = 0;
+
+  for (const s of allSppInOpd) {
+    const v = Number(s.nilai) || 0;
+    if (["UP", "GU", "UP_KKPD", "GU_KKPD"].includes(s.jenis_spp)) {
+      belanjaUpGu += v;
+    } else if (s.jenis_spp === "TU") {
+      belanjaTu += v;
+    } else {
+      belanjaLs += v;
+    }
+  }
+
+  const totalBelanja = belanjaUpGu + belanjaTu + belanjaLs;
+
+  // Kasubag Keuangan OPD: utamakan kasubagNama, jika kosong cari user dengan Role Kasubag Keuangan (Role 12) di OPD terkait
+  let kasubagNama = spp.kasubagNama || null;
+  let kasubagNip = spp.kasubagNip || null;
+  let kasubagJabatan = spp.kasubagJabatan || null;
+
+  if (!kasubagNama && spp.opdId) {
+    try {
+      const kasubagUser = await prisma.user.findFirst({
+        where: {
+          opdId: spp.opdId,
+          isActive: true,
+          OR: [
+            { role: { kode: "12" } },
+            { role: { nama: { contains: "kasubag keuangan", mode: "insensitive" } } },
+            { role: { nama: { contains: "keuangan", mode: "insensitive" } } },
+          ],
+        },
+        include: { role: true },
+        orderBy: { namaLengkap: "asc" },
+      });
+      if (kasubagUser) {
+        kasubagNama = kasubagUser.namaLengkap;
+        kasubagNip = kasubagUser.nip || "";
+        kasubagJabatan = kasubagUser.jabatan || kasubagUser.role.nama || "Kasubag Keuangan";
+      }
+    } catch (e) {
+      console.error("Gagal cari kasubag default:", e);
+    }
+  }
+
+  // Jika di OPD tidak ada user Kasubag Keuangan, baru gunakan pptkNama sebagai fallback
+  if (!kasubagNama) {
+    kasubagNama = spp.pptkNama || null;
+    kasubagNip = spp.pptkNip || null;
+  }
+  if (!kasubagJabatan) {
+    kasubagJabatan = "Kasubag Keuangan";
+  }
+
   return {
     ...spp,
+    kasubagNama,
+    kasubagNip,
+    kasubagJabatan,
+    pptkNama: spp.pptkNama || kasubagNama || null,
+    pptkNip: spp.pptkNip || kasubagNip || null,
     tgl_spp: spp.tgl_spp.toISOString().split("T")[0],
     tgl_spd: spp.tgl_spd ? spp.tgl_spd.toISOString().split("T")[0] : null,
     nilai: Number(spp.nilai) || 0,
@@ -232,6 +351,20 @@ export async function getSppDetail(id: string) {
       ...d,
       nilai: Number(d.nilai) || 0,
     })),
+    printInfo: {
+      totalDpa,
+      sisaDanaBelumSpd: Math.max(0, totalDpa - totalSpdRingkasan),
+      targetSpd,
+      sisaSpd,
+      akumulasiSpd,
+      ringkasanSpdList,
+      totalSpdRingkasan,
+      belanjaUpGu,
+      belanjaTu,
+      belanjaLs,
+      totalBelanja,
+      sisaSpdBelumDibelanjakan: totalSpdRingkasan - totalBelanja,
+    },
   };
 }
 
@@ -254,6 +387,9 @@ export async function saveSpp(data: SaveSppPayload, userNama?: string) {
     npwp_penerima,
     bendaharaNama,
     bendaharaNip,
+    kasubagNama,
+    kasubagNip,
+    kasubagJabatan,
     pptkNama,
     pptkNip,
     paKpaNama,
@@ -362,8 +498,11 @@ export async function saveSpp(data: SaveSppPayload, userNama?: string) {
           npwp_penerima: npwp_penerima || null,
           bendaharaNama: bendaharaNama || null,
           bendaharaNip: bendaharaNip || null,
-          pptkNama: pptkNama || null,
-          pptkNip: pptkNip || null,
+          kasubagNama: kasubagNama || pptkNama || null,
+          kasubagNip: kasubagNip || pptkNip || null,
+          kasubagJabatan: kasubagJabatan || null,
+          pptkNama: pptkNama || kasubagNama || null,
+          pptkNip: pptkNip || kasubagNip || null,
           paKpaNama: paKpaNama || null,
           paKpaNip: paKpaNip || null,
           status,
@@ -400,8 +539,11 @@ export async function saveSpp(data: SaveSppPayload, userNama?: string) {
           npwp_penerima: npwp_penerima || null,
           bendaharaNama: bendaharaNama || null,
           bendaharaNip: bendaharaNip || null,
-          pptkNama: pptkNama || null,
-          pptkNip: pptkNip || null,
+          kasubagNama: kasubagNama || pptkNama || null,
+          kasubagNip: kasubagNip || pptkNip || null,
+          kasubagJabatan: kasubagJabatan || null,
+          pptkNama: pptkNama || kasubagNama || null,
+          pptkNip: pptkNip || kasubagNip || null,
           paKpaNama: paKpaNama || null,
           paKpaNip: paKpaNip || null,
           status,
@@ -412,7 +554,7 @@ export async function saveSpp(data: SaveSppPayload, userNama?: string) {
 
     // Insert rincian trdspp
     if (rincian && rincian.length > 0) {
-      const isUp = jenis_spp === "UP";
+      const isUp = jenis_spp === "UP" || jenis_spp === "UP_KKPD" || jenis_spp === "TU";
       await tx.trdspp.createMany({
         data: rincian.map((r) => ({
           sppId: header.id,
@@ -800,6 +942,22 @@ export async function getPetugasPenandatanganByOpd(opdId: string) {
       jabatan: u.jabatan || u.role.nama,
     }));
 
+  // Kasubag Keuangan: role kode 12 atau nama role mengandung kasubag keuangan / keuangan
+  const kasubagList = users
+    .filter(
+      (u) =>
+        u.role.kode === "12" ||
+        u.role.nama.toLowerCase().includes("kasubag keuangan") ||
+        (u.role.nama.toLowerCase().includes("keuangan") &&
+          !u.role.nama.toLowerCase().includes("bendahara"))
+    )
+    .map((u) => ({
+      id: u.id,
+      nama: u.namaLengkap,
+      nip: u.nip || "",
+      jabatan: u.jabatan || u.role.nama || "Kasubag Keuangan",
+    }));
+
   // PPTK: role kode 9 atau nama role mengandung pptk
   const pptkList = users
     .filter(
@@ -846,6 +1004,7 @@ export async function getPetugasPenandatanganByOpd(opdId: string) {
 
   return {
     bendaharaList,
+    kasubagList,
     pptkList,
     paKpaList,
   };
