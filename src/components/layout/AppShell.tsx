@@ -332,6 +332,14 @@ export default function AppShell({
       isSuperadmin
   );
 
+  // Auto-expand menu penatausahaan & SPM untuk role yang fokus pada penatausahaan (seperti Kasubag Keuangan)
+  useEffect(() => {
+    if (perencanaanMenus.length === 0 && spmSubMenus.length > 0) {
+      setOpenGroups((prev) => ({ ...prev, penatausahaan: true }));
+      setSpmDropdownOpen(true);
+    }
+  }, [perencanaanMenus.length, spmSubMenus.length]);
+
   const pengaturanMenus = [
     {
       label: "Data Pegawai / User",
@@ -530,7 +538,9 @@ export default function AppShell({
           )}
 
           {/* MENU UTAMA: PENATAUSAHAAN */}
-          {(penatausahaanMenus.length > 0 || sppSubMenus.length > 0) && (
+          {(penatausahaanMenus.length > 0 ||
+            sppSubMenus.length > 0 ||
+            spmSubMenus.length > 0) && (
             <div className="bg-[#8E1B24] rounded-xl p-2 space-y-1.5 shadow-sm border border-red-400/15">
               <button
                 type="button"
