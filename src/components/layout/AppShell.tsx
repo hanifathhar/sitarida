@@ -35,6 +35,7 @@ import {
   BookOpenText,
   FileSpreadsheet,
   Coins,
+  Landmark,
 } from "lucide-react";
 import { SessionPayload } from "@/lib/session";
 
@@ -81,6 +82,9 @@ const PAGE_TITLES: Record<string, string> = {
   "/penatausahaan/spp/up-kkpd": "SURAT PERMINTAAN PEMBAYARAN - UP KKPD (SPP-UP KKPD)",
   "/penatausahaan/spp/gu-kkpd": "SURAT PERMINTAAN PEMBAYARAN - GU KKPD (SPP-GU KKPD)",
   "/penatausahaan/spp/register": "BUKU REGISTER SURAT PERMINTAAN PEMBAYARAN (REGISTER SPP)",
+  "/penatausahaan/spm": "PEMBUATAN SURAT PERINTAH MEMBAYAR (SPM)",
+  "/penatausahaan/spm/pembuatan": "PEMBUATAN SURAT PERINTAH MEMBAYAR (SPM)",
+  "/penatausahaan/spm/register": "BUKU REGISTER SURAT PERINTAH MEMBAYAR (REGISTER SPM)",
   "/penatausahaan/spm/up": "SURAT PERINTAH MEMBAYAR - UANG PERSEDIAAN (SPM-UP)",
   "/penatausahaan/spm/gu": "SURAT PERINTAH MEMBAYAR - GANTI UANG (SPM-GU)",
   "/penatausahaan/spm/tu": "SURAT PERINTAH MEMBAYAR - TAMBAH UANG (SPM-TU)",
@@ -88,6 +92,11 @@ const PAGE_TITLES: Record<string, string> = {
   "/penatausahaan/spm/ls-barang-jasa": "SURAT PERINTAH MEMBAYAR - LS BARANG & JASA (SPM-LS BARJAS)",
   "/penatausahaan/spm/up-kkpd": "SURAT PERINTAH MEMBAYAR - UP KKPD (SPM-UP KKPD)",
   "/penatausahaan/spm/gu-kkpd": "SURAT PERINTAH MEMBAYAR - GU KKPD (SPM-GU KKPD)",
+  "/penatausahaan/sp2d": "PEMBUATAN SURAT PERINTAH PENCAIRAN DANA (SP2D)",
+  "/penatausahaan/sp2d/pembuatan": "PEMBUATAN SURAT PERINTAH PENCAIRAN DANA (SP2D)",
+  "/penatausahaan/sp2d/verifikasi": "VERIFIKASI & PENGESAHAN DOKUMEN SP2D",
+  "/penatausahaan/sp2d/register": "BUKU REGISTER SURAT PERINTAH PENCAIRAN DANA (REGISTER SP2D)",
+  "/penatausahaan/sp2d/monitoring": "MONITORING PENCAIRAN DANA SP2D (BANK RKUD)",
   "/admin/users": "DATA PEGAWAI / PENGGUNA & PENUGASAN OPD",
   "/admin/roles": "MANAJEMEN ROLE & HAK AKSES",
   "/admin/audit-log": "LAPORAN JEJAK AUDIT (AUDIT LOG)",
@@ -135,6 +144,9 @@ export default function AppShell({
   const [spmDropdownOpen, setSpmDropdownOpen] = useState(() =>
     pathname.startsWith("/penatausahaan/spm")
   );
+  const [sp2dDropdownOpen, setSp2dDropdownOpen] = useState(() =>
+    pathname.startsWith("/penatausahaan/sp2d")
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -147,6 +159,9 @@ export default function AppShell({
     }
     if (pathname.startsWith("/penatausahaan/spm")) {
       setSpmDropdownOpen(true);
+    }
+    if (pathname.startsWith("/penatausahaan/sp2d")) {
+      setSp2dDropdownOpen(true);
     }
   }, [pathname]);
 
@@ -288,57 +303,77 @@ export default function AppShell({
 
   const spmSubMenus = [
     {
-      label: "SPM-UP",
-      href: "/penatausahaan/spm/up",
-      perm: "menu:penatausahaan:spm-up",
+      label: "Pembuatan SPM",
+      href: "/penatausahaan/spm/pembuatan",
+      perm: "menu:penatausahaan:spm",
     },
     {
-      label: "SPM-GU",
-      href: "/penatausahaan/spm/gu",
-      perm: "menu:penatausahaan:spm-gu",
-    },
-    {
-      label: "SPM-TU",
-      href: "/penatausahaan/spm/tu",
-      perm: "menu:penatausahaan:spm-tu",
-    },
-    {
-      label: "SPM-LS Gaji",
-      href: "/penatausahaan/spm/ls-gaji",
-      perm: "menu:penatausahaan:spm-ls-gaji",
-    },
-    {
-      label: "SPM-LS Barang dan Jasa",
-      href: "/penatausahaan/spm/ls-barang-jasa",
-      perm: "menu:penatausahaan:spm-ls-barjas",
-    },
-    {
-      label: "SPM-UP KKPD",
-      href: "/penatausahaan/spm/up-kkpd",
-      perm: "menu:penatausahaan:spm-up-kkpd",
-    },
-    {
-      label: "SPM-GU KKPD",
-      href: "/penatausahaan/spm/gu-kkpd",
-      perm: "menu:penatausahaan:spm-gu-kkpd",
+      label: "Register SPM",
+      href: "/penatausahaan/spm/register",
+      perm: "menu:penatausahaan:spm-register",
     },
   ].filter(
     (m) =>
       can(m.perm) ||
       can("spm:read") ||
       can("spm:write") ||
+      can("menu:penatausahaan:spm-up") ||
+      can("menu:penatausahaan:spm-gu") ||
+      can("menu:penatausahaan:spm-tu") ||
+      can("menu:penatausahaan:spm-ls-gaji") ||
+      can("menu:penatausahaan:spm-ls-barjas") ||
+      can("menu:penatausahaan:spm-up-kkpd") ||
+      can("menu:penatausahaan:spm-gu-kkpd") ||
       can("spp:read") ||
       can("spp:write") ||
       isSuperadmin
   );
 
-  // Auto-expand menu penatausahaan & SPM untuk role yang fokus pada penatausahaan (seperti Kasubag Keuangan)
+  // Modul SP2D: Khusus peran BUD (kode 1), Bidang Perbendaharaan (kode 3), dan Superadmin (kode 0)
+  const isSp2dRoleAuthorized =
+    session.roleKode === "0" ||
+    session.roleKode === "1" ||
+    session.roleKode === "3" ||
+    session.roleKode === "SUPERADMIN" ||
+    isSuperadmin;
+
+  const sp2dSubMenus = [
+    {
+      label: "Pembuatan SP2D",
+      href: "/penatausahaan/sp2d/pembuatan",
+      perm: "menu:penatausahaan:sp2d-pembuatan",
+    },
+    {
+      label: "Verifikasi SP2D",
+      href: "/penatausahaan/sp2d/verifikasi",
+      perm: "menu:penatausahaan:sp2d-verifikasi",
+    },
+    {
+      label: "Register SP2D",
+      href: "/penatausahaan/sp2d/register",
+      perm: "menu:penatausahaan:sp2d-register",
+    },
+    {
+      label: "Monitoring Pencairan",
+      href: "/penatausahaan/sp2d/monitoring",
+      perm: "menu:penatausahaan:sp2d-monitoring",
+    },
+  ].filter(
+    (m) =>
+      isSp2dRoleAuthorized ||
+      can(m.perm) ||
+      can("sp2d:read") ||
+      can("sp2d:write")
+  );
+
+  // Auto-expand menu penatausahaan untuk role penatausahaan (Kasubag Keuangan, Perbendaharaan, BUD)
   useEffect(() => {
-    if (perencanaanMenus.length === 0 && spmSubMenus.length > 0) {
+    if (perencanaanMenus.length === 0 && (spmSubMenus.length > 0 || sp2dSubMenus.length > 0)) {
       setOpenGroups((prev) => ({ ...prev, penatausahaan: true }));
-      setSpmDropdownOpen(true);
+      if (spmSubMenus.length > 0) setSpmDropdownOpen(true);
+      if (sp2dSubMenus.length > 0) setSp2dDropdownOpen(true);
     }
-  }, [perencanaanMenus.length, spmSubMenus.length]);
+  }, [perencanaanMenus.length, spmSubMenus.length, sp2dSubMenus.length]);
 
   const pengaturanMenus = [
     {
@@ -481,8 +516,8 @@ export default function AppShell({
               href="/dashboard"
               onClick={() => setSidebarOpen(false)}
               className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all shadow-sm ${pathname === "/dashboard"
-                  ? "bg-white text-[#88131A] font-bold"
-                  : "bg-[#7A151D] hover:bg-[#991B1B] text-white"
+                ? "bg-white text-[#88131A] font-bold"
+                : "bg-[#7A151D] hover:bg-[#991B1B] text-white"
                 }`}
             >
               <LayoutDashboard className="w-4 h-4 shrink-0" />
@@ -501,7 +536,7 @@ export default function AppShell({
               >
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-amber-300" />
-                  <span className="tracking-wide">Modul Perencanaan</span>
+                  <span className="tracking-wide">Perencanaan</span>
                 </div>
                 <ChevronDown
                   className={`w-3.5 h-3.5 transition-transform ${openGroups.perencanaan ? "rotate-180" : ""
@@ -520,8 +555,8 @@ export default function AppShell({
                         href={sub.href}
                         onClick={() => setSidebarOpen(false)}
                         className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${active
-                            ? "bg-white text-[#88131A] font-bold shadow-sm"
-                            : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                          ? "bg-white text-[#88131A] font-bold shadow-sm"
+                          : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
                           }`}
                       >
                         <SubIcon
@@ -540,202 +575,198 @@ export default function AppShell({
           {/* MENU UTAMA: PENATAUSAHAAN */}
           {(penatausahaanMenus.length > 0 ||
             sppSubMenus.length > 0 ||
-            spmSubMenus.length > 0) && (
-            <div className="bg-[#8E1B24] rounded-xl p-2 space-y-1.5 shadow-sm border border-red-400/15">
-              <button
-                type="button"
-                suppressHydrationWarning
-                onClick={() => toggleGroup("penatausahaan")}
-                className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs font-bold text-white cursor-pointer"
-              >
-                <div className="flex items-center gap-2">
-                  <Coins className="w-4 h-4 text-amber-300" />
-                  <span>Penatausahaan</span>
-                </div>
-                <ChevronDown
-                  className={`w-3.5 h-3.5 transition-transform ${
-                    openGroups.penatausahaan ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
+            spmSubMenus.length > 0 ||
+            sp2dSubMenus.length > 0) && (
+              <div className="bg-[#8E1B24] rounded-xl p-2 space-y-1.5 shadow-sm border border-red-400/15">
+                <button
+                  type="button"
+                  suppressHydrationWarning
+                  onClick={() => toggleGroup("penatausahaan")}
+                  className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs font-bold text-white cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Coins className="w-4 h-4 text-amber-300" />
+                    <span>Penatausahaan</span>
+                  </div>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 transition-transform ${openGroups.penatausahaan ? "rotate-180" : ""
+                      }`}
+                  />
+                </button>
 
-              {openGroups.penatausahaan && (
-                <div className="space-y-1.5 pt-0.5">
-                  {penatausahaanMenus.map((sub) => {
-                    const SubIcon = sub.icon;
-                    const active = pathname === sub.href;
-                    return (
-                      <Link
-                        key={sub.href}
-                        href={sub.href}
-                        onClick={() => setSidebarOpen(false)}
-                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${
-                          active
+                {openGroups.penatausahaan && (
+                  <div className="space-y-1.5 pt-0.5">
+                    {penatausahaanMenus.map((sub) => {
+                      const SubIcon = sub.icon;
+                      const active = pathname === sub.href;
+                      return (
+                        <Link
+                          key={sub.href}
+                          href={sub.href}
+                          onClick={() => setSidebarOpen(false)}
+                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${active
                             ? "bg-white text-[#88131A] font-bold shadow-sm"
                             : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
-                        }`}
-                      >
-                        <SubIcon
-                          className={`w-3.5 h-3.5 shrink-0 ${
-                            active ? "text-[#88131A]" : "text-amber-200"
-                          }`}
-                        />
-                        <span className="truncate">{sub.label}</span>
-                      </Link>
-                    );
-                  })}
+                            }`}
+                        >
+                          <SubIcon
+                            className={`w-3.5 h-3.5 shrink-0 ${active ? "text-[#88131A]" : "text-amber-200"
+                              }`}
+                          />
+                          <span className="truncate">{sub.label}</span>
+                        </Link>
+                      );
+                    })}
 
-                  {/* SUB-MENU DROPDOWN SPP */}
-                  {sppSubMenus.length > 0 && (
-                    <div className="space-y-1 pt-0.5">
-                      <button
-                        type="button"
-                        onClick={() => setSppDropdownOpen((prev) => !prev)}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${
-                          pathname.startsWith("/penatausahaan/spp")
+                    {/* SUB-MENU DROPDOWN SPP */}
+                    {sppSubMenus.length > 0 && (
+                      <div className="space-y-1 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setSppDropdownOpen((prev) => !prev)}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${pathname.startsWith("/penatausahaan/spp")
                             ? "bg-[#7A121A] text-white font-bold"
                             : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <FileText className="w-3.5 h-3.5 text-amber-200 shrink-0" />
-                          <span>SPP</span>
-                        </div>
-                        <ChevronDown
-                          className={`w-3 h-3 transition-transform ${
-                            sppDropdownOpen ? "rotate-180" : ""
-                          }`}
-                        />
-                      </button>
+                            }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <FileText className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                            <span>SPP</span>
+                          </div>
+                          <ChevronDown
+                            className={`w-3 h-3 transition-transform ${sppDropdownOpen ? "rotate-180" : ""
+                              }`}
+                          />
+                        </button>
 
-                      {sppDropdownOpen && (
-                        <div className="pl-3.5 space-y-1 border-l-2 border-red-300/20 ml-2 py-0.5">
-                          {sppSubMenus.map((sub) => {
-                            const active = pathname === sub.href;
-                            return (
-                              <Link
-                                key={sub.href}
-                                href={sub.href}
-                                onClick={() => setSidebarOpen(false)}
-                                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] transition-all ${
-                                  active
+                        {sppDropdownOpen && (
+                          <div className="pl-3.5 space-y-1 border-l-2 border-red-300/20 ml-2 py-0.5">
+                            {sppSubMenus.map((sub) => {
+                              const active = pathname === sub.href;
+                              return (
+                                <Link
+                                  key={sub.href}
+                                  href={sub.href}
+                                  onClick={() => setSidebarOpen(false)}
+                                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] transition-all ${active
                                     ? "bg-white text-[#88131A] font-bold shadow-sm"
                                     : "text-red-100 hover:text-white hover:bg-[#7A121A] font-medium"
-                                }`}
-                              >
-                                <span
-                                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                    active ? "bg-[#88131A]" : "bg-red-300/60"
-                                  }`}
-                                />
-                                <span className="truncate">{sub.label}</span>
-                              </Link>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                                    }`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? "bg-[#88131A]" : "bg-red-300/60"
+                                      }`}
+                                  />
+                                  <span className="truncate">{sub.label}</span>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-                  {/* SUB-MENU DROPDOWN SPM */}
-                  {spmSubMenus.length > 0 && (
-                    <div className="space-y-1 pt-0.5">
-                      <button
-                        type="button"
-                        onClick={() => setSpmDropdownOpen((prev) => !prev)}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${
-                          pathname.startsWith("/penatausahaan/spm")
+                    {/* SUB-MENU DROPDOWN SPM */}
+                    {spmSubMenus.length > 0 && (
+                      <div className="space-y-1 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setSpmDropdownOpen((prev) => !prev)}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${pathname.startsWith("/penatausahaan/spm")
                             ? "bg-[#7A121A] text-white font-bold"
                             : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <FileCheck2 className="w-3.5 h-3.5 text-amber-200 shrink-0" />
-                          <span>SPM</span>
-                        </div>
-                        <ChevronDown
-                          className={`w-3 h-3 transition-transform ${
-                            spmDropdownOpen ? "rotate-180" : ""
-                          }`}
-                        />
-                      </button>
+                            }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <FileCheck2 className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                            <span>SPM</span>
+                          </div>
+                          <ChevronDown
+                            className={`w-3 h-3 transition-transform ${spmDropdownOpen ? "rotate-180" : ""
+                              }`}
+                          />
+                        </button>
 
-                      {spmDropdownOpen && (
-                        <div className="pl-3.5 space-y-1 border-l-2 border-red-300/20 ml-2 py-0.5">
-                          {spmSubMenus.map((sub) => {
-                            const active = pathname === sub.href;
-                            return (
-                              <Link
-                                key={sub.href}
-                                href={sub.href}
-                                onClick={() => setSidebarOpen(false)}
-                                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] transition-all ${
-                                  active
+                        {spmDropdownOpen && (
+                          <div className="pl-3.5 space-y-1 border-l-2 border-red-300/20 ml-2 py-0.5">
+                            {spmSubMenus.map((sub) => {
+                              const active = pathname === sub.href;
+                              return (
+                                <Link
+                                  key={sub.href}
+                                  href={sub.href}
+                                  onClick={() => setSidebarOpen(false)}
+                                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] transition-all ${active
                                     ? "bg-white text-[#88131A] font-bold shadow-sm"
                                     : "text-red-100 hover:text-white hover:bg-[#7A121A] font-medium"
-                                }`}
-                              >
-                                <span
-                                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                    active ? "bg-[#88131A]" : "bg-red-300/60"
-                                  }`}
-                                />
-                                <span className="truncate">{sub.label}</span>
-                              </Link>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+                                    }`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? "bg-[#88131A]" : "bg-red-300/60"
+                                      }`}
+                                  />
+                                  <span className="truncate">{sub.label}</span>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-          {/* MENU UTAMA: PENGATURAN */}
-          {pengaturanMenus.length > 0 && (
-            <div className="bg-[#8E1B24] rounded-xl p-2 space-y-1.5 shadow-sm border border-red-400/15">
-              <button
-                type="button"
-                suppressHydrationWarning
-                onClick={() => toggleGroup("pengaturan")}
-                className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs font-bold text-white cursor-pointer"
-              >
-                <div className="flex items-center gap-2">
-                  <Settings className="w-4 h-4 text-red-100" />
-                  <span>Pengaturan</span>
-                </div>
-                <ChevronDown
-                  className={`w-3.5 h-3.5 transition-transform ${openGroups.pengaturan ? "rotate-180" : ""
-                    }`}
-                />
-              </button>
-
-              {openGroups.pengaturan && (
-                <div className="space-y-1.5 pt-0.5">
-                  {pengaturanMenus.map((sub) => {
-                    const SubIcon = sub.icon;
-                    const active = pathname === sub.href;
-                    return (
-                      <Link
-                        key={sub.href}
-                        href={sub.href}
-                        onClick={() => setSidebarOpen(false)}
-                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${active
-                            ? "bg-white text-[#88131A] font-bold shadow-sm"
+                    {/* SUB-MENU DROPDOWN SP2D (KHUSUS BUD & PERBENDAHARAAN) */}
+                    {sp2dSubMenus.length > 0 && (
+                      <div className="space-y-1 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setSp2dDropdownOpen((prev) => !prev)}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${pathname.startsWith("/penatausahaan/sp2d")
+                            ? "bg-[#7A121A] text-white font-bold"
                             : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
-                          }`}
-                      >
-                        <SubIcon className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">{sub.label}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+                            }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Landmark className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                            <span>SP2D</span>
+                          </div>
+                          <ChevronDown
+                            className={`w-3 h-3 transition-transform ${sp2dDropdownOpen ? "rotate-180" : ""
+                              }`}
+                          />
+                        </button>
+
+                        {sp2dDropdownOpen && (
+                          <div className="pl-3.5 space-y-1 border-l-2 border-red-300/20 ml-2 py-0.5">
+                            {sp2dSubMenus.map((sub) => {
+                              const active = pathname === sub.href;
+                              return (
+                                <Link
+                                  key={sub.href}
+                                  href={sub.href}
+                                  onClick={() => setSidebarOpen(false)}
+                                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] transition-all ${active
+                                    ? "bg-white text-[#88131A] font-bold shadow-sm"
+                                    : "text-red-100 hover:text-white hover:bg-[#7A121A] font-medium"
+                                    }`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? "bg-[#88131A]" : "bg-red-300/60"
+                                      }`}
+                                  />
+                                  <span className="truncate">{sub.label}</span>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+
 
           {hasAnyMasterSection && (
             <div className="pt-2 px-1">
@@ -782,8 +813,8 @@ export default function AppShell({
                         href={sub.href}
                         onClick={() => setSidebarOpen(false)}
                         className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${active
-                            ? "bg-white text-[#88131A] font-bold shadow-sm"
-                            : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                          ? "bg-white text-[#88131A] font-bold shadow-sm"
+                          : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
                           }`}
                       >
                         <SubIcon className="w-3.5 h-3.5 shrink-0" />
@@ -826,8 +857,8 @@ export default function AppShell({
                         href={sub.href}
                         onClick={() => setSidebarOpen(false)}
                         className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${active
-                            ? "bg-white text-[#88131A] font-bold shadow-sm"
-                            : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                          ? "bg-white text-[#88131A] font-bold shadow-sm"
+                          : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
                           }`}
                       >
                         <SubIcon className="w-3.5 h-3.5 shrink-0" />
@@ -870,8 +901,8 @@ export default function AppShell({
                         href={sub.href}
                         onClick={() => setSidebarOpen(false)}
                         className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${active
-                            ? "bg-white text-[#88131A] font-bold shadow-sm"
-                            : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                          ? "bg-white text-[#88131A] font-bold shadow-sm"
+                          : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
                           }`}
                       >
                         <SubIcon className="w-3.5 h-3.5 shrink-0" />
@@ -883,7 +914,54 @@ export default function AppShell({
               )}
             </div>
           )}
+
+          {/* MENU UTAMA: PENGATURAN */}
+          {pengaturanMenus.length > 0 && (
+            <div className="bg-[#8E1B24] rounded-xl p-2 space-y-1.5 shadow-sm border border-red-400/15">
+              <button
+                type="button"
+                suppressHydrationWarning
+                onClick={() => toggleGroup("pengaturan")}
+                className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs font-bold text-white cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-red-100" />
+                  <span>Pengaturan Hak Aksess</span>
+                </div>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform ${openGroups.pengaturan ? "rotate-180" : ""
+                    }`}
+                />
+              </button>
+
+              {openGroups.pengaturan && (
+                <div className="space-y-1.5 pt-0.5">
+                  {pengaturanMenus.map((sub) => {
+                    const SubIcon = sub.icon;
+                    const active = pathname === sub.href;
+                    return (
+                      <Link
+                        key={sub.href}
+                        href={sub.href}
+                        onClick={() => setSidebarOpen(false)}
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${active
+                          ? "bg-white text-[#88131A] font-bold shadow-sm"
+                          : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                          }`}
+                      >
+                        <SubIcon className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{sub.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
         </div>
+
+
 
         {/* Tombol Keluar */}
         <div className="p-3 border-t border-red-900/50">

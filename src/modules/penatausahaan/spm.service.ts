@@ -577,6 +577,56 @@ export function getRekeningPotonganRef() {
   ];
 }
 
+/**
+ * Validasi Ketersediaan ID Billing (Cek apakah ID Billing pernah digunakan pada SPM lain)
+ */
+export async function checkIdBillingAvailability(
+  idBilling: string,
+  excludeSpmId?: string
+) {
+  const trimmed = idBilling.trim();
+  if (!trimmed) {
+    return { isUsed: false };
+  }
+
+  const existing = await prisma.trspmpot.findFirst({
+    where: {
+      id_billing: { equals: trimmed, mode: "insensitive" },
+      ...(excludeSpmId ? { spmId: { not: excludeSpmId } } : {}),
+    },
+    include: {
+      spm: {
+        select: {
+          id: true,
+          no_spm: true,
+          tgl_spm: true,
+          nm_skpd: true,
+          status: true,
+        },
+      },
+    },
+  });
+
+  if (existing) {
+    const tglFormatted = existing.spm.tgl_spm
+      ? existing.spm.tgl_spm.toISOString().split("T")[0]
+      : "-";
+    return {
+      isUsed: true,
+      existing: {
+        idBilling: existing.id_billing,
+        noSpm: existing.spm.no_spm,
+        tglSpm: tglFormatted,
+        nmSkpd: existing.spm.nm_skpd,
+        status: existing.spm.status,
+      },
+      message: `ID Billing "${existing.id_billing}" sudah pernah digunakan pada Dokumen SPM ${existing.spm.no_spm} (${existing.spm.nm_skpd}) tanggal ${tglFormatted}. Setiap ID Billing pajak hanya boleh digunakan satu kali.`,
+    };
+  }
+
+  return { isUsed: false };
+}
+
 export async function saveSpm(data: SaveSpmPayload, userNama?: string) {
   const {
     id,
@@ -650,6 +700,52 @@ export async function saveSpm(data: SaveSpmPayload, userNama?: string) {
   );
   const totalNilaiBruto = Number(nilai) || 0;
   const nilaiBersih = Math.max(0, totalNilaiBruto - totalPotongan);
+
+  // Validasi ID Billing unik: tidak boleh ganda di form & tidak boleh duplikat dengan database
+  if (potongan && potongan.length > 0) {
+    const billingMap = new Map<string, number>();
+    for (let i = 0; i < potongan.length; i++) {
+      const raw = potongan[i].id_billing?.trim();
+      if (raw) {
+        const key = raw.toUpperCase();
+        if (billingMap.has(key)) {
+          const firstIndex = billingMap.get(key)!;
+          throw new Error(
+            `ID Billing "${raw}" dimasukkan ganda pada form potongan (baris ke-${firstIndex + 1} dan baris ke-${i + 1}). Setiap potongan harus memiliki ID Billing yang berbeda.`
+          );
+        }
+        billingMap.set(key, i);
+      }
+    }
+
+    const billingValues = Array.from(billingMap.keys());
+    if (billingValues.length > 0) {
+      const duplicateInDb = await prisma.trspmpot.findFirst({
+        where: {
+          id_billing: { in: billingValues, mode: "insensitive" },
+          ...(id ? { spmId: { not: id } } : {}),
+        },
+        include: {
+          spm: {
+            select: {
+              no_spm: true,
+              nm_skpd: true,
+              tgl_spm: true,
+            },
+          },
+        },
+      });
+
+      if (duplicateInDb) {
+        const tglStr = duplicateInDb.spm.tgl_spm
+          ? duplicateInDb.spm.tgl_spm.toISOString().split("T")[0]
+          : "-";
+        throw new Error(
+          `ID Billing "${duplicateInDb.id_billing}" sudah pernah digunakan pada Dokumen SPM ${duplicateInDb.spm.no_spm} (${duplicateInDb.spm.nm_skpd}) tanggal ${tglStr}. ID Billing tidak boleh digunakan kembali.`
+        );
+      }
+    }
+  }
 
   const parsedTglSpm = new Date(tgl_spm);
   const parsedTglSpp = tgl_spp ? new Date(tgl_spp) : null;
@@ -857,5 +953,198 @@ export async function deleteSpm(id: string) {
 
     return res;
   });
+}
+
+/**
+ * Mengambil data Buku Register SPM dengan format kolom terpisah per jenis SPM (UP, GU, TU, LS Gaji, LS Barjas, PPKD)
+ */
+export async function getRegisterSpmData(params: {
+  tahunAnggaran: number;
+  opdId?: string | null;
+  jenisSpm?: string | null;
+  tglMulai?: string | null;
+  tglSelesai?: string | null;
+  status?: string | null;
+  search?: string | null;
+}) {
+  const {
+    tahunAnggaran,
+    opdId,
+    jenisSpm,
+    tglMulai,
+    tglSelesai,
+    status,
+    search,
+  } = params;
+
+  const where: any = {
+    tahunAnggaran,
+  };
+
+  if (opdId && opdId !== "ALL") {
+    where.opdId = opdId;
+  }
+
+  if (jenisSpm && jenisSpm !== "ALL") {
+    const variants = [
+      jenisSpm,
+      jenisSpm.replace(/_/g, "-"),
+      jenisSpm.replace(/-/g, "_"),
+    ];
+    where.jenis_spm = { in: Array.from(new Set(variants)) };
+  }
+
+  if (status && status !== "ALL") {
+    where.status = status;
+  }
+
+  if (tglMulai && tglSelesai) {
+    where.tgl_spm = {
+      gte: new Date(tglMulai),
+      lte: new Date(tglSelesai),
+    };
+  } else if (tglMulai) {
+    where.tgl_spm = {
+      gte: new Date(tglMulai),
+    };
+  } else if (tglSelesai) {
+    where.tgl_spm = {
+      lte: new Date(tglSelesai),
+    };
+  }
+
+  if (search && search.trim()) {
+    const q = search.trim();
+    where.OR = [
+      { no_spm: { contains: q, mode: "insensitive" } },
+      { no_spp: { contains: q, mode: "insensitive" } },
+      { keperluan: { contains: q, mode: "insensitive" } },
+      { nm_skpd: { contains: q, mode: "insensitive" } },
+      { nama_penerima: { contains: q, mode: "insensitive" } },
+    ];
+  }
+
+  const rows = await prisma.trhspm.findMany({
+    where,
+    orderBy: [{ tgl_spm: "asc" }, { no_spm: "asc" }],
+    include: {
+      opd: {
+        select: {
+          id: true,
+          kd_skpd: true,
+          nm_skpd: true,
+          kepalaNama: true,
+          kepalaNip: true,
+          kepalaJabatan: true,
+        },
+      },
+    },
+  });
+
+  let totalUp = 0;
+  let totalGu = 0;
+  let totalTu = 0;
+  let totalLsGaji = 0;
+  let totalLsBarjas = 0;
+  let totalPpkd = 0;
+  let grandTotal = 0;
+
+  const items = rows.map((r, idx) => {
+    const val = Number(r.nilai) || 0;
+    const jns = (r.jenis_spm || "").toUpperCase().replace(/-/g, "_");
+
+    let isUp = false;
+    let isGu = false;
+    let isTu = false;
+    let isLsGaji = false;
+    let isLsBarjas = false;
+    let isPpkd = false;
+
+    if (jns === "UP" || jns === "UP_KKPD") {
+      isUp = true;
+      totalUp += val;
+    } else if (jns === "GU" || jns === "GU_KKPD") {
+      isGu = true;
+      totalGu += val;
+    } else if (jns === "TU") {
+      isTu = true;
+      totalTu += val;
+    } else if (jns === "LS_GAJI" || jns.includes("GAJI")) {
+      isLsGaji = true;
+      totalLsGaji += val;
+    } else if (jns === "PPKD") {
+      isPpkd = true;
+      totalPpkd += val;
+    } else {
+      // Default ke LS Barang & Jasa
+      isLsBarjas = true;
+      totalLsBarjas += val;
+    }
+
+    grandTotal += val;
+
+    const d = new Date(r.tgl_spm);
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    const tglDisplay = `${day}-${month}-${year}`;
+
+    return {
+      noUrut: idx + 1,
+      id: r.id,
+      tgl_spm: r.tgl_spm.toISOString().split("T")[0],
+      tglDisplay,
+      no_spm: r.no_spm,
+      no_spp: r.no_spp,
+      tgl_spp: r.tgl_spp ? r.tgl_spp.toISOString().split("T")[0] : null,
+      jenis_spm: r.jenis_spm,
+      keperluan: r.keperluan,
+      nilai: val,
+      nilai_potongan: Number(r.nilai_potongan) || 0,
+      nilai_bersih: Number(r.nilai_bersih) || val,
+      // Kolom Nomor SPM
+      no_spm_up: isUp ? r.no_spm : "",
+      no_spm_gu: isGu ? r.no_spm : "",
+      no_spm_tu: isTu ? r.no_spm : "",
+      no_spm_ls_gaji: isLsGaji ? r.no_spm : "",
+      no_spm_ls_barjas: isLsBarjas ? r.no_spm : "",
+      no_spm_ppkd: isPpkd ? r.no_spm : "",
+      // Kolom Nilai Rupiah
+      nilai_up: isUp ? val : 0,
+      nilai_gu: isGu ? val : 0,
+      nilai_tu: isTu ? val : 0,
+      nilai_ls_gaji: isLsGaji ? val : 0,
+      nilai_ls_barjas: isLsBarjas ? val : 0,
+      nilai_ppkd: isPpkd ? val : 0,
+      // Instansi & Penerima
+      kd_skpd: r.kd_skpd,
+      nm_skpd: r.nm_skpd,
+      kd_unit: r.kd_unit,
+      nm_unit: r.nm_unit,
+      nama_penerima: r.nama_penerima,
+      bank_penerima: r.bank_penerima,
+      rek_penerima: r.rek_penerima,
+      bendaharaNama: r.bendaharaNama,
+      paKpaNama: r.paKpaNama || r.opd?.kepalaNama || "",
+      paKpaNip: r.paKpaNip || r.opd?.kepalaNip || "",
+      paKpaJabatan: r.opd?.kepalaJabatan || "Kepala SKPD",
+      status: r.status,
+    };
+  });
+
+  return {
+    tahunAnggaran,
+    totalItems: items.length,
+    totals: {
+      totalUp,
+      totalGu,
+      totalTu,
+      totalLsGaji,
+      totalLsBarjas,
+      totalPpkd,
+      grandTotal,
+    },
+    items,
+  };
 }
 

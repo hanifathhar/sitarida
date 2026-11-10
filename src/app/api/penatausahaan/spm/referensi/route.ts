@@ -4,6 +4,7 @@ import {
   getSppTerbitForSpm,
   getNextSpmSequence,
   getRekeningPotonganRef,
+  checkIdBillingAvailability,
 } from "@/modules/penatausahaan/spm.service";
 import { getPetugasPenandatanganByOpd } from "@/modules/penatausahaan/spp.service";
 
@@ -66,7 +67,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: true, data });
     }
 
-    // 4. Default / spp-pilihan: Daftar Dokumen SPP yang Terbit
+    // 4. Validasi Keunikan ID Billing (Cek apakah ID Billing pernah digunakan)
+    if (type === "check-id-billing") {
+      const idBilling = searchParams.get("idBilling");
+      if (!idBilling || !idBilling.trim()) {
+        return NextResponse.json({ success: true, data: { isUsed: false } });
+      }
+      const data = await checkIdBillingAvailability(idBilling, excludeSpmId);
+      return NextResponse.json({ success: true, data });
+    }
+
+    // 5. Default / spp-pilihan: Daftar Dokumen SPP yang Terbit
     if (!kd_skpd) {
       return NextResponse.json(
         { success: false, error: "Parameter kd_skpd wajib disertakan" },

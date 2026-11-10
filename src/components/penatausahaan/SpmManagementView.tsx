@@ -46,10 +46,10 @@ export type JenisSpmType =
   | "GU_KKPD";
 
 export interface SpmManagementViewProps {
-  jenisSpm: JenisSpmType;
-  title: string;
-  subtitle: string;
-  badgeLabel: string;
+  jenisSpm?: JenisSpmType | "ALL";
+  title?: string;
+  subtitle?: string;
+  badgeLabel?: string;
   badgeColor?: string;
 }
 
@@ -161,11 +161,11 @@ interface PotonganRef {
 }
 
 export default function SpmManagementView({
-  jenisSpm,
-  title,
-  subtitle,
-  badgeLabel,
-  badgeColor = "bg-rose-100 text-rose-800 border-rose-200",
+  jenisSpm = "ALL",
+  title = "Pembuatan Surat Perintah Membayar (SPM)",
+  subtitle = "Penerbitan dokumen SPM atas beban pengeluaran (UP, GU, TU, LS Gaji, LS Barang dan Jasa) berdasarkan dokumen SPP yang telah diterbitkan",
+  badgeLabel = "SPM",
+  badgeColor = "bg-rose-100 text-[#88131A] border-rose-200",
 }: SpmManagementViewProps) {
   // Navigation Steps: 1: OPD -> 2: Unit -> 3: SPM List -> 4: SPM Form
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
@@ -186,11 +186,13 @@ export default function SpmManagementView({
   const [loadingList, setLoadingList] = useState(false);
   const [searchSpm, setSearchSpm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
+  const [filterJenisSpm, setFilterJenisSpm] = useState<string>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
   // Step 4: SPM Form Data
   const [editingSpmId, setEditingSpmId] = useState<string | null>(null);
+  const [activeFormJenisSpm, setActiveFormJenisSpm] = useState<string>("UP");
   const [formHeader, setFormHeader] = useState({
     no_spm: "",
     tgl_spm: new Date().toISOString().split("T")[0],
@@ -219,6 +221,8 @@ export default function SpmManagementView({
   });
   const [formRincianBelanja, setFormRincianBelanja] = useState<SpmRincianItem[]>([]);
   const [formPotongan, setFormPotongan] = useState<SpmPotonganItem[]>([]);
+  const [billingErrors, setBillingErrors] = useState<Record<number, string>>({});
+  const [checkingBilling, setCheckingBilling] = useState<Record<number, boolean>>({});
   const [loadingForm, setLoadingForm] = useState(false);
   const [savingSpm, setSavingSpm] = useState(false);
 
@@ -359,17 +363,18 @@ export default function SpmManagementView({
     if (currentStep === 3 && selectedOpd) {
       loadSpmList();
     }
-  }, [currentStep, selectedOpd, selectedUnit, filterStatus]);
+  }, [currentStep, selectedOpd, selectedUnit, filterStatus, filterJenisSpm]);
 
   async function loadSpmList() {
     if (!selectedOpd) return;
     setLoadingList(true);
     try {
+      const activeJenis = jenisSpm === "ALL" ? filterJenisSpm : jenisSpm;
       const params = new URLSearchParams({
         tahun: tahunAnggaran.toString(),
         kd_skpd: selectedOpd.kd_skpd,
-        jenis_spm: jenisSpm,
-        jenisSpm: jenisSpm,
+        jenis_spm: activeJenis,
+        jenisSpm: activeJenis,
       });
 
       if (selectedUnit) {
@@ -451,7 +456,11 @@ export default function SpmManagementView({
   }
 
   // Generate nomor urut SPM berikutnya
-  async function fetchNextSpmNumber(opd: OpdItem, unit?: UnitItem | null) {
+  async function fetchNextSpmNumber(
+    opd: OpdItem,
+    unit?: UnitItem | null,
+    targetJenis: string = "UP"
+  ) {
     try {
       const res = await fetch(
         `/api/penatausahaan/spm/referensi?type=next-no&tahun=${tahunAnggaran}&kd_skpd=${opd.kd_skpd}`
@@ -461,10 +470,10 @@ export default function SpmManagementView({
       const paddedNoUrut = String(seq).padStart(5, "0");
       const kdUnitTarget =
         unit?.kd_unit || availableUnits[0]?.kd_unit || opd.kd_skpd;
-      const jnsSpmCode = jenisSpm.replace(/_/g, "-");
+      const jnsSpmCode = (targetJenis !== "ALL" ? targetJenis : "UP").replace(/_/g, "-");
       return `900/${paddedNoUrut}/${kdUnitTarget}/SPM/${jnsSpmCode}/${tahunAnggaran}`;
     } catch {
-      return `900/00001/${opd.kd_skpd}/SPM/${jenisSpm}/${tahunAnggaran}`;
+      return `900/00001/${opd.kd_skpd}/SPM/${targetJenis}/${tahunAnggaran}`;
     }
   }
 
@@ -477,7 +486,9 @@ export default function SpmManagementView({
     const defaultPptk = petugasData.pptkList[0];
     const defaultPa = petugasData.paKpaList[0];
 
-    const nextNo = await fetchNextSpmNumber(selectedOpd, selectedUnit);
+    const initialJenis = jenisSpm !== "ALL" ? jenisSpm : "UP";
+    setActiveFormJenisSpm(initialJenis);
+    const nextNo = await fetchNextSpmNumber(selectedOpd, selectedUnit, initialJenis);
 
     setEditingSpmId(null);
     setFormHeader({
@@ -487,7 +498,7 @@ export default function SpmManagementView({
       tgl_spp: "",
       sppId: null,
       bulan: new Date().getMonth() + 1,
-      keperluan: `Pembayaran ${title} ${selectedOpd.nm_skpd} Tahun ${tahunAnggaran}`,
+      keperluan: `Pembayaran SPM ${selectedOpd.nm_skpd} Tahun ${tahunAnggaran}`,
       no_spd: "",
       tgl_spd: "",
       nama_penerima: "",
@@ -508,6 +519,8 @@ export default function SpmManagementView({
     });
     setFormRincianBelanja([]);
     setFormPotongan([]);
+    setBillingErrors({});
+    setCheckingBilling({});
 
     setCurrentStep(4);
 
@@ -519,11 +532,17 @@ export default function SpmManagementView({
   async function handleEditSpm(spmItem: SpmHeaderItem) {
     setLoadingForm(true);
     setEditingSpmId(spmItem.id);
+    setActiveFormJenisSpm(spmItem.jenis_spm || "UP");
+    setBillingErrors({});
+    setCheckingBilling({});
     try {
       const res = await fetch(`/api/penatausahaan/spm/${spmItem.id}`);
       const json = await res.json();
       if (json.success && json.data) {
         const d = json.data;
+        if (d.jenis_spm) {
+          setActiveFormJenisSpm(d.jenis_spm);
+        }
         setFormHeader({
           no_spm: d.no_spm || "",
           tgl_spm: d.tgl_spm || new Date().toISOString().split("T")[0],
@@ -586,11 +605,12 @@ export default function SpmManagementView({
     setShowSppModal(true);
     setLoadingSppModal(true);
     try {
+      const activeJenis = jenisSpm === "ALL" ? "ALL" : jenisSpm;
       const params = new URLSearchParams({
         tahun: tahunAnggaran.toString(),
         kd_skpd: selectedOpd.kd_skpd,
-        jenis_spm: jenisSpm,
-        jenisSpm: jenisSpm,
+        jenis_spm: activeJenis,
+        jenisSpm: activeJenis,
       });
       if (selectedUnit) {
         params.append("kd_unit", selectedUnit.kd_unit);
@@ -618,6 +638,12 @@ export default function SpmManagementView({
 
   // Pilih SPP & Tarik Datanya
   function handleSelectSpp(spp: any) {
+    const derivedJenis = (spp.jenis_spp || spp.jenis_spm || "UP")
+      .toUpperCase()
+      .replace(/-/g, "_");
+    setActiveFormJenisSpm(derivedJenis);
+    const jnsSpmCode = derivedJenis.replace(/_/g, "-");
+
     // Ubah redaksi keperluan dari SPP ke SPM jika default
     let kep = spp.keperluan || "";
     if (kep.includes("Surat Permintaan Pembayaran")) {
@@ -627,28 +653,41 @@ export default function SpmManagementView({
       kep = kep.replace("SPP", "SPM");
     }
 
-    setFormHeader((prev) => ({
-      ...prev,
-      sppId: spp.id,
-      no_spp: spp.no_spp,
-      tgl_spp: spp.tgl_spp,
-      keperluan: kep,
-      no_spd: spp.no_spd || prev.no_spd,
-      tgl_spd: spp.tgl_spd || prev.tgl_spd,
-      nama_penerima: spp.nama_penerima || prev.nama_penerima,
-      bank_penerima: spp.bank_penerima || prev.bank_penerima,
-      rek_penerima: spp.rek_penerima || prev.rek_penerima,
-      npwp_penerima: spp.npwp_penerima || prev.npwp_penerima,
-      bendaharaNama: spp.bendaharaNama || prev.bendaharaNama,
-      bendaharaNip: spp.bendaharaNip || prev.bendaharaNip,
-      kasubagNama: spp.kasubagNama || prev.kasubagNama,
-      kasubagNip: spp.kasubagNip || prev.kasubagNip,
-      kasubagJabatan: spp.kasubagJabatan || prev.kasubagJabatan,
-      pptkNama: spp.pptkNama || prev.pptkNama,
-      pptkNip: spp.pptkNip || prev.pptkNip,
-      paKpaNama: spp.paKpaNama || prev.paKpaNama,
-      paKpaNip: spp.paKpaNip || prev.paKpaNip,
-    }));
+    setFormHeader((prev) => {
+      let updatedNo = prev.no_spm;
+      if (updatedNo.includes("/SPM/")) {
+        const parts = updatedNo.split("/SPM/");
+        const afterParts = parts[1]?.split("/") || [];
+        if (afterParts.length >= 2) {
+          // Ganti kode jenis di dalam no_spm: 900/00001/kd_skpd/SPM/JENIS/2026
+          updatedNo = `${parts[0]}/SPM/${jnsSpmCode}/${afterParts[afterParts.length - 1]}`;
+        }
+      }
+
+      return {
+        ...prev,
+        no_spm: updatedNo,
+        sppId: spp.id,
+        no_spp: spp.no_spp,
+        tgl_spp: spp.tgl_spp,
+        keperluan: kep,
+        no_spd: spp.no_spd || prev.no_spd,
+        tgl_spd: spp.tgl_spd || prev.tgl_spd,
+        nama_penerima: spp.nama_penerima || prev.nama_penerima,
+        bank_penerima: spp.bank_penerima || prev.bank_penerima,
+        rek_penerima: spp.rek_penerima || prev.rek_penerima,
+        npwp_penerima: spp.npwp_penerima || prev.npwp_penerima,
+        bendaharaNama: spp.bendaharaNama || prev.bendaharaNama,
+        bendaharaNip: spp.bendaharaNip || prev.bendaharaNip,
+        kasubagNama: spp.kasubagNama || prev.kasubagNama,
+        kasubagNip: spp.kasubagNip || prev.kasubagNip,
+        kasubagJabatan: spp.kasubagJabatan || prev.kasubagJabatan,
+        pptkNama: spp.pptkNama || prev.pptkNama,
+        pptkNip: spp.pptkNip || prev.pptkNip,
+        paKpaNama: spp.paKpaNama || prev.paKpaNama,
+        paKpaNip: spp.paKpaNip || prev.paKpaNip,
+      };
+    });
 
     // Tarik rincian belanja dari trdspp
     const rincianTransformed: SpmRincianItem[] = (spp.rincian || []).map((r: any) => ({
@@ -696,6 +735,74 @@ export default function SpmManagementView({
     ]);
   }
 
+  // Validasi ID Billing (Mencegah Duplikasi Internal & Database)
+  async function validateIdBilling(index: number, idBillingValue: string) {
+    const trimmed = idBillingValue.trim();
+    if (!trimmed) {
+      setBillingErrors((prev) => {
+        const copy = { ...prev };
+        delete copy[index];
+        return copy;
+      });
+      return true;
+    }
+
+    // 1. Cek duplikasi di form potongan yang sama
+    const duplicateInForm = formPotongan.find(
+      (p, i) => i !== index && p.id_billing?.trim().toUpperCase() === trimmed.toUpperCase()
+    );
+
+    if (duplicateInForm) {
+      const errorMsg = `ID Billing "${trimmed}" sudah pernah digunakan. Silahkan periksa kembali ID Billing anda.`;
+      setBillingErrors((prev) => ({ ...prev, [index]: errorMsg }));
+      setBanner({
+        type: "error",
+        title: "ID Billing Duplikat",
+        message: errorMsg,
+      });
+      return false;
+    }
+
+    // 2. Cek ke database apakah ID Billing sudah pernah digunakan pada SPM lain
+    setCheckingBilling((prev) => ({ ...prev, [index]: true }));
+    try {
+      const params = new URLSearchParams({
+        type: "check-id-billing",
+        idBilling: trimmed,
+      });
+      if (editingSpmId) {
+        params.append("excludeSpmId", editingSpmId);
+      }
+      const res = await fetch(`/api/penatausahaan/spm/referensi?${params.toString()}`);
+      const json = await res.json();
+
+      if (json.success && json.data?.isUsed) {
+        const errorMsg =
+          json.data.message ||
+          `ID Billing "${trimmed}" sudah pernah diinput pada Dokumen SPM lain.`;
+        setBillingErrors((prev) => ({ ...prev, [index]: errorMsg }));
+        setBanner({
+          type: "error",
+          title: "ID Billing Sudah Pernah Diinput",
+          message: errorMsg,
+        });
+        return false;
+      } else {
+        setBillingErrors((prev) => {
+          const copy = { ...prev };
+          delete copy[index];
+          return copy;
+        });
+        return true;
+      }
+    } catch (err) {
+      console.error("Error check id billing:", err);
+      return true;
+    } finally {
+      setCheckingBilling((prev) => ({ ...prev, [index]: false }));
+    }
+  }
+
   // Update data baris potongan
   function handleUpdatePotongan(index: number, field: keyof SpmPotonganItem, value: any) {
     setFormPotongan((prev) => {
@@ -711,11 +818,38 @@ export default function SpmManagementView({
       }
       return next;
     });
+
+    // Jika user mengedit ID Billing, bersihkan error sementara agar user leluasa mengetik
+    if (field === "id_billing" && billingErrors[index]) {
+      setBillingErrors((prev) => {
+        const copy = { ...prev };
+        delete copy[index];
+        return copy;
+      });
+    }
   }
 
   // Hapus baris potongan
   function handleRemovePotongan(index: number) {
     setFormPotongan((prev) => prev.filter((_, i) => i !== index));
+    setBillingErrors((prev) => {
+      const nextErrors: Record<number, string> = {};
+      Object.entries(prev).forEach(([key, val]) => {
+        const k = Number(key);
+        if (k < index) nextErrors[k] = val;
+        else if (k > index) nextErrors[k - 1] = val;
+      });
+      return nextErrors;
+    });
+    setCheckingBilling((prev) => {
+      const nextCheck: Record<number, boolean> = {};
+      Object.entries(prev).forEach(([key, val]) => {
+        const k = Number(key);
+        if (k < index) nextCheck[k] = val;
+        else if (k > index) nextCheck[k - 1] = val;
+      });
+      return nextCheck;
+    });
   }
 
   // Hitung Nilai Bruto, Total Potongan, dan Nilai Bersih
@@ -781,6 +915,45 @@ export default function SpmManagementView({
       return;
     }
 
+    // 1. Cek error ID Billing yang masih aktif
+    const activeErrorIndices = Object.keys(billingErrors);
+    if (activeErrorIndices.length > 0) {
+      const firstIdx = Number(activeErrorIndices[0]);
+      setBanner({
+        type: "error",
+        title: "ID Billing Tidak Valid",
+        message:
+          billingErrors[firstIdx] ||
+          "Terdapat ID Billing yang duplikat atau sudah pernah digunakan. Mohon periksa kembali tabel potongan.",
+      });
+      return;
+    }
+
+    // 2. Validasi kelengkapan & keunikan ID Billing pada seluruh baris potongan
+    const billingMap = new Map<string, number>();
+    for (let i = 0; i < formPotongan.length; i++) {
+      const rawBilling = formPotongan[i].id_billing?.trim();
+      if (rawBilling) {
+        const upper = rawBilling.toUpperCase();
+        if (billingMap.has(upper)) {
+          const firstI = billingMap.get(upper)!;
+          const msg = `ID Billing "${rawBilling}" diinput ganda pada baris ke-${firstI + 1} dan baris ke-${i + 1}. Setiap potongan harus menggunakan ID Billing unik.`;
+          setBillingErrors((prev) => ({ ...prev, [i]: msg }));
+          setBanner({
+            type: "error",
+            title: "ID Billing Duplikat",
+            message: msg,
+          });
+          return;
+        }
+        billingMap.set(upper, i);
+
+        // Validasi ke database untuk memastikan
+        const isValid = await validateIdBilling(i, rawBilling);
+        if (!isValid) return;
+      }
+    }
+
     setSavingSpm(true);
     try {
       const payload = {
@@ -793,7 +966,7 @@ export default function SpmManagementView({
         sppId: formHeader.sppId || null,
         opdId: selectedOpd.id,
         unitKerjaId: selectedUnit?.id || null,
-        jenis_spm: jenisSpm,
+        jenis_spm: activeFormJenisSpm || (jenisSpm !== "ALL" ? jenisSpm : "UP"),
         bulan: formHeader.bulan ? Number(formHeader.bulan) : null,
         keperluan: formHeader.keperluan.trim(),
         nilai: totalNilaiBruto,
@@ -1328,6 +1501,22 @@ export default function SpmManagementView({
             </div>
 
             <div className="flex items-center gap-2">
+              {jenisSpm === "ALL" && (
+                <select
+                  value={filterJenisSpm}
+                  onChange={(e) => setFilterJenisSpm(e.target.value)}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm focus:border-[#5E0E14] focus:outline-none"
+                >
+                  <option value="ALL">Semua Jenis SPM</option>
+                  <option value="UP">SPM-UP</option>
+                  <option value="GU">SPM-GU</option>
+                  <option value="TU">SPM-TU</option>
+                  <option value="LS_GAJI">SPM-LS Gaji</option>
+                  <option value="LS_BARANG_JASA">SPM-LS Barjas</option>
+                  <option value="UP_KKPD">SPM-UP KKPD</option>
+                  <option value="GU_KKPD">SPM-GU KKPD</option>
+                </select>
+              )}
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
@@ -1342,7 +1531,7 @@ export default function SpmManagementView({
               </select>
               <button
                 onClick={loadSpmList}
-                className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 shadow-sm hover:bg-slate-50"
+                className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 shadow-sm hover:bg-slate-50 cursor-pointer"
                 title="Refresh Daftar"
               >
                 <RotateCcw className="h-4 w-4" />
@@ -1398,9 +1587,16 @@ export default function SpmManagementView({
                           className="transition hover:bg-slate-50/75"
                         >
                           <td className="px-4 py-3.5">
-                            <span className="font-mono font-bold text-slate-900">
-                              {spm.no_spm}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-mono font-bold text-slate-900">
+                                {spm.no_spm}
+                              </span>
+                              {spm.jenis_spm && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-[#88131A] border border-rose-200">
+                                  {spm.jenis_spm.replace(/_/g, " ")}
+                                </span>
+                              )}
+                            </div>
                             <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-500">
                               <Calendar className="h-3 w-3" />
                               <span>{spm.tgl_spm}</span>
@@ -1554,9 +1750,16 @@ export default function SpmManagementView({
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4">
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">
-                    Informasi Dokumen SPM
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900">
+                      Informasi Dokumen SPM
+                    </h3>
+                    {activeFormJenisSpm && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 text-[#88131A] border border-rose-200">
+                        {activeFormJenisSpm.replace(/_/g, " ")}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-slate-500">
                     Nomor, tanggal dan relasi dengan dokumen SPP sumber.
                   </p>
@@ -1914,12 +2117,12 @@ export default function SpmManagementView({
                             >
                               {potonganRefList.map((ref) => (
                                 <option key={ref.kd_rek6} value={ref.kd_rek6}>
-                                  [{ref.kd_rek6}] {ref.nm_rek6}
+                                  {ref.kd_rek6} - {ref.nm_rek6}
                                 </option>
                               ))}
                             </select>
                             <input
-                              type="text"
+                              type="hidden"
                               value={pot.nm_rek6}
                               onChange={(e) =>
                                 handleUpdatePotongan(idx, "nm_rek6", e.target.value)
@@ -1929,20 +2132,39 @@ export default function SpmManagementView({
                             />
                           </td>
 
-                          <td className="px-3 py-2.5">
-                            <input
-                              type="text"
-                              value={pot.id_billing || ""}
-                              onChange={(e) =>
-                                handleUpdatePotongan(
-                                  idx,
-                                  "id_billing",
-                                  e.target.value
-                                )
-                              }
-                              placeholder="ID Billing e-Pajak"
-                              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-mono text-xs text-slate-900 focus:border-[#5E0E14] focus:outline-none"
-                            />
+                          <td className="px-3 py-2.5 align-top min-w-[200px]">
+                            <div className="relative">
+                              <input
+                                type="text"
+                                value={pot.id_billing || ""}
+                                onChange={(e) =>
+                                  handleUpdatePotongan(
+                                    idx,
+                                    "id_billing",
+                                    e.target.value
+                                  )
+                                }
+                                onBlur={() =>
+                                  validateIdBilling(idx, pot.id_billing || "")
+                                }
+                                placeholder="ID Billing e-Pajak"
+                                className={`w-full rounded-lg border px-2.5 py-1.5 font-mono text-xs transition-colors focus:outline-none ${billingErrors[idx]
+                                  ? "border-rose-400 bg-rose-50/50 text-rose-900 focus:border-rose-600 focus:ring-1 focus:ring-rose-500"
+                                  : "border-slate-200 bg-white text-slate-900 focus:border-[#5E0E14]"
+                                  }`}
+                              />
+                              {checkingBilling[idx] && (
+                                <span className="absolute right-2.5 top-2 text-[10px] text-slate-400 italic">
+                                  Memeriksa...
+                                </span>
+                              )}
+                            </div>
+                            {billingErrors[idx] && (
+                              <div className="mt-1 flex items-start gap-1 text-[11px] font-semibold text-rose-600 leading-tight">
+                                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-600" />
+                                <span>{billingErrors[idx]}</span>
+                              </div>
+                            )}
                           </td>
 
                           <td className="px-3 py-2.5">
@@ -2334,10 +2556,15 @@ export default function SpmManagementView({
                             }`}
                         >
                           <div className="space-y-1">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-mono text-xs font-bold text-slate-900">
                                 {spp.no_spp}
                               </span>
+                              {spp.jenis_spp && (
+                                <span className="rounded bg-rose-50 border border-rose-200 px-2 py-0.5 text-[10px] font-bold text-[#88131A]">
+                                  {spp.jenis_spp.replace(/_/g, " ")}
+                                </span>
+                              )}
                               <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
                                 {spp.tgl_spp}
                               </span>

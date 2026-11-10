@@ -108,6 +108,7 @@ model Opd {
   penetapanUpList   PenetapanUp[]
   sppList           Trhspp[]
   spmList           Trhspm[]
+  sp2dList          Trhsp2d[]
 
   @@index([kd_skpd])
   @@index([nm_skpd])
@@ -775,6 +776,7 @@ model Trhspp {
   opd             Opd       @relation(fields: [opdId], references: [id], onDelete: Cascade)
   rincian         Trdspp[]
   spmList         Trhspm[]
+  sp2dList        Trhsp2d[]
 
   @@unique([tahunAnggaran, no_spp])
   @@index([tahunAnggaran, kd_skpd])
@@ -852,6 +854,7 @@ model Trhspm {
   opd             Opd       @relation(fields: [opdId], references: [id], onDelete: Cascade)
   spp             Trhspp?   @relation(fields: [sppId], references: [id], onDelete: SetNull)
   potongan        Trspmpot[]
+  sp2dList        Trhsp2d[]
 
   @@unique([tahunAnggaran, no_spm])
   @@index([tahunAnggaran, kd_skpd])
@@ -879,6 +882,64 @@ model Trspmpot {
   @@index([spmId])
   @@index([tahunAnggaran, kd_skpd])
   @@map("trspmpot")
+}
+
+model Trhsp2d {
+  id                  String    @id @default(uuid())
+  tahunAnggaran       Int
+  no_sp2d             String
+  tgl_sp2d            DateTime
+  no_spm              String
+  tgl_spm             DateTime?
+  spmId               String?
+  no_spp              String
+  tgl_spp             DateTime?
+  sppId               String?
+  kd_skpd             String
+  nm_skpd             String
+  opdId               String
+  kd_unit             String?
+  nm_unit             String?
+  unitKerjaId         String?
+  jenis_sp2d          String    // UP, GU, TU, LS_GAJI, LS_BARANG_JASA, UP_KKPD, GU_KKPD
+  bulan               Int?
+  keperluan           String    @db.Text
+  nilai               Decimal   @default(0) @db.Decimal(18, 2)
+  nilai_potongan      Decimal   @default(0) @db.Decimal(18, 2)
+  nilai_bersih        Decimal   @default(0) @db.Decimal(18, 2)
+  no_spd              String?
+  tgl_spd             DateTime?
+  nama_penerima       String?
+  bank_penerima       String?
+  rek_penerima        String?
+  npwp_penerima       String?
+  nama_bank_pembayar  String?   // Bank Penyalur RKUD (cth: Bank Sumut)
+  rek_bank_pembayar   String?   // No Rekening Kas Daerah
+  kuasaBudNama        String?
+  kuasaBudNip         String?
+  kuasaBudJabatan     String?
+  verifikatorNama     String?
+  verifikatorNip      String?
+  tgl_verifikasi      DateTime?
+  catatan_verifikasi  String?   @db.Text
+  status              String    @default("DRAFT") // DRAFT, DIVERIFIKASI, DISETUJUI, CAIR, DITOLAK, BATAL
+  tgl_cair            DateTime?
+  no_transaksi_bank   String?
+  keterangan          String?   @db.Text
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  opd                 Opd       @relation(fields: [opdId], references: [id], onDelete: Cascade)
+  spm                 Trhspm?   @relation(fields: [spmId], references: [id], onDelete: SetNull)
+  spp                 Trhspp?   @relation(fields: [sppId], references: [id], onDelete: SetNull)
+
+  @@unique([tahunAnggaran, no_sp2d])
+  @@index([tahunAnggaran, kd_skpd])
+  @@index([jenis_sp2d])
+  @@index([status])
+  @@index([spmId])
+  @@index([sppId])
+  @@map("trhsp2d")
 }
 
 model DocumentAttachment {
