@@ -175,6 +175,10 @@ export async function getSpmList(params: {
       _count: {
         select: { potongan: true },
       },
+      sp2dList: {
+        where: { status: { notIn: ["BATAL", "DITOLAK"] } },
+        select: { id: true, no_sp2d: true, tgl_sp2d: true, status: true },
+      },
     },
     orderBy: [{ tgl_spm: "desc" }, { createdAt: "desc" }],
   });
@@ -191,6 +195,9 @@ export async function getSpmList(params: {
     totalNilaiBruto += valBruto;
     totalPotongan += valPot;
     totalNilaiBersih += valBersih;
+
+    const activeSp2d = r.sp2dList?.[0];
+    const isLockedBySp2d = r.status === "TELAH DIBUAT SP2D" || Boolean(activeSp2d);
 
     return {
       id: r.id,
@@ -227,10 +234,16 @@ export async function getSpmList(params: {
       pptkNip: r.pptkNip,
       paKpaNama: r.paKpaNama,
       paKpaNip: r.paKpaNip,
-      status: r.status,
+      status: isLockedBySp2d ? "TELAH DIBUAT SP2D" : r.status,
       keterangan: r.keterangan,
       rekeningCount: r.spp?._count.rincian || 0,
       potonganCount: r._count.potongan || 0,
+      isUsedBySp2d: isLockedBySp2d,
+      usedSp2dNo: activeSp2d?.no_sp2d || null,
+      usedSp2dDate: activeSp2d?.tgl_sp2d
+        ? activeSp2d.tgl_sp2d.toISOString().split("T")[0]
+        : null,
+      usedSp2dStatus: activeSp2d?.status || null,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     };
@@ -273,6 +286,10 @@ export async function getSpmDetail(id: string) {
       },
       potongan: {
         orderBy: [{ kd_rek6: "asc" }],
+      },
+      sp2dList: {
+        where: { status: { notIn: ["BATAL", "DITOLAK"] } },
+        select: { id: true, no_sp2d: true, tgl_sp2d: true, status: true },
       },
     },
   });
@@ -332,6 +349,9 @@ export async function getSpmDetail(id: string) {
     nilai: Number(p.nilai) || 0,
   }));
 
+  const activeSp2d = spm.sp2dList?.[0];
+  const isLockedBySp2d = spm.status === "TELAH DIBUAT SP2D" || Boolean(activeSp2d);
+
   return {
     ...spm,
     tgl_spm: spm.tgl_spm.toISOString().split("T")[0],
@@ -343,6 +363,13 @@ export async function getSpmDetail(id: string) {
     kasubagNama,
     kasubagNip,
     kasubagJabatan,
+    status: isLockedBySp2d ? "TELAH DIBUAT SP2D" : spm.status,
+    isUsedBySp2d: isLockedBySp2d,
+    usedSp2dNo: activeSp2d?.no_sp2d || null,
+    usedSp2dDate: activeSp2d?.tgl_sp2d
+      ? activeSp2d.tgl_sp2d.toISOString().split("T")[0]
+      : null,
+    usedSp2dStatus: activeSp2d?.status || null,
     rincian: rincianBelanja,
     potongan: potonganList,
   };
@@ -681,6 +708,31 @@ export async function saveSpm(data: SaveSpmPayload, userNama?: string) {
     }
   }
 
+  // Cek jika dokumen sedang diedit namun sudah terkunci oleh SP2D
+  if (id) {
+    const existing = await prisma.trhspm.findUnique({
+      where: { id },
+      include: {
+        sp2dList: {
+          where: { status: { notIn: ["BATAL", "DITOLAK"] } },
+          select: { id: true, no_sp2d: true },
+        },
+      },
+    });
+
+    if (existing) {
+      if (
+        existing.status === "TELAH DIBUAT SP2D" ||
+        existing.sp2dList.length > 0
+      ) {
+        const noSp2d = existing.sp2dList[0]?.no_sp2d || "";
+        throw new Error(
+          `Dokumen SPM ini telah diterbitkan SP2D ${noSp2d ? `(${noSp2d}) ` : ""}dan terkunci sehingga tidak dapat diubah.`
+        );
+      }
+    }
+  }
+
   // Cek duplikasi nomor SPM pada tahun yang sama
   const existingNo = await prisma.trhspm.findFirst({
     where: {
@@ -915,9 +967,24 @@ export async function deleteSpm(id: string) {
     throw new Error("Dokumen SPM tidak ditemukan");
   }
 
-  if (existing.status === "DIVERIFIKASI" || existing.status === "DISETUJUI") {
+  if (
+    existing.status === "DIVERIFIKASI" ||
+    existing.status === "DISETUJUI" ||
+    existing.status === "TELAH DIBUAT SP2D"
+  ) {
     throw new Error(
-      "Dokumen SPM yang telah diverifikasi atau disetujui tidak dapat dihapus"
+      existing.status === "TELAH DIBUAT SP2D"
+        ? "Dokumen SPM yang telah diterbitkan SP2D terkunci dan tidak dapat dihapus."
+        : "Dokumen SPM yang telah diverifikasi atau disetujui tidak dapat dihapus."
+    );
+  }
+
+  const checkSp2d = await prisma.trhsp2d.findFirst({
+    where: { spmId: id, status: { notIn: ["BATAL", "DITOLAK"] } },
+  });
+  if (checkSp2d) {
+    throw new Error(
+      `Dokumen SPM terkunci karena telah diterbitkan SP2D (${checkSp2d.no_sp2d}).`
     );
   }
 

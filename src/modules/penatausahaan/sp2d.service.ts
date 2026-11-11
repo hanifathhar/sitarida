@@ -108,6 +108,8 @@ export async function getSp2dScopeData(session: SessionPayload) {
     }))
   );
 
+  const pejabatBud = await getPejabatBudList();
+
   return {
     session: {
       userId: session.userId,
@@ -121,25 +123,69 @@ export async function getSp2dScopeData(session: SessionPayload) {
     },
     opds,
     units,
+    pejabatBud,
   };
 }
 
 /**
+ * Mengambil daftar pengguna/pejabat dengan role/peran BUD
+ */
+export async function getPejabatBudList() {
+  const users = await prisma.user.findMany({
+    where: {
+      isActive: true,
+      OR: [
+        { role: { kode: "1" } },
+        { role: { nama: { contains: "BUD", mode: "insensitive" } } },
+        { roleAssignments: { some: { role: { kode: "1" } } } },
+        { roleAssignments: { some: { role: { nama: { contains: "BUD", mode: "insensitive" } } } } },
+      ],
+    },
+    select: {
+      id: true,
+      username: true,
+      namaLengkap: true,
+      nip: true,
+      jabatan: true,
+      role: {
+        select: {
+          id: true,
+          kode: true,
+          nama: true,
+        },
+      },
+    },
+    orderBy: { namaLengkap: "asc" },
+  });
+
+  return users.map((u) => ({
+    id: u.id,
+    nama: u.namaLengkap,
+    nip: u.nip || "",
+    jabatan: u.jabatan || "Kuasa Bendahara Umum Daerah (BUD)",
+    roleNama: u.role.nama,
+  }));
+}
+
+/**
  * Generate Nomor Urut SP2D Berikutnya (Running Global se-Kabupaten/Daerah)
- * Format: 900/[NOMOR_URUT]/SP2D/[JENIS]/[TAHUN]
+ * Format Baru: [NOMOR_URUT]/[KD_UNIT]/SP2D/[JENIS]/[TAHUN]
+ * Contoh: 00001/1.01.2.22.0.00.01.0000/SP2D/LS-GAJI/2026
  */
 export async function getNextSp2dSequence(params: {
   tahunAnggaran: number;
   jenisSp2d?: string;
+  kd_unit?: string;
+  kd_skpd?: string;
 }) {
-  const { tahunAnggaran, jenisSp2d = "UP" } = params;
+  const { tahunAnggaran, jenisSp2d = "UP", kd_unit, kd_skpd } = params;
 
   // Hitung jumlah SP2D yang sudah pernah terbit di tahun anggaran ini
   const totalCount = await prisma.trhsp2d.count({
     where: { tahunAnggaran },
   });
 
-  // Cari nomor urut terbesar dari no_sp2d jika berformat 900/XXXXX/SP2D/...
+  // Cari nomor urut terbesar dari no_sp2d
   const existingSp2dList = await prisma.trhsp2d.findMany({
     where: { tahunAnggaran },
     select: { no_sp2d: true },
@@ -148,11 +194,18 @@ export async function getNextSp2dSequence(params: {
   let maxSeq = totalCount;
   for (const item of existingSp2dList) {
     const parts = item.no_sp2d.split("/");
-    // Contoh format: 900/00001/SP2D/... -> index 1 adalah urut
-    if (parts.length >= 3) {
-      const num = parseInt(parts[1], 10);
-      if (!isNaN(num) && num > maxSeq) {
-        maxSeq = num;
+    // Format Baru: [NOMOR_URUT]/[KD_UNIT]/SP2D/... -> index 0 adalah nomor urut
+    if (parts.length >= 4) {
+      const numFirst = parseInt(parts[0], 10);
+      if (!isNaN(numFirst) && numFirst > maxSeq) {
+        maxSeq = numFirst;
+      }
+      // Format Lama: 900/00001/SP2D/... -> index 1 adalah nomor urut
+      if (parts[0] === "900") {
+        const numSecond = parseInt(parts[1], 10);
+        if (!isNaN(numSecond) && numSecond > maxSeq) {
+          maxSeq = numSecond;
+        }
       }
     }
   }
@@ -160,7 +213,8 @@ export async function getNextSp2dSequence(params: {
   const nextSeq = maxSeq + 1;
   const paddedNoUrut = String(nextSeq).padStart(5, "0");
   const jnsCode = jenisSp2d.replace(/_/g, "-").toUpperCase();
-  const generatedNo = `900/${paddedNoUrut}/SP2D/${jnsCode}/${tahunAnggaran}`;
+  const targetKodeUnit = kd_unit || kd_skpd || "1.01.2.22.0.00.01.0000";
+  const generatedNo = `${paddedNoUrut}/${targetKodeUnit}/SP2D/${jnsCode}/${tahunAnggaran}`;
 
   return {
     nextSeq,
@@ -197,7 +251,7 @@ export async function getSpmTerbitForSp2d(params: {
 
   const where: any = {
     tahunAnggaran,
-    status: { in: ["DISETUJUI", "DIVERIFIKASI", "TELAH DIBUAT SP2D"] },
+    status: { in: ["DIAJUKAN", "DISETUJUI", "DIVERIFIKASI"] },
   };
 
   if (kd_skpd && kd_skpd !== "ALL") {
@@ -631,10 +685,11 @@ export async function saveSp2d(data: SaveSp2dPayload, userNama?: string) {
 
 /**
  * Verifikasi & Persetujuan SP2D (Kuasa BUD / Staf Verifikator)
+ * Mendukung pembatalan kembali ke status "DRAFT"
  */
 export async function verifySp2d(params: {
   id: string;
-  status: "DIVERIFIKASI" | "DISETUJUI" | "DITOLAK";
+  status: "DIVERIFIKASI" | "DISETUJUI" | "DITOLAK" | "DRAFT";
   catatan_verifikasi?: string;
   verifikatorNama?: string;
   verifikatorNip?: string;
@@ -648,7 +703,7 @@ export async function verifySp2d(params: {
       catatan_verifikasi: catatan_verifikasi || null,
       verifikatorNama: verifikatorNama || null,
       verifikatorNip: verifikatorNip || null,
-      tgl_verifikasi: new Date(),
+      tgl_verifikasi: status === "DRAFT" ? null : new Date(),
     },
   });
 }
@@ -691,11 +746,11 @@ export async function deleteSp2d(id: string) {
   }
 
   return await prisma.$transaction(async (tx) => {
-    // Kembalikan status SPM menjadi DISETUJUI jika tidak ada SP2D lain
+    // Kembalikan status SPM menjadi DIAJUKAN jika tidak ada SP2D lain
     if (sp2d.spmId) {
       await tx.trhspm.update({
         where: { id: sp2d.spmId },
-        data: { status: "DISETUJUI" },
+        data: { status: "DIAJUKAN" },
       });
     }
 

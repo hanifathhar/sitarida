@@ -123,8 +123,19 @@ export default function VerifikasiSp2dPage() {
     }
   }
 
-  async function handleAction(statusTarget: "DIVERIFIKASI" | "DISETUJUI" | "DITOLAK") {
-    if (!selectedSp2d) return;
+  async function handleAction(
+    statusTarget: "DIVERIFIKASI" | "DISETUJUI" | "DITOLAK" | "DRAFT",
+    targetItem?: any
+  ) {
+    const target = targetItem || selectedSp2d;
+    if (!target) return;
+
+    if (statusTarget === "DRAFT") {
+      const confirmCancel = window.confirm(
+        `Batalkan pengesahan/verifikasi dokumen SP2D ${target.no_sp2d} dan kembalikan statusnya menjadi DRAFT?`
+      );
+      if (!confirmCancel) return;
+    }
 
     setProcessing(true);
     try {
@@ -132,9 +143,12 @@ export default function VerifikasiSp2dPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: selectedSp2d.id,
+          id: target.id,
           status: statusTarget,
-          catatan_verifikasi: catatanVerifikasi.trim() || null,
+          catatan_verifikasi:
+            statusTarget === "DRAFT"
+              ? `Dibatalkan ke DRAFT oleh verifikator: ${catatanVerifikasi.trim() || "Perbaikan dokumen"}`
+              : catatanVerifikasi.trim() || null,
         }),
       });
       const json = await res.json();
@@ -142,15 +156,18 @@ export default function VerifikasiSp2dPage() {
       if (json.success) {
         setBanner({
           type: "success",
-          title: "Verifikasi Berhasil",
-          message: `Dokumen SP2D ${selectedSp2d.no_sp2d} berhasil diubah statusnya menjadi ${statusTarget}.`,
+          title: statusTarget === "DRAFT" ? "Pembatalan Berhasil" : "Verifikasi Berhasil",
+          message:
+            statusTarget === "DRAFT"
+              ? `Dokumen SP2D ${target.no_sp2d} berhasil dibatalkan dan dikembalikan ke status DRAFT.`
+              : `Dokumen SP2D ${target.no_sp2d} berhasil diubah statusnya menjadi ${statusTarget}.`,
         });
         setSelectedSp2d(null);
         loadList();
       } else {
         setBanner({
           type: "error",
-          title: "Verifikasi Gagal",
+          title: "Proses Gagal",
           message: json.error || "Gagal memproses status verifikasi SP2D.",
         });
       }
@@ -347,6 +364,15 @@ export default function VerifikasiSp2dPage() {
                           <Eye className="w-3.5 h-3.5" />
                           <span>Periksa</span>
                         </button>
+                        {sp2d.status !== "DRAFT" && sp2d.status !== "CAIR" && (
+                          <button
+                            onClick={() => handleAction("DRAFT", sp2d)}
+                            className="p-1 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 cursor-pointer transition"
+                            title="Batalkan ke DRAFT"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => setPrintData(sp2d as any)}
                           className="p-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer"
@@ -529,6 +555,19 @@ export default function VerifikasiSp2dPage() {
               </button>
 
               <div className="flex items-center gap-2">
+                {selectedSp2d.status !== "DRAFT" && selectedSp2d.status !== "CAIR" && (
+                  <button
+                    type="button"
+                    disabled={processing}
+                    onClick={() => handleAction("DRAFT")}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow transition cursor-pointer"
+                    title="Batalkan SP2D kembali ke status DRAFT"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Batalkan ke DRAFT</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   disabled={processing}

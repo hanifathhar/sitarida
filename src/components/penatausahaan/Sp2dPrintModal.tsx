@@ -2,10 +2,11 @@
 
 import React, { useRef } from "react";
 import { Printer, X } from "lucide-react";
-import { formatRupiah, terbilang } from "@/lib/utils";
+import { terbilang } from "@/lib/utils";
 
 export interface Sp2dPrintData {
   id: string;
+  tahunAnggaran?: number;
   no_sp2d: string;
   tgl_sp2d: string;
   no_spm: string;
@@ -32,6 +33,7 @@ export interface Sp2dPrintData {
   kuasaBudNama?: string | null;
   kuasaBudNip?: string | null;
   kuasaBudJabatan?: string | null;
+  no_transaksi_bank?: string | null;
   rincianBelanja?: Array<{
     kd_sub_kegiatan: string;
     nm_sub_kegiatan: string;
@@ -53,6 +55,46 @@ interface Sp2dPrintModalProps {
   onClose: () => void;
 }
 
+/**
+ * Format angka rupiah standar cetakan SP2D: 379.236.060,00
+ */
+function formatNilaiSp2d(value: number | string | null | undefined): string {
+  if (value === null || value === undefined) return "0,00";
+  const num = typeof value === "string" ? parseFloat(value) : value;
+  if (isNaN(num)) return "0,00";
+  return new Intl.NumberFormat("id-ID", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(num);
+}
+
+/**
+ * Format tanggal format angka: 04/11/2026
+ */
+function formatTglAngka(tglStr?: string | null): string {
+  if (!tglStr) return "-";
+  const d = new Date(tglStr);
+  if (isNaN(d.getTime())) return tglStr;
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+/**
+ * Format tanggal formal: 11 November 2026
+ */
+function formatTglIndo(tglStr?: string | null): string {
+  if (!tglStr) return "-";
+  const d = new Date(tglStr);
+  if (isNaN(d.getTime())) return tglStr;
+  return d.toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export default function Sp2dPrintModal({ data, onClose }: Sp2dPrintModalProps) {
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -62,48 +104,21 @@ export default function Sp2dPrintModal({ data, onClose }: Sp2dPrintModalProps) {
     window.print();
   }
 
-  type RincianItem = NonNullable<typeof data.rincianBelanja>[number];
-  interface GroupItem {
-    kd_sub: string;
-    nm_sub: string;
-    items: RincianItem[];
-  }
-
-  // Pengelompokan Rincian Belanja Berjenjang (Sub Kegiatan -> Rekening Belanja)
-  const groupedBelanja = (data.rincianBelanja || []).reduce<Record<string, GroupItem>>((acc, curr) => {
-    const key = `${curr.kd_sub_kegiatan}__${curr.nm_sub_kegiatan}`;
-    if (!acc[key]) {
-      acc[key] = {
-        kd_sub: curr.kd_sub_kegiatan,
-        nm_sub: curr.nm_sub_kegiatan,
-        items: [],
-      };
-    }
-    acc[key]!.items.push(curr);
-    return acc;
-  }, {});
-
-  const groupKeys = Object.keys(groupedBelanja);
-
-  const tglFormatted = data.tgl_sp2d
-    ? new Date(data.tgl_sp2d).toLocaleDateString("id-ID", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      })
-    : "-";
+  const tahunAnggaran = data.tahunAnggaran || 2026;
+  const tglIndo = formatTglIndo(data.tgl_sp2d);
+  const tglSpmAngka = formatTglAngka(data.tgl_spm);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-2xl">
-        {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 print:hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 sm:p-4 backdrop-blur-xs">
+      <div className="flex max-h-[95vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-2xl">
+        {/* Header Dialog (Hidden saat cetak) */}
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-3.5 print:hidden">
           <div>
             <h3 className="text-base font-bold text-slate-900">
-              Pratinjau Cetak Surat Perintah Pencairan Dana (SP2D)
+              Pratinjau Format Cetak SP2D (Sesuai Standar SP2D.pdf)
             </h3>
             <p className="text-xs text-slate-500">
-              Dokumen resmi SP2D standar Kuasa Bendahara Umum Daerah (BUD).
+              Format lembar Surat Perintah Pencairan Dana (SP2D) resmi Pemerintah Kabupaten Tapanuli Selatan.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -112,7 +127,7 @@ export default function Sp2dPrintModal({ data, onClose }: Sp2dPrintModalProps) {
               className="inline-flex items-center gap-2 rounded-xl bg-[#5E0E14] px-4 py-2 text-xs font-bold text-white shadow hover:bg-[#46090E] transition cursor-pointer"
             >
               <Printer className="h-4 w-4" />
-              <span>Cetak Dokumen</span>
+              <span>Cetak SP2D</span>
             </button>
             <button
               onClick={onClose}
@@ -123,258 +138,445 @@ export default function Sp2dPrintModal({ data, onClose }: Sp2dPrintModalProps) {
           </div>
         </div>
 
-        {/* Modal Body - Printable Document */}
-        <div className="flex-1 overflow-y-auto p-6 print:p-0 print:overflow-visible">
+        {/* Lembar Dokumen SP2D */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 print:p-0 print:overflow-visible bg-slate-100/60 print:bg-white">
           <div
             ref={printRef}
-            className="mx-auto max-w-[210mm] bg-white text-black text-[11px] leading-tight font-serif p-8 border border-slate-300 print:border-0 print:p-0"
+            className="sp2d-paper mx-auto max-w-[210mm] bg-white text-black text-[10px] leading-tight font-sans p-6 border border-slate-300 print:border-0 print:p-0 shadow-sm print:shadow-none"
           >
-            {/* Header Instansi */}
-            <div className="text-center pb-2 border-b-2 border-black">
-              <h1 className="text-sm font-bold uppercase tracking-wider">
-                PEMERINTAH KABUPATEN TAPANULI SELATAN
-              </h1>
-              <h2 className="text-base font-black uppercase tracking-wider mt-0.5">
-                SURAT PERINTAH PENCAIRAN DANA (SP2D)
-              </h2>
-              <div className="text-[11px] font-semibold tracking-wide mt-0.5">
-                TAHUN ANGGARAN 2026
-              </div>
-            </div>
-
-            {/* Nomor Dokumen & Jenis */}
-            <div className="flex justify-between items-center py-2 text-[11px] border-b border-black">
-              <div>
-                <span>Nomor SPM: </span>
-                <span className="font-bold font-mono">{data.no_spm}</span>
-                {data.tgl_spm && (
-                  <span className="ml-2 italic text-slate-600">
-                    tgl. {data.tgl_spm}
-                  </span>
-                )}
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] font-bold uppercase tracking-wider border border-black px-2 py-0.5 mr-2">
-                  {data.jenis_sp2d?.replace(/_/g, " ") || "SP2D"}
+            {/* ========================================================================= */}
+            {/* BINGKAI KOTAK UTAMA DOKUMEN SP2D */}
+            {/* ========================================================================= */}
+            <div className="border border-black">
+              {/* 1. Baris Nomor Bank */}
+              <div className="border-b border-black px-2 py-1 text-[10px]">
+                <span>Nomor Bank : </span>
+                <span className="font-mono font-medium">
+                  {data.no_transaksi_bank || "005586"}
                 </span>
-                <span>Nomor SP2D: </span>
-                <span className="font-bold font-mono">{data.no_sp2d}</span>
               </div>
-            </div>
 
-            {/* Inti Perintah Pencairan */}
-            <div className="py-2.5 space-y-1 border-b border-black text-[11px]">
-              <div>
-                <strong>KUASA BENDAHARA UMUM DAERAH</strong>
-              </div>
-              <div>PEMERINTAH KABUPATEN TAPANULI SELATAN</div>
-              <div className="pt-1">
-                Hendaklah mencairkan / memindahbukukan dari Bank:{" "}
-                <strong>{data.nama_bank_pembayar || "PT. Bank Sumut (RKUD)"}</strong>{" "}
-                {data.rek_bank_pembayar && (
-                  <span>No. Rekening: <strong>{data.rek_bank_pembayar}</strong></span>
-                )}
-              </div>
-              <div>
-                Uang sejumlah:{" "}
-                <strong className="underline">
-                  {formatRupiah(data.nilai_bersih)}
-                </strong>{" "}
-                (<em>{terbilang(data.nilai_bersih)} Rupiah</em>)
-              </div>
-            </div>
-
-            {/* Identitas Penerima */}
-            <div className="py-2.5 border-b border-black space-y-1">
-              <div className="grid grid-cols-12 gap-1">
-                <div className="col-span-3">Kepada</div>
-                <div className="col-span-9 font-bold">
-                  : {data.nama_penerima || data.nm_skpd}
-                </div>
-              </div>
-              <div className="grid grid-cols-12 gap-1">
-                <div className="col-span-3">Nomor Rekening Bank</div>
-                <div className="col-span-9">
-                  : {data.rek_penerima || "-"} / {data.bank_penerima || "-"}
-                </div>
-              </div>
-              <div className="grid grid-cols-12 gap-1">
-                <div className="col-span-3">Nomor Pokok Wajib Pajak (NPWP)</div>
-                <div className="col-span-9">
-                  : {data.npwp_penerima || "-"}
-                </div>
-              </div>
-              <div className="grid grid-cols-12 gap-1">
-                <div className="col-span-3">SKPD / Unit Kerja</div>
-                <div className="col-span-9">
-                  : {data.kd_skpd} - {data.nm_skpd}
-                </div>
-              </div>
-              <div className="grid grid-cols-12 gap-1">
-                <div className="col-span-3">Dasar Pembayaran / SPD</div>
-                <div className="col-span-9">
-                  : {data.no_spd || "-"} {data.tgl_spd ? `tgl. ${data.tgl_spd}` : ""}
-                </div>
-              </div>
-              <div className="grid grid-cols-12 gap-1">
-                <div className="col-span-3">Untuk Keperluan</div>
-                <div className="col-span-9 font-medium">
-                  : {data.keperluan}
-                </div>
-              </div>
-            </div>
-
-            {/* Pembebanan Rekening Belanja & Potongan (2 Kolom berdampingan) */}
-            <div className="grid grid-cols-12 border-b border-black">
-              {/* Kolom Kiri: Pembebanan pada Kode Rekening */}
-              <div className="col-span-7 border-r border-black p-2 space-y-2">
-                <div className="font-bold underline text-[11px]">
-                  Pembebanan pada kode rekening:
-                </div>
-
-                <div className="space-y-2 text-[10px]">
-                  {groupKeys.length === 0 ? (
-                    <div className="italic text-slate-500">
-                      Rincian belanja terintegrasi pada dokumen SPP/SPM asal.
+              {/* 2. Kop Dokumen: Pemkab Tapsel & Judul SP2D */}
+              <div className="grid grid-cols-12 border-b border-black">
+                {/* Kiri: Logo & Pemkab Tapsel */}
+                <div className="col-span-6 border-r border-black p-2 flex items-center justify-center gap-3">
+                  <img
+                    src="/Logo-Tapsel.png"
+                    alt="Logo Tapanuli Selatan"
+                    className="h-14 w-auto object-contain"
+                  />
+                  <div className="text-center">
+                    <div className="text-[11px] font-bold uppercase tracking-wider leading-snug">
+                      PEMERINTAH
                     </div>
-                  ) : (
-                    groupKeys.map((k) => {
-                      const group = groupedBelanja[k];
-                      if (!group) return null;
-                      return (
-                        <div key={k} className="space-y-0.5">
-                          <div className="font-bold text-slate-800">
-                            {group.kd_sub} {group.nm_sub}
-                          </div>
-                          <div className="space-y-0.5 pl-3">
-                            {group.items.map((item, i) => (
-                              <div
-                                key={i}
-                                className="flex justify-between items-start gap-1"
-                              >
-                                <span className="text-slate-700">
-                                  {item.kd_rek6} {item.nm_rek6}
-                                </span>
-                                <span className="font-mono font-medium whitespace-nowrap">
-                                  {formatRupiah(item.nilai)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
+                    <div className="text-xs font-black uppercase tracking-wider leading-snug">
+                      KABUPATEN TAPANULI SELATAN
+                    </div>
+                  </div>
                 </div>
 
-                <div className="pt-2 border-t border-dotted border-slate-400 flex justify-between font-bold text-[11px]">
-                  <span>Jumlah Permintaan (Bruto):</span>
-                  <span className="font-mono">{formatRupiah(data.nilai)}</span>
-                </div>
-                <div className="text-[10px] italic">
-                  Terbilang: ({terbilang(data.nilai)} Rupiah)
+                {/* Kanan: Nomor & Judul SP2D */}
+                <div className="col-span-6 p-2 text-center flex flex-col justify-center">
+                  <div className="text-[10px]">Nomor :</div>
+                  <div className="font-mono font-bold text-[11px] tracking-tight">
+                    {data.no_sp2d}
+                  </div>
+                  <div className="font-bold text-[11px] uppercase tracking-wide mt-1">
+                    SURAT PERINTAH PENCAIRAN DANA
+                  </div>
+                  <div className="font-bold text-[11px] uppercase">
+                    (SP2D)
+                  </div>
                 </div>
               </div>
 
-              {/* Kolom Kanan: Potongan-Potongan Pajak & Ringkasan Bayar */}
-              <div className="col-span-5 p-2 flex flex-col justify-between">
-                <div>
-                  <div className="font-bold underline text-[11px] mb-1.5">
-                    Potongan-Potongan:
+              {/* 3. Baris Informasi SPM, SKPD, dan SPD (2 Kolom) */}
+              <div className="grid grid-cols-12 border-b border-black text-[10px]">
+                {/* Kolom Kiri */}
+                <div className="col-span-6 border-r border-black p-2 space-y-1">
+                  <div className="flex">
+                    <span className="w-28 shrink-0">Nomor SPM</span>
+                    <span className="font-mono font-medium">: {data.no_spm}</span>
                   </div>
-
-                  <table className="w-full text-[10px] border border-black">
-                    <thead>
-                      <tr className="border-b border-black bg-slate-100 font-bold">
-                        <th className="p-1 text-center w-6">No</th>
-                        <th className="p-1 text-left">Uraian / ID Billing</th>
-                        <th className="p-1 text-right">Jumlah</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-300">
-                      {!data.potongan || data.potongan.length === 0 ? (
-                        <tr>
-                          <td colSpan={3} className="p-2 text-center italic text-slate-400">
-                            Nihil Potongan
-                          </td>
-                        </tr>
-                      ) : (
-                        data.potongan.map((p, idx) => (
-                          <tr key={idx}>
-                            <td className="p-1 text-center">{idx + 1}</td>
-                            <td className="p-1">
-                              <div>{p.nm_rek6}</div>
-                              {p.id_billing && (
-                                <div className="font-mono text-[9px] text-slate-600">
-                                  Billing: {p.id_billing}
-                                </div>
-                              )}
-                            </td>
-                            <td className="p-1 text-right font-mono">
-                              {formatRupiah(p.nilai)}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                    <tfoot className="border-t border-black font-bold">
-                      <tr>
-                        <td colSpan={2} className="p-1 text-right">Jumlah Potongan:</td>
-                        <td className="p-1 text-right font-mono">
-                          {formatRupiah(data.nilai_potongan)}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-
-                {/* Perhitungan Bersih Dibayarkan */}
-                <div className="mt-4 pt-2 border-t border-black space-y-1 text-[11px]">
-                  <div className="flex justify-between">
-                    <span>Jumlah Yang Diminta</span>
-                    <span className="font-mono">{formatRupiah(data.nilai)}</span>
+                  <div className="flex">
+                    <span className="w-28 shrink-0">Tanggal SPM</span>
+                    <span>: {tglSpmAngka}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Jumlah Potongan</span>
-                    <span className="font-mono">{formatRupiah(data.nilai_potongan)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold border-t border-black pt-1 text-[12px]">
-                    <span>Jumlah Yang Dibayarkan</span>
-                    <span className="font-mono text-black">
-                      {formatRupiah(data.nilai_bersih)}
+                  <div className="flex">
+                    <span className="w-28 shrink-0">Nama SKPD/UNIT</span>
+                    <span className="font-medium">
+                      : {data.kd_skpd} - {data.nm_skpd}
                     </span>
                   </div>
                 </div>
+
+                {/* Kolom Kanan */}
+                <div className="col-span-6 p-2 space-y-1">
+                  <div className="flex">
+                    <span className="w-28 shrink-0">Dari</span>
+                    <span className="font-medium">: KUASA BUD</span>
+                  </div>
+                  <div className="flex">
+                    <span className="w-28 shrink-0">Tahun Anggaran</span>
+                    <span>: {tahunAnggaran}</span>
+                  </div>
+                  <div>
+                    <span>Nomor SPD :</span>
+                    <div className="font-mono text-[9.5px] mt-0.5">
+                      {data.no_spd || "-"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Baris Instruksi Pemindahbukuan & Identitas Penerima */}
+              <div className="border-b border-black p-2 space-y-1 text-[10px]">
+                <div className="flex">
+                  <span className="w-40 shrink-0">Bank/Pos</span>
+                  <span>
+                    : {data.nama_bank_pembayar || "PT. Bank Sumut Cabang Sipirok"}
+                  </span>
+                </div>
+                <div>
+                  <span>Hendaklah mencairkan/memindahbukukan dari bank Rekening Nomor</span>
+                  <span className="font-mono font-bold">
+                    {" "}: AC. {data.rek_bank_pembayar || "233.01.02.000001-4"}
+                  </span>
+                </div>
+                <div className="flex items-baseline">
+                  <span className="w-40 shrink-0 font-bold">Uang Sebesar</span>
+                  <span className="font-bold">
+                    : Rp. {formatNilaiSp2d(data.nilai)}
+                  </span>
+                </div>
+                <div className="flex items-baseline">
+                  <span className="w-40 shrink-0">Terbilang</span>
+                  <span className="italic">
+                    : ({terbilang(data.nilai)} Rupiah)
+                  </span>
+                </div>
+                <div className="flex pt-0.5">
+                  <span className="w-40 shrink-0">Kepada</span>
+                  <span className="font-bold">
+                    : {data.nama_penerima || data.nm_skpd}
+                  </span>
+                </div>
+                <div className="flex">
+                  <span className="w-40 shrink-0">NPWP</span>
+                  <span className="font-mono">: {data.npwp_penerima || "-"}</span>
+                </div>
+                <div className="flex">
+                  <span className="w-40 shrink-0">No. Rekening Bank</span>
+                  <span className="font-mono font-bold">: {data.rek_penerima || "-"}</span>
+                </div>
+                <div className="flex">
+                  <span className="w-40 shrink-0">Bank/Pos</span>
+                  <span>: {data.bank_penerima || "BANK SUMUT"}</span>
+                </div>
+                <div className="flex">
+                  <span className="w-40 shrink-0">Keperluan Untuk</span>
+                  <span className="leading-snug">
+                    : {data.keperluan}
+                  </span>
+                </div>
+              </div>
+
+              {/* 5. Tabel Pembebanan pada Kode Rekening */}
+              <div className="border-b border-black">
+                <table className="w-full border-collapse text-[10px]">
+                  <thead>
+                    <tr className="border-b border-black">
+                      <th className="w-8 border-r border-black py-1 px-1.5 text-center font-bold">
+                        No.
+                      </th>
+                      <th className="w-80 border-r border-black py-1 px-2 text-center font-bold">
+                        Kode Rekening
+                      </th>
+                      <th className="border-r border-black py-1 px-2 text-center font-bold">
+                        Uraian
+                      </th>
+                      <th className="w-36 py-1 px-2 text-center font-bold">
+                        Jumlah<br />(Rp.)
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {!data.rincianBelanja || data.rincianBelanja.length === 0 ? (
+                      <tr className="border-b border-black">
+                        <td className="border-r border-black py-1 px-1.5 text-center">1.</td>
+                        <td className="border-r border-black py-1 px-2 font-mono text-[9px]">
+                          {data.kd_skpd}
+                        </td>
+                        <td className="border-r border-black py-1 px-2">{data.keperluan}</td>
+                        <td className="py-1 px-2 text-right font-mono font-bold">
+                          {formatNilaiSp2d(data.nilai)}
+                        </td>
+                      </tr>
+                    ) : (
+                      data.rincianBelanja.map((item, idx) => (
+                        <tr key={idx} className="border-b border-black">
+                          <td className="border-r border-black py-1 px-1.5 text-center align-top">
+                            {idx + 1}.
+                          </td>
+                          <td className="border-r border-black py-1 px-2 font-mono text-[9px] align-top">
+                            {item.kd_sub_kegiatan} {item.kd_rek6}
+                          </td>
+                          <td className="border-r border-black py-1 px-2 align-top">
+                            {item.nm_rek6}
+                          </td>
+                          <td className="py-1 px-2 text-right font-mono font-medium align-top">
+                            {formatNilaiSp2d(item.nilai)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+
+                    {/* Baris Total Pembebanan */}
+                    <tr>
+                      <td
+                        colSpan={3}
+                        className="border-r border-black py-1 px-2 font-bold text-left"
+                      >
+                        Jumlah
+                      </td>
+                      <td className="py-1 px-2 text-right font-mono font-bold">
+                        {formatNilaiSp2d(data.nilai)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* 6. Tabel Potongan - Potongan */}
+              <div className="border-b border-black">
+                <div className="px-2 py-0.5 font-normal text-[10px] border-b border-black">
+                  Potongan - Potongan
+                </div>
+                <table className="w-full border-collapse text-[10px]">
+                  <thead>
+                    <tr className="border-b border-black">
+                      <th className="w-8 border-r border-black py-1 px-1.5 text-center font-bold">
+                        No.
+                      </th>
+                      <th className="border-r border-black py-1 px-2 text-center font-bold">
+                        Uraian<br />Kode Rekening
+                      </th>
+                      <th className="w-36 border-r border-black py-1 px-2 text-center font-bold">
+                        Jumlah<br />(Rp.)
+                      </th>
+                      <th className="w-44 py-1 px-2 text-center font-bold">
+                        Keterangan
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {!data.potongan || data.potongan.length === 0 ? (
+                      <tr className="border-b border-black">
+                        <td className="border-r border-black py-1 px-1.5 text-center">-</td>
+                        <td className="border-r border-black py-1 px-2 italic text-slate-500">
+                          Nihil Potongan
+                        </td>
+                        <td className="border-r border-black py-1 px-2 text-right font-mono">
+                          0,00
+                        </td>
+                        <td className="py-1 px-2">-</td>
+                      </tr>
+                    ) : (
+                      data.potongan.map((pot, idx) => (
+                        <tr key={idx} className="border-b border-black">
+                          <td className="border-r border-black py-1 px-1.5 text-center align-top">
+                            {idx + 1}
+                          </td>
+                          <td className="border-r border-black py-1 px-2 align-top">
+                            {pot.kd_rek6} - {pot.nm_rek6}
+                          </td>
+                          <td className="border-r border-black py-1 px-2 text-right font-mono align-top">
+                            {formatNilaiSp2d(pot.nilai)}
+                          </td>
+                          <td className="py-1 px-2 align-top text-[9.5px]">
+                            {pot.id_billing
+                              ? `ID Billing: ${pot.id_billing}`
+                              : pot.keterangan || "-"}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+
+                    {/* Baris Total Potongan */}
+                    <tr>
+                      <td
+                        colSpan={2}
+                        className="border-r border-black py-1 px-2 font-bold text-left"
+                      >
+                        Jumlah
+                      </td>
+                      <td className="border-r border-black py-1 px-2 text-right font-mono font-bold">
+                        {formatNilaiSp2d(data.nilai_potongan)}
+                      </td>
+                      <td className="py-1 px-2"></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* 7. Tabel Informasi (tidak mengurangi jumlah pembayaran SP2D) */}
+              <div className="border-b border-black">
+                <div className="px-2 py-0.5 font-normal text-[10px] border-b border-black">
+                  Informasi:(tidak mengurangi jumlah pembayaran SP2D)
+                </div>
+                <table className="w-full border-collapse text-[10px]">
+                  <thead>
+                    <tr className="border-b border-black">
+                      <th className="w-8 border-r border-black py-1 px-1.5 text-center font-bold">
+                        No.
+                      </th>
+                      <th className="border-r border-black py-1 px-2 text-center font-bold">
+                        Uraian<br />Kode Rekening
+                      </th>
+                      <th className="w-36 border-r border-black py-1 px-2 text-center font-bold">
+                        Jumlah<br />(Rp.)
+                      </th>
+                      <th className="w-44 py-1 px-2 text-center font-bold">
+                        Keterangan
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Baris Total Informasi (0,00) */}
+                    <tr>
+                      <td
+                        colSpan={2}
+                        className="border-r border-black py-1 px-2 font-bold text-left"
+                      >
+                        Jumlah
+                      </td>
+                      <td className="border-r border-black py-1 px-2 text-right font-mono font-bold">
+                        0,00
+                      </td>
+                      <td className="py-1 px-2"></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* 8. Ringkasan SP2D Yang di Bayarkan */}
+              <div className="border-b border-black">
+                <table className="w-full border-collapse text-[10px]">
+                  <tbody>
+                    <tr className="border-b border-black">
+                      <td
+                        colSpan={2}
+                        className="py-1 px-2 font-bold text-left border-r border-black"
+                      >
+                        SP2D Yang di Bayarkan
+                      </td>
+                      <td className="py-1 px-2"></td>
+                    </tr>
+                    <tr className="border-b border-black">
+                      <td className="w-96 py-0.5 px-3 border-r border-black">
+                        Jumlah Yang di Minta
+                      </td>
+                      <td className="w-48 py-0.5 px-2 border-r border-black font-mono">
+                        Rp. {formatNilaiSp2d(data.nilai)}
+                      </td>
+                      <td className="py-0.5 px-2"></td>
+                    </tr>
+                    <tr className="border-b border-black">
+                      <td className="w-96 py-0.5 px-3 border-r border-black">
+                        Jumlah Potongan
+                      </td>
+                      <td className="w-48 py-0.5 px-2 border-r border-black font-mono">
+                        Rp. {formatNilaiSp2d(data.nilai_potongan)}
+                      </td>
+                      <td className="py-0.5 px-2"></td>
+                    </tr>
+                    <tr>
+                      <td className="w-96 py-1 px-2 font-bold border-r border-black">
+                        Jumlah Yang di Bayarkan
+                      </td>
+                      <td className="w-48 py-1 px-2 font-mono font-bold border-r border-black">
+                        Rp. {formatNilaiSp2d(data.nilai_bersih)}
+                      </td>
+                      <td className="py-1 px-2"></td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* Terbilang Jumlah yang Dibayarkan */}
+                <div className="p-2 border-t border-black text-[10px]">
+                  <span>Terbilang : </span>
+                  <span className="italic">
+                    ({terbilang(data.nilai_bersih)} Rupiah)
+                  </span>
+                </div>
+              </div>
+
+              {/* 9. Area Tanda Tangan Kuasa BUD */}
+              <div className="p-4 flex justify-end">
+                <div className="w-72 text-center text-[10.5px] space-y-1">
+                  <div>Sipirok, {tglIndo}</div>
+                  <div className="font-bold tracking-wide">
+                    KUASA BENDAHARA UMUM DAERAH
+                  </div>
+
+                  {/* Ruang Tanda Tangan */}
+                  <div className="h-20 flex items-center justify-center">
+                    {/* Placeholder ruang stempel / ttd */}
+                  </div>
+
+                  <div className="font-bold underline tracking-wide">
+                    {data.kuasaBudNama || "M. FRANANDA, S.E, M.M"}
+                  </div>
+                  <div>
+                    Nip. {data.kuasaBudNip || "198007232003121002"}
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Footer / Lembar Pengesahan Kuasa BUD */}
-            <div className="pt-4 flex justify-between items-end text-[11px]">
-              <div className="text-[9px] italic text-slate-500 max-w-xs">
-                Lembar 1: Bank Penyalur RKUD (Bank Sumut)
-                <br />
-                Lembar 2: Bendahara Pengeluaran SKPD
-                <br />
-                Lembar 3: Arsip Kuasa BUD / Perbendaharaan
+            {/* ========================================================================= */}
+            {/* 10. FOOTER DI LUAR BINGKAI KOTAK */}
+            {/* ========================================================================= */}
+            <div className="flex justify-between items-center text-[9px] pt-2 px-1 text-slate-700">
+              <div>
+                <span>Nomor SP2D : </span>
+                <span className="font-mono font-medium">{data.no_sp2d}</span>
               </div>
-
-              <div className="text-center min-w-[240px]">
-                <div>Sipirok, {tglFormatted}</div>
-                <div className="font-bold mt-0.5">
-                  KUASA BENDAHARA UMUM DAERAH
-                </div>
-                <div className="h-16 flex items-center justify-center italic text-slate-300">
-                  ( Tanda Tangan & Cap Stempel )
-                </div>
-                <div className="font-bold underline">
-                  {data.kuasaBudNama || "MARA TUA SIREGAR, S.Sos"}
-                </div>
-                <div>NIP. {data.kuasaBudNip || "197205101993031002"}</div>
+              <div>
+                <span className="italic">Halaman: 1 dari 1</span>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Global Print Styles */}
+      <style jsx global>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          .sp2d-paper,
+          .sp2d-paper * {
+            visibility: visible;
+          }
+          .sp2d-paper {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100% !important;
+            max-width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: 0 !important;
+            box-shadow: none !important;
+          }
+          @page {
+            size: A4 portrait;
+            margin: 10mm;
+          }
+        }
+      `}</style>
     </div>
   );
 }

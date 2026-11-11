@@ -29,6 +29,7 @@ import {
   BadgePercent,
   Receipt,
   FileCheck,
+  Lock,
 } from "lucide-react";
 import { formatRupiah, terbilang } from "@/lib/utils";
 import ActionBanner, { ActionFeedback } from "@/components/ui/ActionBanner";
@@ -126,6 +127,10 @@ interface SpmHeaderItem {
   keterangan?: string | null;
   rekeningCount: number;
   potonganCount: number;
+  isUsedBySp2d?: boolean;
+  usedSp2dNo?: string | null;
+  usedSp2dDate?: string | null;
+  usedSp2dStatus?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -218,6 +223,8 @@ export default function SpmManagementView({
     paKpaNip: "",
     status: "DRAFT",
     keterangan: "",
+    isUsedBySp2d: false,
+    usedSp2dNo: null as string | null,
   });
   const [formRincianBelanja, setFormRincianBelanja] = useState<SpmRincianItem[]>([]);
   const [formPotongan, setFormPotongan] = useState<SpmPotonganItem[]>([]);
@@ -516,6 +523,8 @@ export default function SpmManagementView({
       paKpaNip: defaultPa?.nip || selectedOpd.kepalaNip || "",
       status: "DRAFT",
       keterangan: "",
+      isUsedBySp2d: false,
+      usedSp2dNo: null,
     });
     setFormRincianBelanja([]);
     setFormPotongan([]);
@@ -568,6 +577,8 @@ export default function SpmManagementView({
           paKpaNip: d.paKpaNip || "",
           status: d.status || "DRAFT",
           keterangan: d.keterangan || "",
+          isUsedBySp2d: Boolean(d.isUsedBySp2d || d.status === "TELAH DIBUAT SP2D"),
+          usedSp2dNo: d.usedSp2dNo || null,
         });
         setFormRincianBelanja(d.rincian || []);
         setFormPotongan(
@@ -871,9 +882,24 @@ export default function SpmManagementView({
     return Math.max(0, totalNilaiBruto - totalNilaiPotongan);
   }, [totalNilaiBruto, totalNilaiPotongan]);
 
+  // Cek apakah dokumen SPM terkunci karena telah dibuatkan SP2D
+  const isSpmLocked = Boolean(
+    formHeader.isUsedBySp2d || formHeader.status === "TELAH DIBUAT SP2D"
+  );
+
   // Simpan Dokumen SPM
   async function handleSaveSpm(statusTarget: "DRAFT" | "DIAJUKAN") {
     if (!selectedOpd) return;
+
+    if (isSpmLocked) {
+      setBanner({
+        type: "error",
+        title: "Dokumen Terkunci",
+        message:
+          "Dokumen SPM ini telah diterbitkan SP2D dan terkunci sehingga tidak dapat diubah.",
+      });
+      return;
+    }
 
     if (!formHeader.no_spm.trim()) {
       setBanner({ type: "error", message: "Nomor SPM wajib diisi." });
@@ -1527,6 +1553,7 @@ export default function SpmManagementView({
                 <option value="DIAJUKAN">DIAJUKAN</option>
                 <option value="DIVERIFIKASI">DIVERIFIKASI</option>
                 <option value="DISETUJUI">DISETUJUI</option>
+                <option value="TELAH DIBUAT SP2D">TELAH DIBUAT SP2D</option>
                 <option value="DITOLAK">DITOLAK</option>
               </select>
               <button
@@ -1644,18 +1671,28 @@ export default function SpmManagementView({
 
                           <td className="px-4 py-3.5 text-center">
                             <span
-                              className={`inline-block rounded-md px-2 py-0.5 text-[10px] font-bold ${spm.status === "DISETUJUI"
-                                ? "bg-emerald-100 text-emerald-800"
-                                : spm.status === "DIAJUKAN"
-                                  ? "bg-blue-100 text-blue-800"
-                                  : spm.status === "DIVERIFIKASI"
-                                    ? "bg-purple-100 text-purple-800"
-                                    : spm.status === "DITOLAK"
-                                      ? "bg-rose-100 text-rose-800"
-                                      : "bg-slate-100 text-slate-700"
-                                }`}
+                              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                                spm.status === "TELAH DIBUAT SP2D" || spm.isUsedBySp2d
+                                  ? "bg-teal-100 text-teal-800 border border-teal-200"
+                                  : spm.status === "DISETUJUI"
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : spm.status === "DIAJUKAN"
+                                      ? "bg-blue-100 text-blue-800"
+                                      : spm.status === "DIVERIFIKASI"
+                                        ? "bg-purple-100 text-purple-800"
+                                        : spm.status === "DITOLAK"
+                                          ? "bg-rose-100 text-rose-800"
+                                          : "bg-slate-100 text-slate-700"
+                              }`}
                             >
-                              {spm.status}
+                              {(spm.status === "TELAH DIBUAT SP2D" || spm.isUsedBySp2d) && (
+                                <Lock className="h-3 w-3 text-teal-700" />
+                              )}
+                              <span>
+                                {spm.status === "TELAH DIBUAT SP2D" || spm.isUsedBySp2d
+                                  ? "TERBIT SP2D"
+                                  : spm.status}
+                              </span>
                             </span>
                           </td>
 
@@ -1663,10 +1700,24 @@ export default function SpmManagementView({
                             <div className="flex items-center justify-center gap-1.5">
                               <button
                                 onClick={() => handleEditSpm(spm)}
-                                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-blue-700"
-                                title="Lihat / Edit Dokumen SPM"
+                                className={`rounded-lg p-1.5 ${
+                                  spm.isUsedBySp2d || spm.status === "TELAH DIBUAT SP2D"
+                                    ? "text-teal-700 hover:bg-teal-50"
+                                    : "text-slate-500 hover:bg-slate-100 hover:text-blue-700"
+                                }`}
+                                title={
+                                  spm.isUsedBySp2d || spm.status === "TELAH DIBUAT SP2D"
+                                    ? `Lihat Dokumen SPM Terkunci (Telah Terbit SP2D ${
+                                        spm.usedSp2dNo ? `[${spm.usedSp2dNo}]` : ""
+                                      })`
+                                    : "Lihat / Edit Dokumen SPM"
+                                }
                               >
-                                <Pencil className="h-4 w-4" />
+                                {spm.isUsedBySp2d || spm.status === "TELAH DIBUAT SP2D" ? (
+                                  <Eye className="h-4 w-4" />
+                                ) : (
+                                  <Pencil className="h-4 w-4" />
+                                )}
                               </button>
                               <button
                                 onClick={() => handleOpenPrint(spm)}
@@ -1675,13 +1726,15 @@ export default function SpmManagementView({
                               >
                                 <Printer className="h-4 w-4" />
                               </button>
-                              <button
-                                onClick={() => setDeleteTarget(spm)}
-                                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-rose-700"
-                                title="Hapus Dokumen SPM"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                              {!(spm.isUsedBySp2d || spm.status === "TELAH DIBUAT SP2D") && (
+                                <button
+                                  onClick={() => setDeleteTarget(spm)}
+                                  className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-rose-700"
+                                  title="Hapus Dokumen SPM"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1737,13 +1790,42 @@ export default function SpmManagementView({
                   <span>Cetak Format SPM</span>
                 </button>
               )}
-              <span className="text-xs text-slate-500">
-                {editingSpmId ? "Mode Edit Dokumen" : "Dokumen Baru"}
-              </span>
+              {isSpmLocked ? (
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-teal-100 px-2.5 py-1 text-xs font-bold text-teal-800 border border-teal-200">
+                  <Lock className="h-3.5 w-3.5 text-teal-700" />
+                  Dokumen Terkunci (Terbit SP2D)
+                </span>
+              ) : (
+                <span className="text-xs text-slate-500">
+                  {editingSpmId ? "Mode Edit Dokumen" : "Dokumen Baru"}
+                </span>
+              )}
             </div>
           </div>
 
-
+          {/* Banner Peringatan SPM Terkunci SP2D */}
+          {isSpmLocked && (
+            <div className="mb-6 flex items-start gap-3.5 rounded-2xl border border-teal-300 bg-teal-50/90 p-4 shadow-sm">
+              <div className="mt-0.5 rounded-xl bg-teal-700 p-2 text-white shadow-xs shrink-0">
+                <Lock className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h4 className="text-xs font-bold text-teal-950">
+                    Dokumen SPM Terkunci (Telah Diterbitkan SP2D)
+                  </h4>
+                  {formHeader.usedSp2dNo && (
+                    <span className="font-mono bg-teal-200/90 text-teal-950 px-2 py-0.5 rounded text-[11px] font-bold border border-teal-300">
+                      No. SP2D: {formHeader.usedSp2dNo}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-[11px] leading-relaxed text-teal-850">
+                  Dokumen SPM ini telah diterbitkan Surat Perintah Pencairan Dana (SP2D) oleh Kuasa BUD / Bidang Perbendaharaan. Dokumen ini berada dalam mode <strong>hanya-baca (read-only)</strong> serta tidak dapat diedit atau dihapus untuk menjaga keutuhan penatausahaan keuangan daerah.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-6">
             {/* 1. Header Informasi SPM & Penarikan SPP */}
@@ -1764,16 +1846,18 @@ export default function SpmManagementView({
                     Nomor, tanggal dan relasi dengan dokumen SPP sumber.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleOpenSppModal}
-                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#5E0E14] to-[#88131A] px-4 py-2 text-xs font-bold text-white shadow-md transition hover:opacity-95"
-                >
-                  <FileCheck className="h-4 w-4" />
-                  <span>
-                    {formHeader.no_spp ? "Ganti Dokumen SPP" : "Pilih Dokumen SPP"}
-                  </span>
-                </button>
+                {!isSpmLocked && (
+                  <button
+                    type="button"
+                    onClick={handleOpenSppModal}
+                    className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#5E0E14] to-[#88131A] px-4 py-2 text-xs font-bold text-white shadow-md transition hover:opacity-95"
+                  >
+                    <FileCheck className="h-4 w-4" />
+                    <span>
+                      {formHeader.no_spp ? "Ganti Dokumen SPP" : "Pilih Dokumen SPP"}
+                    </span>
+                  </button>
+                )}
               </div>
 
               <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-3">
@@ -1783,11 +1867,12 @@ export default function SpmManagementView({
                   </label>
                   <input
                     type="text"
+                    disabled={isSpmLocked}
                     value={formHeader.no_spm}
                     onChange={(e) =>
                       setFormHeader((p) => ({ ...p, no_spm: e.target.value }))
                     }
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 font-mono text-xs font-bold text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none focus:ring-1 focus:ring-[#5E0E14]"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 font-mono text-xs font-bold text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none focus:ring-1 focus:ring-[#5E0E14] disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                     placeholder="900/00001/.../SPM/..."
                   />
                 </div>
@@ -1798,11 +1883,12 @@ export default function SpmManagementView({
                   </label>
                   <input
                     type="date"
+                    disabled={isSpmLocked}
                     value={formHeader.tgl_spm}
                     onChange={(e) =>
                       setFormHeader((p) => ({ ...p, tgl_spm: e.target.value }))
                     }
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -1811,6 +1897,7 @@ export default function SpmManagementView({
                     Bulan Anggaran
                   </label>
                   <select
+                    disabled={isSpmLocked}
                     value={formHeader.bulan || 1}
                     onChange={(e) =>
                       setFormHeader((p) => ({
@@ -1818,7 +1905,7 @@ export default function SpmManagementView({
                         bulan: parseInt(e.target.value, 10),
                       }))
                     }
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                   >
                     {[
                       "Januari",
@@ -1885,11 +1972,12 @@ export default function SpmManagementView({
                 </label>
                 <textarea
                   rows={2}
+                  disabled={isSpmLocked}
                   value={formHeader.keperluan}
                   onChange={(e) =>
                     setFormHeader((p) => ({ ...p, keperluan: e.target.value }))
                   }
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                   placeholder="Contoh: Pembayaran Surat Perintah Membayar - Uang Persediaan (SPM-UP)..."
                 />
               </div>
@@ -1906,6 +1994,7 @@ export default function SpmManagementView({
                     </label>
                     <input
                       type="text"
+                      disabled={isSpmLocked}
                       value={formHeader.nama_penerima || ""}
                       onChange={(e) =>
                         setFormHeader((p) => ({
@@ -1913,7 +2002,7 @@ export default function SpmManagementView({
                           nama_penerima: e.target.value,
                         }))
                       }
-                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none"
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -1923,6 +2012,7 @@ export default function SpmManagementView({
                     </label>
                     <input
                       type="text"
+                      disabled={isSpmLocked}
                       value={formHeader.bank_penerima || ""}
                       onChange={(e) =>
                         setFormHeader((p) => ({
@@ -1930,7 +2020,7 @@ export default function SpmManagementView({
                           bank_penerima: e.target.value,
                         }))
                       }
-                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none"
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -1940,6 +2030,7 @@ export default function SpmManagementView({
                     </label>
                     <input
                       type="text"
+                      disabled={isSpmLocked}
                       value={formHeader.rek_penerima || ""}
                       onChange={(e) =>
                         setFormHeader((p) => ({
@@ -1947,7 +2038,7 @@ export default function SpmManagementView({
                           rek_penerima: e.target.value,
                         }))
                       }
-                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-mono text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none"
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-mono text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -1957,6 +2048,7 @@ export default function SpmManagementView({
                     </label>
                     <input
                       type="text"
+                      disabled={isSpmLocked}
                       value={formHeader.npwp_penerima || ""}
                       onChange={(e) =>
                         setFormHeader((p) => ({
@@ -2067,14 +2159,16 @@ export default function SpmManagementView({
                       {formatRupiah(totalNilaiPotongan)}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleAddPotongan}
-                    className="flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-900 shadow-sm transition hover:bg-amber-100"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>Tambah Potongan</span>
-                  </button>
+                  {!isSpmLocked && (
+                    <button
+                      type="button"
+                      onClick={handleAddPotongan}
+                      className="flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-900 shadow-sm transition hover:bg-amber-100"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>Tambah Potongan</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -2098,7 +2192,7 @@ export default function SpmManagementView({
                           className="py-8 text-center text-xs italic text-slate-400"
                         >
                           Tidak ada potongan pajak pada SPM ini (Nihil Potongan).
-                          Klik tombol &apos;+ Tambah Potongan&apos; jika ada potongan yang harus dipungut.
+                          {!isSpmLocked && " Klik tombol '+ Tambah Potongan' jika ada potongan yang harus dipungut."}
                         </td>
                       </tr>
                     ) : (
@@ -2109,11 +2203,12 @@ export default function SpmManagementView({
                           </td>
                           <td className="px-3 py-2.5">
                             <select
+                              disabled={isSpmLocked}
                               value={pot.kd_rek6}
                               onChange={(e) =>
                                 handleUpdatePotongan(idx, "kd_rek6", e.target.value)
                               }
-                              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-[#5E0E14] focus:outline-none"
+                              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-[#5E0E14] focus:outline-none disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                             >
                               {potonganRefList.map((ref) => (
                                 <option key={ref.kd_rek6} value={ref.kd_rek6}>
@@ -2136,6 +2231,7 @@ export default function SpmManagementView({
                             <div className="relative">
                               <input
                                 type="text"
+                                disabled={isSpmLocked}
                                 value={pot.id_billing || ""}
                                 onChange={(e) =>
                                   handleUpdatePotongan(
@@ -2148,7 +2244,7 @@ export default function SpmManagementView({
                                   validateIdBilling(idx, pot.id_billing || "")
                                 }
                                 placeholder="ID Billing e-Pajak"
-                                className={`w-full rounded-lg border px-2.5 py-1.5 font-mono text-xs transition-colors focus:outline-none ${billingErrors[idx]
+                                className={`w-full rounded-lg border px-2.5 py-1.5 font-mono text-xs transition-colors focus:outline-none disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed ${billingErrors[idx]
                                   ? "border-rose-400 bg-rose-50/50 text-rose-900 focus:border-rose-600 focus:ring-1 focus:ring-rose-500"
                                   : "border-slate-200 bg-white text-slate-900 focus:border-[#5E0E14]"
                                   }`}
@@ -2170,6 +2266,7 @@ export default function SpmManagementView({
                           <td className="px-3 py-2.5">
                             <input
                               type="text"
+                              disabled={isSpmLocked}
                               value={pot.keterangan || ""}
                               onChange={(e) =>
                                 handleUpdatePotongan(
@@ -2179,7 +2276,7 @@ export default function SpmManagementView({
                                 )
                               }
                               placeholder="Catatan / Uraian potongan"
-                              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-[#5E0E14] focus:outline-none"
+                              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-[#5E0E14] focus:outline-none disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                             />
                           </td>
 
@@ -2187,25 +2284,32 @@ export default function SpmManagementView({
                             <input
                               type="number"
                               min="0"
+                              disabled={isSpmLocked}
                               value={pot.nilai === 0 ? "" : pot.nilai}
                               onChange={(e) => {
                                 const val = parseFloat(e.target.value) || 0;
                                 handleUpdatePotongan(idx, "nilai", val);
                               }}
                               placeholder="0"
-                              className="w-36 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-right font-mono text-xs font-bold text-slate-900 focus:border-[#5E0E14] focus:outline-none"
+                              className="w-36 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-right font-mono text-xs font-bold text-slate-900 focus:border-[#5E0E14] focus:outline-none disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                             />
                           </td>
 
                           <td className="px-3 py-2.5 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handleRemovePotongan(idx)}
-                              className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                              title="Hapus baris potongan"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                            {!isSpmLocked ? (
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePotongan(idx)}
+                                className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                                title="Hapus baris potongan"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            ) : (
+                              <span className="inline-flex items-center text-slate-300" title="Terkunci">
+                                <Lock className="h-3.5 w-3.5" />
+                              </span>
+                            )}
                           </td>
                         </tr>
                       ))
@@ -2284,6 +2388,7 @@ export default function SpmManagementView({
                     Bendahara Pengeluaran
                   </label>
                   <select
+                    disabled={isSpmLocked}
                     value={formHeader.bendaharaNama || ""}
                     onChange={(e) => {
                       const sel = petugasData.bendaharaList.find(
@@ -2295,7 +2400,7 @@ export default function SpmManagementView({
                         bendaharaNip: sel ? sel.nip : prev.bendaharaNip,
                       }));
                     }}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                   >
                     <option value="">-- Pilih Bendahara --</option>
                     {petugasData.bendaharaList.map((p) => (
@@ -2306,6 +2411,7 @@ export default function SpmManagementView({
                   </select>
                   <input
                     type="text"
+                    disabled={isSpmLocked}
                     value={formHeader.bendaharaNip || ""}
                     onChange={(e) =>
                       setFormHeader((p) => ({
@@ -2314,7 +2420,7 @@ export default function SpmManagementView({
                       }))
                     }
                     placeholder="NIP Bendahara"
-                    className="mt-1.5 w-full rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1 font-mono text-[11px] text-slate-600 focus:border-[#5E0E14] focus:bg-white focus:outline-none"
+                    className="mt-1.5 w-full rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1 font-mono text-[11px] text-slate-600 focus:border-[#5E0E14] focus:bg-white focus:outline-none disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -2324,6 +2430,7 @@ export default function SpmManagementView({
                     Kasubag Keuangan / PPK SKPD
                   </label>
                   <select
+                    disabled={isSpmLocked}
                     value={formHeader.kasubagNama || ""}
                     onChange={(e) => {
                       const sel = petugasData.kasubagList.find(
@@ -2336,7 +2443,7 @@ export default function SpmManagementView({
                         kasubagJabatan: sel?.jabatan || "Kasubag Keuangan",
                       }));
                     }}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                   >
                     <option value="">-- Pilih Kasubag Keuangan --</option>
                     {petugasData.kasubagList.map((p) => (
@@ -2347,6 +2454,7 @@ export default function SpmManagementView({
                   </select>
                   <input
                     type="text"
+                    disabled={isSpmLocked}
                     value={formHeader.kasubagNip || ""}
                     onChange={(e) =>
                       setFormHeader((p) => ({
@@ -2355,7 +2463,7 @@ export default function SpmManagementView({
                       }))
                     }
                     placeholder="NIP Kasubag Keuangan"
-                    className="mt-1.5 w-full rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1 font-mono text-[11px] text-slate-600 focus:border-[#5E0E14] focus:bg-white focus:outline-none"
+                    className="mt-1.5 w-full rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1 font-mono text-[11px] text-slate-600 focus:border-[#5E0E14] focus:bg-white focus:outline-none disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -2365,6 +2473,7 @@ export default function SpmManagementView({
                     Pengguna Anggaran (PA / KPA)
                   </label>
                   <select
+                    disabled={isSpmLocked}
                     value={formHeader.paKpaNama || ""}
                     onChange={(e) => {
                       const sel = petugasData.paKpaList.find(
@@ -2376,7 +2485,7 @@ export default function SpmManagementView({
                         paKpaNip: sel ? sel.nip : prev.paKpaNip,
                       }));
                     }}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                   >
                     <option value="">-- Pilih PA / KPA --</option>
                     {petugasData.paKpaList.map((p) => (
@@ -2387,12 +2496,13 @@ export default function SpmManagementView({
                   </select>
                   <input
                     type="text"
+                    disabled={isSpmLocked}
                     value={formHeader.paKpaNip || ""}
                     onChange={(e) =>
                       setFormHeader((p) => ({ ...p, paKpaNip: e.target.value }))
                     }
                     placeholder="NIP PA / KPA"
-                    className="mt-1.5 w-full rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1 font-mono text-[11px] text-slate-600 focus:border-[#5E0E14] focus:bg-white focus:outline-none"
+                    className="mt-1.5 w-full rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1 font-mono text-[11px] text-slate-600 focus:border-[#5E0E14] focus:bg-white focus:outline-none disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -2406,16 +2516,18 @@ export default function SpmManagementView({
                     Status Dokumen SPM
                   </label>
                   <select
+                    disabled={isSpmLocked}
                     value={formHeader.status}
                     onChange={(e) =>
                       setFormHeader((p) => ({ ...p, status: e.target.value }))
                     }
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                   >
                     <option value="DRAFT">DRAFT (Penyusunan)</option>
                     <option value="DIAJUKAN">DIAJUKAN (Kirim ke BUD / Kuasa BUD)</option>
                     <option value="DIVERIFIKASI">DIVERIFIKASI (Verifikasi Bendahara Umum)</option>
                     <option value="DISETUJUI">DISETUJUI (Siap Terbit SP2D)</option>
+                    <option value="TELAH DIBUAT SP2D">TELAH DIBUAT SP2D (Terkunci)</option>
                     <option value="DITOLAK">DITOLAK</option>
                   </select>
                 </div>
@@ -2426,12 +2538,13 @@ export default function SpmManagementView({
                   </label>
                   <input
                     type="text"
+                    disabled={isSpmLocked}
                     value={formHeader.keterangan || ""}
                     onChange={(e) =>
                       setFormHeader((p) => ({ ...p, keterangan: e.target.value }))
                     }
                     placeholder="Catatan tambahan (opsional)"
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 shadow-sm focus:border-[#5E0E14] focus:outline-none disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -2444,29 +2557,48 @@ export default function SpmManagementView({
                 onClick={() => setCurrentStep(3)}
                 className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
               >
-                Batal
+                {isSpmLocked ? "Kembali ke Daftar SPM" : "Batal"}
               </button>
 
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  disabled={savingSpm}
-                  onClick={() => handleSaveSpm("DRAFT")}
-                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-50"
-                >
-                  {savingSpm ? "Menyimpan..." : "Simpan DRAFT"}
-                </button>
+              {isSpmLocked ? (
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-bold text-teal-800">
+                    <Lock className="h-4 w-4 text-teal-700" />
+                    <span>Dokumen SPM Terkunci &mdash; Telah Diterbitkan SP2D</span>
+                  </div>
+                  {editingSpmId && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenPrint({ id: editingSpmId } as any)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-[#88131A] bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl transition-colors cursor-pointer shadow-xs"
+                    >
+                      <Printer className="w-4 h-4" />
+                      <span>Cetak Lembar SPM</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={savingSpm}
+                    onClick={() => handleSaveSpm("DRAFT")}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {savingSpm ? "Menyimpan..." : "Simpan DRAFT"}
+                  </button>
 
-                <button
-                  type="button"
-                  disabled={savingSpm}
-                  onClick={() => handleSaveSpm("DIAJUKAN")}
-                  className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#5E0E14] to-[#88131A] px-5 py-2 text-xs font-bold text-white shadow-md hover:opacity-95 disabled:opacity-50"
-                >
-                  <Check className="h-4 w-4" />
-                  <span>{savingSpm ? "Menyimpan..." : "Simpan & Ajukan SPM"}</span>
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    disabled={savingSpm}
+                    onClick={() => handleSaveSpm("DIAJUKAN")}
+                    className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#5E0E14] to-[#88131A] px-5 py-2 text-xs font-bold text-white shadow-md hover:opacity-95 disabled:opacity-50"
+                  >
+                    <Check className="h-4 w-4" />
+                    <span>{savingSpm ? "Menyimpan..." : "Simpan & Ajukan SPM"}</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

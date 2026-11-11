@@ -26,9 +26,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!["DIVERIFIKASI", "DISETUJUI", "DITOLAK"].includes(status)) {
+    if (!["DIVERIFIKASI", "DISETUJUI", "DITOLAK", "DRAFT"].includes(status)) {
       return NextResponse.json(
-        { success: false, error: "Status verifikasi harus DIVERIFIKASI, DISETUJUI, atau DITOLAK." },
+        { success: false, error: "Status verifikasi harus DIVERIFIKASI, DISETUJUI, DITOLAK, atau DRAFT." },
         { status: 400 }
       );
     }

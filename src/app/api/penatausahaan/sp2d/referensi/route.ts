@@ -4,6 +4,7 @@ import {
   isSp2dAuthorized,
   getSpmTerbitForSp2d,
   getNextSp2dSequence,
+  getPejabatBudList,
 } from "@/modules/penatausahaan/sp2d.service";
 
 export async function GET(req: NextRequest) {
@@ -34,16 +35,25 @@ export async function GET(req: NextRequest) {
       ? parseInt(tahunParam, 10)
       : session.tahunAnggaran || 2026;
 
-    // 1. Nomor Urut SP2D Berikutnya (Running Global se-Kabupaten)
+    // 1. Nomor Urut SP2D Berikutnya (Running Global se-Kabupaten: [NOMOR_URUT]/[KD_UNIT]/SP2D/[JENIS]/2026)
     if (type === "next-no") {
+      const kd_unit = searchParams.get("kd_unit") || kd_skpd || undefined;
       const data = await getNextSp2dSequence({
         tahunAnggaran,
         jenisSp2d,
+        kd_unit,
+        kd_skpd,
       });
       return NextResponse.json({ success: true, data });
     }
 
-    // 2. Daftar SPM Terbit yang siap diterbitkan SP2D
+    // 2. Daftar Pejabat Kuasa BUD (User dengan role/peran BUD)
+    if (type === "pejabat-bud") {
+      const data = await getPejabatBudList();
+      return NextResponse.json({ success: true, data });
+    }
+
+    // 3. Daftar SPM Terbit yang siap diterbitkan SP2D
     const data = await getSpmTerbitForSp2d({
       tahunAnggaran,
       kd_skpd,
