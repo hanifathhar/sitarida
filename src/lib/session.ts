@@ -49,9 +49,10 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
 export async function setSessionCookie(payload: SessionPayload) {
   const token = await createSessionToken(payload);
   const cookieStore = await cookies();
+  const isSecure = process.env.COOKIE_SECURE === "true";
   cookieStore.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecure,
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 12,
@@ -59,7 +60,7 @@ export async function setSessionCookie(payload: SessionPayload) {
   if (payload.tahunAnggaranId) {
     cookieStore.set(TAHUN_COOKIE_NAME, payload.tahunAnggaranId, {
       httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
+      secure: isSecure,
       sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
@@ -90,9 +91,10 @@ export async function getSelectedTahunAnggaranId(): Promise<string | null> {
 
 export async function setSelectedTahunAnggaranId(tahunId: string) {
   const cookieStore = await cookies();
+  const isSecure = process.env.COOKIE_SECURE === "true";
   cookieStore.set(TAHUN_COOKIE_NAME, tahunId, {
     httpOnly: false,
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecure,
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
