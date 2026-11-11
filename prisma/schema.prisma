@@ -109,6 +109,12 @@ model Opd {
   sppList           Trhspp[]
   spmList           Trhspm[]
   sp2dList          Trhsp2d[]
+  kasinList         Trhkasin[]
+  transoutList      Trhtransout[]
+  trmpotList        Trhtrmpot[]
+  strpotList        Trhstrpot[]
+  rekalList         Trhrekal[]
+  lpjList           Trlpj[]
 
   @@index([kd_skpd])
   @@index([nm_skpd])
@@ -926,6 +932,9 @@ model Trhsp2d {
   tgl_cair            DateTime?
   no_transaksi_bank   String?
   keterangan          String?   @db.Text
+  tgl_terima          DateTime? // Tanggal penerimaan SP2D oleh Bendahara Pengeluaran
+  no_terima           String?   // Nomor bukti penerimaan / nomor BKU pengeluaran
+  status_pembukuan    String?   @default("BELUM_DIBUKUKAN") // BELUM_DIBUKUKAN, SUDAH_DIBUKUKAN
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
@@ -940,6 +949,290 @@ model Trhsp2d {
   @@index([spmId])
   @@index([sppId])
   @@map("trhsp2d")
+}
+
+// -------------------------------------------------------------
+// MODUL BENDAHARA UMUM DAERAH (BUD) - PENERIMAAN KAS DAERAH
+// -------------------------------------------------------------
+model Trhkasin {
+  id              String      @id @default(uuid())
+  tahunAnggaran   Int
+  no_kas          String      // No Transaksi / Buku Kas Masuk
+  tgl_kas         DateTime
+  no_sts          String?     // No STS / Bukti Setor Penerimaan
+  tgl_sts         DateTime?
+  kd_skpd         String
+  nm_skpd         String
+  opdId           String
+  kd_unit         String?
+  nm_unit         String?
+  unitKerjaId     String?
+  uraian          String      @db.Text
+  sumber_dana     String?     // PAD, TRANSFER, DAU, DAK, BAGI_HASIL, LAIN_PAD_SAH
+  nama_penyetor   String?
+  alamat_penyetor String?
+  nama_bank       String?     // Bank Rekening Kas Daerah (cth: Bank Sumut)
+  rek_bank        String?     // No Rekening Kas Daerah Penampung
+  nilai           Decimal     @default(0) @db.Decimal(18, 2)
+  status          String      @default("TERIMA") // DRAFT, TERIMA, SETOR, BATAL
+  keterangan      String?     @db.Text
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  opd             Opd         @relation(fields: [opdId], references: [id], onDelete: Cascade)
+  rincianRekening Trdkasin[]
+
+  @@unique([tahunAnggaran, no_kas])
+  @@index([tahunAnggaran, kd_skpd])
+  @@index([tgl_kas])
+  @@index([status])
+  @@map("trhkasin")
+}
+
+model Trdkasin {
+  id              String      @id @default(uuid())
+  kasinId         String
+  no_kas          String
+  kd_rek6         String      // Kode Akun 6 (cth: 4.1.01.01.0001)
+  nm_rek6         String      // Nama Rekening Pendapatan / Penerimaan
+  kd_sub_kegiatan String?
+  nm_sub_kegiatan String?
+  nilai           Decimal     @default(0) @db.Decimal(18, 2)
+  keterangan      String?     @db.Text
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  header          Trhkasin    @relation(fields: [kasinId], references: [id], onDelete: Cascade)
+
+  @@index([kasinId])
+  @@index([kd_rek6])
+  @@map("trdkasin")
+}
+
+// -------------------------------------------------------------
+// MODUL BENDAHARA PENGELUARAN (PEMBUKUAN, SPJ, POTONGAN, REKAL, LPJ)
+// -------------------------------------------------------------
+
+model Trhtransout {
+  id              String         @id @default(uuid())
+  tahunAnggaran   Int
+  no_bukti        String         // Nomor Bukti Transaksi Pengeluaran / Pembukuan SP2D / SPJ
+  tgl_bukti       DateTime
+  no_sp2d         String?        // Referensi No SP2D (jika pembukuan SP2D)
+  tgl_sp2d        DateTime?
+  sp2dId          String?
+  no_spj          String?        // Referensi No SPJ (jika pembukuan SPJ)
+  tgl_spj         DateTime?
+  kd_skpd         String
+  nm_skpd         String
+  opdId           String
+  kd_unit         String?
+  nm_unit         String?
+  unitKerjaId     String?
+  sumber_dana     String?        // UP, GU, TU, LS
+  jenis_beban     String?        // UP, GU, TU, LS_GAJI, LS_BARJAS
+  pay_type        String?        @default("BANK") // BANK / TUNAI
+  uraian          String         @db.Text
+  total           Decimal        @default(0) @db.Decimal(18, 2)
+  status          String         @default("POSTING") // DRAFT, POSTING, BATAL
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  opd             Opd            @relation(fields: [opdId], references: [id], onDelete: Cascade)
+  rincian         Trdtransout[]
+
+  @@unique([tahunAnggaran, no_bukti])
+  @@index([tahunAnggaran, kd_skpd])
+  @@index([tgl_bukti])
+  @@index([no_sp2d])
+  @@map("trhtransout")
+}
+
+model Trdtransout {
+  id              String      @id @default(uuid())
+  transoutId      String
+  no_bukti        String
+  kd_sub_kegiatan String?
+  nm_sub_kegiatan String?
+  kd_rek6         String
+  nm_rek6         String
+  nilai           Decimal     @default(0) @db.Decimal(18, 2)
+  sumber_dana     String?
+  keterangan      String?     @db.Text
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  header          Trhtransout @relation(fields: [transoutId], references: [id], onDelete: Cascade)
+
+  @@index([transoutId])
+  @@index([kd_rek6])
+  @@map("trdtransout")
+}
+
+model Trhtrmpot {
+  id              String      @id @default(uuid())
+  tahunAnggaran   Int
+  no_bukti        String      // No Bukti Penerimaan Potongan
+  tgl_bukti       DateTime
+  no_sp2d         String?
+  kd_skpd         String
+  nm_skpd         String
+  opdId           String
+  kd_unit         String?
+  nm_unit         String?
+  unitKerjaId     String?
+  uraian          String      @db.Text
+  total           Decimal     @default(0) @db.Decimal(18, 2)
+  status          String      @default("TERIMA")
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  opd             Opd         @relation(fields: [opdId], references: [id], onDelete: Cascade)
+  rincian         Trdtrmpot[]
+
+  @@unique([tahunAnggaran, no_bukti])
+  @@index([tahunAnggaran, kd_skpd])
+  @@map("trhtrmpot")
+}
+
+model Trdtrmpot {
+  id              String      @id @default(uuid())
+  trmpotId        String
+  no_bukti        String
+  kd_rek6         String      // Kode Akun Pajak (PPN, PPh, dll)
+  nm_rek6         String
+  id_billing      String?
+  nilai           Decimal     @default(0) @db.Decimal(18, 2)
+  keterangan      String?     @db.Text
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  header          Trhtrmpot   @relation(fields: [trmpotId], references: [id], onDelete: Cascade)
+
+  @@index([trmpotId])
+  @@index([kd_rek6])
+  @@map("trdtrmpot")
+}
+
+model Trhstrpot {
+  id              String      @id @default(uuid())
+  tahunAnggaran   Int
+  no_bukti        String      // No Bukti Setor Pajak
+  tgl_bukti       DateTime
+  no_trmpot       String?     // Referensi No Penerimaan Potongan
+  kd_skpd         String
+  nm_skpd         String
+  opdId           String
+  kd_unit         String?
+  nm_unit         String?
+  unitKerjaId     String?
+  uraian          String      @db.Text
+  total           Decimal     @default(0) @db.Decimal(18, 2)
+  status          String      @default("SETOR")
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  opd             Opd         @relation(fields: [opdId], references: [id], onDelete: Cascade)
+  rincian         Trdstrpot[]
+
+  @@unique([tahunAnggaran, no_bukti])
+  @@index([tahunAnggaran, kd_skpd])
+  @@map("trhstrpot")
+}
+
+model Trdstrpot {
+  id              String      @id @default(uuid())
+  strpotId        String
+  no_bukti        String
+  kd_rek6         String
+  nm_rek6         String
+  id_billing      String?
+  ntpn            String?     // Nomor Transaksi Penerimaan Negara
+  nilai           Decimal     @default(0) @db.Decimal(18, 2)
+  keterangan      String?     @db.Text
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  header          Trhstrpot   @relation(fields: [strpotId], references: [id], onDelete: Cascade)
+
+  @@index([strpotId])
+  @@index([kd_rek6])
+  @@map("trdstrpot")
+}
+
+model Trhrekal {
+  id              String      @id @default(uuid())
+  tahunAnggaran   Int
+  no_rekal        String
+  tgl_rekal       DateTime
+  kd_skpd         String
+  nm_skpd         String
+  opdId           String
+  kd_unit         String?
+  nm_unit         String?
+  unitKerjaId     String?
+  bulan           Int
+  keterangan      String?     @db.Text
+  total_mutasi    Decimal     @default(0) @db.Decimal(18, 2)
+  status          String      @default("SELESAI")
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  opd             Opd         @relation(fields: [opdId], references: [id], onDelete: Cascade)
+  rincian         Trdrekal[]
+
+  @@unique([tahunAnggaran, no_rekal])
+  @@index([tahunAnggaran, kd_skpd])
+  @@map("trhrekal")
+}
+
+model Trdrekal {
+  id              String      @id @default(uuid())
+  rekalId         String
+  no_rekal        String
+  kd_sub_kegiatan String?
+  kd_rek6         String
+  nm_rek6         String
+  nilai_lalu      Decimal     @default(0) @db.Decimal(18, 2)
+  nilai_ini       Decimal     @default(0) @db.Decimal(18, 2)
+  nilai_total     Decimal     @default(0) @db.Decimal(18, 2)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  header          Trhrekal    @relation(fields: [rekalId], references: [id], onDelete: Cascade)
+
+  @@index([rekalId])
+  @@map("trdrekal")
+}
+
+model Trlpj {
+  id              String      @id @default(uuid())
+  tahunAnggaran   Int
+  no_lpj          String      // No LPJ
+  tgl_lpj         DateTime
+  tgl_awal        DateTime    // Rentang awal transaksi
+  tgl_akhir       DateTime    // Rentang akhir transaksi
+  jenis_lpj       String      // UP, GU, TU, KKPD
+  kd_skpd         String
+  nm_skpd         String
+  opdId           String
+  kd_unit         String?
+  nm_unit         String?
+  unitKerjaId     String?
+  keterangan      String      @db.Text
+  total_belanja   Decimal     @default(0) @db.Decimal(18, 2)
+  total_potongan  Decimal     @default(0) @db.Decimal(18, 2)
+  total_bersih    Decimal     @default(0) @db.Decimal(18, 2)
+  status          String      @default("DRAFT") // DRAFT, DIAJUKAN, DISETUJUI, DITOLAK
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  opd             Opd         @relation(fields: [opdId], references: [id], onDelete: Cascade)
+
+  @@unique([tahunAnggaran, no_lpj])
+  @@index([tahunAnggaran, kd_skpd])
+  @@index([jenis_lpj])
+  @@map("trlpj")
 }
 
 model DocumentAttachment {

@@ -419,6 +419,9 @@ export async function getSp2dList(params: {
         ? s.tgl_verifikasi.toISOString().split("T")[0]
         : null,
       tgl_cair: s.tgl_cair ? s.tgl_cair.toISOString().split("T")[0] : null,
+      tgl_terima: s.tgl_terima ? s.tgl_terima.toISOString().split("T")[0] : null,
+      no_terima: s.no_terima || null,
+      status_pembukuan: s.status_pembukuan || "BELUM_DIBUKUKAN",
       nilai: Number(s.nilai) || 0,
       nilai_potongan: Number(s.nilai_potongan) || 0,
       nilai_bersih: Number(s.nilai_bersih) || 0,
@@ -485,6 +488,9 @@ export async function getSp2dDetail(id: string) {
       ? sp2d.tgl_verifikasi.toISOString().split("T")[0]
       : null,
     tgl_cair: sp2d.tgl_cair ? sp2d.tgl_cair.toISOString().split("T")[0] : null,
+    tgl_terima: sp2d.tgl_terima ? sp2d.tgl_terima.toISOString().split("T")[0] : null,
+    no_terima: sp2d.no_terima || null,
+    status_pembukuan: sp2d.status_pembukuan || "BELUM_DIBUKUKAN",
     nilai: Number(sp2d.nilai) || 0,
     nilai_potongan: Number(sp2d.nilai_potongan) || 0,
     nilai_bersih: Number(sp2d.nilai_bersih) || 0,

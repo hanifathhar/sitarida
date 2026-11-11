@@ -95,6 +95,9 @@ interface Sp2dItem {
   kuasaBudNip?: string | null;
   status: string;
   tgl_cair?: string | null;
+  tgl_terima?: string | null;
+  no_terima?: string | null;
+  status_pembukuan?: string | null;
   no_transaksi_bank?: string | null;
   keterangan?: string | null;
 }
@@ -954,20 +957,27 @@ export default function Sp2dManagementView() {
                         </td>
 
                         <td className="px-4 py-3.5 text-center">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${sp2d.status === "CAIR"
-                              ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                              : sp2d.status === "DISETUJUI"
-                                ? "bg-blue-100 text-blue-800 border border-blue-200"
-                                : sp2d.status === "DIVERIFIKASI"
-                                  ? "bg-indigo-100 text-indigo-800 border border-indigo-200"
-                                  : sp2d.status === "DITOLAK"
-                                    ? "bg-rose-100 text-rose-800 border border-rose-200"
-                                    : "bg-slate-100 text-slate-800 border border-slate-200"
-                              }`}
-                          >
-                            {sp2d.status}
-                          </span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${sp2d.status === "CAIR"
+                                ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                : sp2d.status === "DISETUJUI"
+                                  ? "bg-blue-100 text-blue-800 border border-blue-200"
+                                  : sp2d.status === "DIVERIFIKASI"
+                                    ? "bg-indigo-100 text-indigo-800 border border-indigo-200"
+                                    : sp2d.status === "DITOLAK"
+                                      ? "bg-rose-100 text-rose-800 border border-rose-200"
+                                      : "bg-slate-100 text-slate-800 border border-slate-200"
+                                }`}
+                            >
+                              {sp2d.status}
+                            </span>
+                            {sp2d.status_pembukuan === "SUDAH_DIBUKUKAN" && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal-50 text-teal-800 border border-teal-200">
+                                Sudah Dibukukan
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         <td className="px-4 py-3.5 text-center">

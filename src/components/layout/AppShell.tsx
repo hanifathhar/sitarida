@@ -97,6 +97,24 @@ const PAGE_TITLES: Record<string, string> = {
   "/penatausahaan/sp2d/verifikasi": "VERIFIKASI & PENGESAHAN DOKUMEN SP2D",
   "/penatausahaan/sp2d/register": "BUKU REGISTER SURAT PERINTAH PENCAIRAN DANA (REGISTER SP2D)",
   "/penatausahaan/sp2d/monitoring": "MONITORING PENCAIRAN DANA SP2D (BANK RKUD)",
+  "/penatausahaan/bud": "BENDAHARA UMUM DAERAH (BUD)",
+  "/penatausahaan/bud/penerimaan": "PENERIMAAN KAS DAERAH (BUD)",
+  "/penatausahaan/bud/pengeluaran": "PENGELUARAN DAERAH (DAFTAR SP2D CAIR)",
+  "/penatausahaan/bud/bku": "BUKU KAS UMUM DAERAH (BKU KASDA)",
+  "/penatausahaan/bud/dth-rth": "DAFTAR & REKAPITULASI TRANSAKSI HARIAN (DTH & RTH)",
+  "/penatausahaan/bud/rekap-penerimaan": "REKAPITULASI PENERIMAAN DAERAH",
+  "/penatausahaan/bud/rekap-pengeluaran": "REKAPITULASI PENGELUARAN DAERAH",
+  "/penatausahaan/bendahara-pengeluaran": "BENDAHARA PENGELUARAN",
+  "/penatausahaan/bendahara-pengeluaran/pembukuan-sp2d": "PEMBUKUAN SP2D",
+  "/penatausahaan/bendahara-pengeluaran/validasi-spj": "VALIDASI SPJ",
+  "/penatausahaan/bendahara-pengeluaran/pembukuan-spj": "PEMBUKUAN SPJ",
+  "/penatausahaan/bendahara-pengeluaran/penerimaan-potongan": "PENERIMAAN POTONGAN",
+  "/penatausahaan/bendahara-pengeluaran/penyetoran-potongan": "PENYETORAN POTONGAN",
+  "/penatausahaan/bendahara-pengeluaran/setor-sisa-kas": "SETOR SISA KAS (UP/GU/TU)",
+  "/penatausahaan/bendahara-pengeluaran/pengembalian": "PENGEMBALIAN",
+  "/penatausahaan/bendahara-pengeluaran/rekal-transaksi": "REKAL TRANSAKSI",
+  "/penatausahaan/bendahara-pengeluaran/lpj": "LAPORAN PERTANGGUNGJAWABAN (LPJ)",
+  "/penatausahaan/bendahara-pengeluaran/lpj-kkpd": "LPJ-KKPD",
   "/admin/users": "DATA PEGAWAI / PENGGUNA & PENUGASAN OPD",
   "/admin/roles": "MANAJEMEN ROLE & HAK AKSES",
   "/admin/audit-log": "LAPORAN JEJAK AUDIT (AUDIT LOG)",
@@ -147,6 +165,12 @@ export default function AppShell({
   const [sp2dDropdownOpen, setSp2dDropdownOpen] = useState(() =>
     pathname.startsWith("/penatausahaan/sp2d")
   );
+  const [budDropdownOpen, setBudDropdownOpen] = useState(() =>
+    pathname.startsWith("/penatausahaan/bud")
+  );
+  const [bendaharaDropdownOpen, setBendaharaDropdownOpen] = useState(() =>
+    pathname.startsWith("/penatausahaan/bendahara-pengeluaran")
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -162,6 +186,12 @@ export default function AppShell({
     }
     if (pathname.startsWith("/penatausahaan/sp2d")) {
       setSp2dDropdownOpen(true);
+    }
+    if (pathname.startsWith("/penatausahaan/bud")) {
+      setBudDropdownOpen(true);
+    }
+    if (pathname.startsWith("/penatausahaan/bendahara-pengeluaran")) {
+      setBendaharaDropdownOpen(true);
     }
   }, [pathname]);
 
@@ -366,14 +396,142 @@ export default function AppShell({
       can("sp2d:write")
   );
 
-  // Auto-expand menu penatausahaan untuk role penatausahaan (Kasubag Keuangan, Perbendaharaan, BUD)
+  // Modul BUD: Khusus peran BUD (kode 1), Bidang Perbendaharaan (kode 3), dan Superadmin (kode 0)
+  const isBudRoleAuthorized =
+    session.roleKode === "0" ||
+    session.roleKode === "1" ||
+    session.roleKode === "3" ||
+    session.roleKode === "SUPERADMIN" ||
+    isSuperadmin;
+
+  const budSubMenus = [
+    {
+      label: "Penerimaan Daerah",
+      href: "/penatausahaan/bud/penerimaan",
+      perm: "menu:penatausahaan:bud-penerimaan",
+    },
+    {
+      label: "Pengeluaran Daerah",
+      href: "/penatausahaan/bud/pengeluaran",
+      perm: "menu:penatausahaan:bud-pengeluaran",
+    },
+    {
+      label: "Buku Kas Umum Daerah",
+      href: "/penatausahaan/bud/bku",
+      perm: "menu:penatausahaan:bud-bku",
+    },
+    {
+      label: "DTH dan RTH",
+      href: "/penatausahaan/bud/dth-rth",
+      perm: "menu:penatausahaan:bud-dth-rth",
+    },
+    {
+      label: "Rekapitulasi Penerimaan",
+      href: "/penatausahaan/bud/rekap-penerimaan",
+      perm: "menu:penatausahaan:bud-rekap-penerimaan",
+    },
+    {
+      label: "Rekapitulasi Pengeluaran",
+      href: "/penatausahaan/bud/rekap-pengeluaran",
+      perm: "menu:penatausahaan:bud-rekap-pengeluaran",
+    },
+  ].filter(
+    (m) =>
+      isBudRoleAuthorized ||
+      can(m.perm) ||
+      can("bud:read") ||
+      can("bud:write")
+  );
+
+  // Modul Bendahara Pengeluaran: Khusus peran BUD (kode 1), Bendahara Pengeluaran (kode 10), dan Superadmin (kode 0)
+  const isBendaharaRoleAuthorized =
+    session.roleKode === "0" ||
+    session.roleKode === "1" ||
+    session.roleKode === "10" ||
+    session.roleKode === "SUPERADMIN" ||
+    isSuperadmin;
+
+  const bendaharaSubMenus = [
+    {
+      label: "Pembukuan SP2D",
+      href: "/penatausahaan/bendahara-pengeluaran/pembukuan-sp2d",
+      perm: "menu:penatausahaan:bendahara-pembukuan-sp2d",
+    },
+    {
+      label: "Validasi SPJ",
+      href: "/penatausahaan/bendahara-pengeluaran/validasi-spj",
+      perm: "menu:penatausahaan:bendahara-validasi-spj",
+    },
+    {
+      label: "Pembukuan SPJ",
+      href: "/penatausahaan/bendahara-pengeluaran/pembukuan-spj",
+      perm: "menu:penatausahaan:bendahara-pembukuan-spj",
+    },
+    {
+      label: "Penerimaan Potongan",
+      href: "/penatausahaan/bendahara-pengeluaran/penerimaan-potongan",
+      perm: "menu:penatausahaan:bendahara-penerimaan-potongan",
+    },
+    {
+      label: "Penyetoran Potongan",
+      href: "/penatausahaan/bendahara-pengeluaran/penyetoran-potongan",
+      perm: "menu:penatausahaan:bendahara-penyetoran-potongan",
+    },
+    {
+      label: "Setor Sisa Kas(UP/GU/TU)",
+      href: "/penatausahaan/bendahara-pengeluaran/setor-sisa-kas",
+      perm: "menu:penatausahaan:bendahara-setor-sisa-kas",
+    },
+    {
+      label: "Pengembalian",
+      href: "/penatausahaan/bendahara-pengeluaran/pengembalian",
+      perm: "menu:penatausahaan:bendahara-pengembalian",
+    },
+    {
+      label: "Rekal Transaksi",
+      href: "/penatausahaan/bendahara-pengeluaran/rekal-transaksi",
+      perm: "menu:penatausahaan:bendahara-rekal-transaksi",
+    },
+    {
+      label: "LPJ",
+      href: "/penatausahaan/bendahara-pengeluaran/lpj",
+      perm: "menu:penatausahaan:bendahara-lpj",
+    },
+    {
+      label: "LPJ-KKPD",
+      href: "/penatausahaan/bendahara-pengeluaran/lpj-kkpd",
+      perm: "menu:penatausahaan:bendahara-lpj-kkpd",
+    },
+  ].filter(
+    (m) =>
+      isBendaharaRoleAuthorized ||
+      can(m.perm) ||
+      can("bendahara:read") ||
+      can("bendahara:write")
+  );
+
+  // Auto-expand menu penatausahaan untuk role penatausahaan (Kasubag Keuangan, Perbendaharaan, BUD, Bendahara Pengeluaran)
   useEffect(() => {
-    if (perencanaanMenus.length === 0 && (spmSubMenus.length > 0 || sp2dSubMenus.length > 0)) {
+    if (
+      perencanaanMenus.length === 0 &&
+      (spmSubMenus.length > 0 ||
+        sp2dSubMenus.length > 0 ||
+        budSubMenus.length > 0 ||
+        bendaharaSubMenus.length > 0)
+    ) {
       setOpenGroups((prev) => ({ ...prev, penatausahaan: true }));
       if (spmSubMenus.length > 0) setSpmDropdownOpen(true);
       if (sp2dSubMenus.length > 0) setSp2dDropdownOpen(true);
+      if (budSubMenus.length > 0) setBudDropdownOpen(true);
+      if (bendaharaSubMenus.length > 0) setBendaharaDropdownOpen(true);
     }
-  }, [perencanaanMenus.length, spmSubMenus.length, sp2dSubMenus.length]);
+  }, [
+    perencanaanMenus.length,
+    spmSubMenus.length,
+    sp2dSubMenus.length,
+    budSubMenus.length,
+    bendaharaSubMenus.length,
+  ]);
 
   const pengaturanMenus = [
     {
@@ -576,7 +734,9 @@ export default function AppShell({
           {(penatausahaanMenus.length > 0 ||
             sppSubMenus.length > 0 ||
             spmSubMenus.length > 0 ||
-            sp2dSubMenus.length > 0) && (
+            sp2dSubMenus.length > 0 ||
+            budSubMenus.length > 0 ||
+            bendaharaSubMenus.length > 0) && (
               <div className="bg-[#8E1B24] rounded-xl p-2 space-y-1.5 shadow-sm border border-red-400/15">
                 <button
                   type="button"
@@ -738,6 +898,102 @@ export default function AppShell({
                         {sp2dDropdownOpen && (
                           <div className="pl-3.5 space-y-1 border-l-2 border-red-300/20 ml-2 py-0.5">
                             {sp2dSubMenus.map((sub) => {
+                              const active = pathname === sub.href;
+                              return (
+                                <Link
+                                  key={sub.href}
+                                  href={sub.href}
+                                  onClick={() => setSidebarOpen(false)}
+                                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] transition-all ${active
+                                    ? "bg-white text-[#88131A] font-bold shadow-sm"
+                                    : "text-red-100 hover:text-white hover:bg-[#7A121A] font-medium"
+                                    }`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? "bg-[#88131A]" : "bg-red-300/60"
+                                      }`}
+                                  />
+                                  <span className="truncate">{sub.label}</span>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* SUB-MENU DROPDOWN BENDAHARA UMUM DAERAH (BUD) */}
+                    {budSubMenus.length > 0 && (
+                      <div className="space-y-1 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setBudDropdownOpen((prev) => !prev)}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${pathname.startsWith("/penatausahaan/bud")
+                            ? "bg-[#7A121A] text-white font-bold"
+                            : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                            }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Building2 className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                            <span>Bendahara Umum Daerah</span>
+                          </div>
+                          <ChevronDown
+                            className={`w-3 h-3 transition-transform ${budDropdownOpen ? "rotate-180" : ""
+                              }`}
+                          />
+                        </button>
+
+                        {budDropdownOpen && (
+                          <div className="pl-3.5 space-y-1 border-l-2 border-red-300/20 ml-2 py-0.5">
+                            {budSubMenus.map((sub) => {
+                              const active = pathname === sub.href;
+                              return (
+                                <Link
+                                  key={sub.href}
+                                  href={sub.href}
+                                  onClick={() => setSidebarOpen(false)}
+                                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] transition-all ${active
+                                    ? "bg-white text-[#88131A] font-bold shadow-sm"
+                                    : "text-red-100 hover:text-white hover:bg-[#7A121A] font-medium"
+                                    }`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? "bg-[#88131A]" : "bg-red-300/60"
+                                      }`}
+                                  />
+                                  <span className="truncate">{sub.label}</span>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* SUB-MENU DROPDOWN BENDAHARA PENGELUARAN */}
+                    {bendaharaSubMenus.length > 0 && (
+                      <div className="space-y-1 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setBendaharaDropdownOpen((prev) => !prev)}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${pathname.startsWith("/penatausahaan/bendahara-pengeluaran")
+                            ? "bg-[#7A121A] text-white font-bold"
+                            : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                            }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <WalletCards className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                            <span>Bendahara Pengeluaran</span>
+                          </div>
+                          <ChevronDown
+                            className={`w-3 h-3 transition-transform ${bendaharaDropdownOpen ? "rotate-180" : ""
+                              }`}
+                          />
+                        </button>
+
+                        {bendaharaDropdownOpen && (
+                          <div className="pl-3.5 space-y-1 border-l-2 border-red-300/20 ml-2 py-0.5">
+                            {bendaharaSubMenus.map((sub) => {
                               const active = pathname === sub.href;
                               return (
                                 <Link
