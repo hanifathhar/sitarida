@@ -115,6 +115,7 @@ model Opd {
   strpotList        Trhstrpot[]
   rekalList         Trhrekal[]
   lpjList           Trlpj[]
+  kwitansiList      TblKwitansi[]
 
   @@index([kd_skpd])
   @@index([nm_skpd])
@@ -141,6 +142,7 @@ model UnitKerja {
   users             User[]
   userRoleAssignments UserRoleAssignment[]
   plafondAnggarans  PlafondAnggaran[]
+  kwitansiList      TblKwitansi[]
 
   @@index([opdId])
   @@index([kd_unit])
@@ -214,6 +216,8 @@ model User {
   auditLogs       AuditLog[]
   notifications   Notification[]
   trskpdList      Trskpd[]             @relation("TrskpdPPTK")
+  kwitansiPptkList TblKwitansi[]       @relation("KwitansiPPTK")
+  kwitansiPaList  TblKwitansi[]        @relation("KwitansiPAKPA")
 
   @@index([roleId])
   @@index([opdId])
@@ -1283,4 +1287,100 @@ model Notification {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead])
+}
+
+// ==========================================
+// 12. PENGAJUAN KUITANSI (PPTK, PA/KPA)
+// ==========================================
+
+model TblKwitansi {
+  id               String   @id @default(uuid())
+  nomor            String   @unique
+  tanggal          DateTime
+  tahunAnggaran    Int      @default(2026)
+  opdId            String
+  unitKerjaId      String?
+  kd_skpd          String
+  nm_skpd          String
+  kd_unit          String?
+  nm_unit          String?
+  kd_program       String?
+  nm_program       String?
+  kd_kegiatan      String?
+  nm_kegiatan      String?
+  kd_sub_kegiatan  String
+  nm_sub_kegiatan  String
+  kd_rek6          String
+  nm_rek6          String
+  jns_beban        String   // UP, GU, TU, LS
+  uraian           String   @db.Text
+  nilai            Decimal  @default(0) @db.Decimal(18, 2)
+  nilai_potongan   Decimal  @default(0) @db.Decimal(18, 2)
+  nilai_bersih     Decimal  @default(0) @db.Decimal(18, 2)
+  pptkUserId       String?
+  pptkNama         String?
+  pptkNip          String?
+  paKpaUserId      String?
+  paKpaNama        String?
+  paKpaNip         String?
+  bendaharaUserId  String?
+  bendaharaNama    String?
+  bendaharaNip     String?
+  status           String   @default("DRAFT") // DRAFT, DIAJUKAN, DISETUJUI, DITOLAK, DIBUKUKAN
+  tgl_persetujuan  DateTime?
+  catatan          String?  @db.Text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  opd              Opd                   @relation(fields: [opdId], references: [id], onDelete: Cascade)
+  unitKerja        UnitKerja?            @relation(fields: [unitKerjaId], references: [id], onDelete: SetNull)
+  pptk             User?                 @relation("KwitansiPPTK", fields: [pptkUserId], references: [id], onDelete: SetNull)
+  paKpa            User?                 @relation("KwitansiPAKPA", fields: [paKpaUserId], references: [id], onDelete: SetNull)
+  penerimaList     TblKwitansiPenerima[]
+  potonganList     TblKwitansiPotongan[]
+
+  @@index([tahunAnggaran, kd_skpd])
+  @@index([kd_sub_kegiatan])
+  @@index([kd_rek6])
+  @@index([pptkUserId])
+  @@index([status])
+  @@map("tbl_kwitansi")
+}
+
+model TblKwitansiPenerima {
+  id               String      @id @default(uuid())
+  kwitansiId       String
+  nm_penerima      String
+  alamat_penerima  String?
+  npwp_penerima    String?
+  nm_bank_penerima String
+  no_rek_penerima  String
+  an_rekening      String?
+  nilai            Decimal     @default(0) @db.Decimal(18, 2)
+  keterangan       String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  kwitansi         TblKwitansi @relation(fields: [kwitansiId], references: [id], onDelete: Cascade)
+
+  @@index([kwitansiId])
+  @@map("tbl_kwitansi_penerima")
+}
+
+model TblKwitansiPotongan {
+  id          String      @id @default(uuid())
+  kwitansiId  String
+  kd_rek6     String?
+  nm_rek6     String?
+  id_billing  String?
+  ntpn        String?
+  nilai       Decimal     @default(0) @db.Decimal(18, 2)
+  keterangan  String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  kwitansi    TblKwitansi @relation(fields: [kwitansiId], references: [id], onDelete: Cascade)
+
+  @@index([kwitansiId])
+  @@map("tbl_kwitansi_potongan")
 }

@@ -36,6 +36,7 @@ import {
   FileSpreadsheet,
   Coins,
   Landmark,
+  Receipt,
 } from "lucide-react";
 import { SessionPayload } from "@/lib/session";
 
@@ -74,6 +75,8 @@ const PAGE_TITLES: Record<string, string> = {
   "/perencanaan/spd": "SURAT PENYEDIAAN DANA (SPD)",
   "/perencanaan/cetak-dokumen": "CETAK DOKUMEN ANGGARAN (PERMENDAGRI NO. 17 TAHUN 2026)",
   "/penatausahaan/pengaturan": "PENETAPAN BESARAN UANG PERSEDIAAN (UP & UP-KKPD)",
+  "/penatausahaan/pengajuan/kuitansi": "PENGAJUAN KUITANSI",
+  "/penatausahaan/pengajuan/register-kuitansi": "REGISTER KUITANSI",
   "/penatausahaan/spp/up": "SURAT PERMINTAAN PEMBAYARAN - UANG PERSEDIAAN (SPP-UP)",
   "/penatausahaan/spp/gu": "SURAT PERMINTAAN PEMBAYARAN - GANTI UANG (SPP-GU)",
   "/penatausahaan/spp/tu": "SURAT PERMINTAAN PEMBAYARAN - TAMBAH UANG (SPP-TU)",
@@ -156,6 +159,9 @@ export default function AppShell({
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
     getActiveGroupByPath(pathname)
   );
+  const [pengajuanDropdownOpen, setPengajuanDropdownOpen] = useState(() =>
+    pathname.startsWith("/penatausahaan/pengajuan")
+  );
   const [sppDropdownOpen, setSppDropdownOpen] = useState(() =>
     pathname.startsWith("/penatausahaan/spp")
   );
@@ -178,6 +184,9 @@ export default function AppShell({
 
   useEffect(() => {
     setOpenGroups(getActiveGroupByPath(pathname));
+    if (pathname.startsWith("/penatausahaan/pengajuan")) {
+      setPengajuanDropdownOpen(true);
+    }
     if (pathname.startsWith("/penatausahaan/spp")) {
       setSppDropdownOpen(true);
     }
@@ -280,6 +289,38 @@ export default function AppShell({
         (can("penatausahaan:up:read") ||
           can("penatausahaan:up:manage") ||
           isSuperadmin))
+  );
+
+  // Modul Pengajuan: Khusus peran Superadmin (kode 0), PPTK (kode 9), dan PA/KPA (kode 7)
+  const isPengajuanRoleAuthorized =
+    session.roleKode === "0" ||
+    session.roleKode === "SUPERADMIN" ||
+    session.roleKode === "7" ||
+    session.roleKode === "PA/KPA" ||
+    session.roleKode === "9" ||
+    session.roleKode === "PPTK" ||
+    session.roleNama?.toLowerCase().includes("pptk") ||
+    session.roleNama?.toLowerCase().includes("pa") ||
+    session.roleNama?.toLowerCase().includes("kpa") ||
+    isSuperadmin;
+
+  const pengajuanSubMenus = [
+    {
+      label: "Kuitansi",
+      href: "/penatausahaan/pengajuan/kuitansi",
+      perm: "menu:penatausahaan:pengajuan-kuitansi",
+    },
+    {
+      label: "Register Kuitansi",
+      href: "/penatausahaan/pengajuan/register-kuitansi",
+      perm: "menu:penatausahaan:pengajuan-register",
+    },
+  ].filter(
+    (m) =>
+      isPengajuanRoleAuthorized ||
+      can(m.perm) ||
+      can("kuitansi:read") ||
+      can("kuitansi:write")
   );
 
   const sppSubMenus = [
@@ -510,16 +551,18 @@ export default function AppShell({
       can("bendahara:write")
   );
 
-  // Auto-expand menu penatausahaan untuk role penatausahaan (Kasubag Keuangan, Perbendaharaan, BUD, Bendahara Pengeluaran)
+  // Auto-expand menu penatausahaan untuk role penatausahaan (Kasubag Keuangan, Perbendaharaan, BUD, Bendahara Pengeluaran, PPTK, PA/KPA)
   useEffect(() => {
     if (
       perencanaanMenus.length === 0 &&
-      (spmSubMenus.length > 0 ||
+      (pengajuanSubMenus.length > 0 ||
+        spmSubMenus.length > 0 ||
         sp2dSubMenus.length > 0 ||
         budSubMenus.length > 0 ||
         bendaharaSubMenus.length > 0)
     ) {
       setOpenGroups((prev) => ({ ...prev, penatausahaan: true }));
+      if (pengajuanSubMenus.length > 0) setPengajuanDropdownOpen(true);
       if (spmSubMenus.length > 0) setSpmDropdownOpen(true);
       if (sp2dSubMenus.length > 0) setSp2dDropdownOpen(true);
       if (budSubMenus.length > 0) setBudDropdownOpen(true);
@@ -732,6 +775,7 @@ export default function AppShell({
 
           {/* MENU UTAMA: PENATAUSAHAAN */}
           {(penatausahaanMenus.length > 0 ||
+            pengajuanSubMenus.length > 0 ||
             sppSubMenus.length > 0 ||
             spmSubMenus.length > 0 ||
             sp2dSubMenus.length > 0 ||
@@ -777,6 +821,54 @@ export default function AppShell({
                         </Link>
                       );
                     })}
+
+                    {/* SUB-MENU DROPDOWN PENGAJUAN */}
+                    {pengajuanSubMenus.length > 0 && (
+                      <div className="space-y-1 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setPengajuanDropdownOpen((prev) => !prev)}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${pathname.startsWith("/penatausahaan/pengajuan")
+                            ? "bg-[#7A121A] text-white font-bold"
+                            : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                            }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Receipt className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                            <span>Pengajuan</span>
+                          </div>
+                          <ChevronDown
+                            className={`w-3 h-3 transition-transform ${pengajuanDropdownOpen ? "rotate-180" : ""
+                              }`}
+                          />
+                        </button>
+
+                        {pengajuanDropdownOpen && (
+                          <div className="pl-3.5 space-y-1 border-l-2 border-red-300/20 ml-2 py-0.5">
+                            {pengajuanSubMenus.map((sub) => {
+                              const active = pathname === sub.href;
+                              return (
+                                <Link
+                                  key={sub.href}
+                                  href={sub.href}
+                                  onClick={() => setSidebarOpen(false)}
+                                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] transition-all ${active
+                                    ? "bg-white text-[#88131A] font-bold shadow-sm"
+                                    : "text-red-100 hover:text-white hover:bg-[#7A121A] font-medium"
+                                    }`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? "bg-[#88131A]" : "bg-red-300/60"
+                                      }`}
+                                  />
+                                  <span className="truncate">{sub.label}</span>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* SUB-MENU DROPDOWN SPP */}
                     {sppSubMenus.length > 0 && (
