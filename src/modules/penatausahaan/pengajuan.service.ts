@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { SessionPayload } from "@/lib/session";
 import { Prisma } from "@prisma/client";
+import { bendaharaPengeluaranService } from "./bendahara-pengeluaran.service";
 
 export function isPengajuanAuthorized(session: SessionPayload): boolean {
   if (session.roleKode === "0" || session.roleKode === "SUPERADMIN") return true;
@@ -48,6 +49,7 @@ export function isPptk(session: SessionPayload): boolean {
 }
 
 export interface KwitansiPenerimaInput {
+  no_urut?: string | null;
   nm_penerima: string;
   alamat_penerima?: string | null;
   npwp_penerima?: string | null;
@@ -55,6 +57,8 @@ export interface KwitansiPenerimaInput {
   no_rek_penerima: string;
   an_rekening?: string | null;
   nilai: number;
+  uraian?: string | null;
+  cair?: number;
   keterangan?: string | null;
 }
 
@@ -88,6 +92,7 @@ export interface CreateKwitansiInput {
   jns_beban: string; // UP, GU, TU, LS
   uraian: string;
   nilai: number;
+  cair?: number;
   penerima: KwitansiPenerimaInput[];
   potongan?: KwitansiPotonganInput[];
   pptkUserId?: string | null;
@@ -222,6 +227,12 @@ export const pengajuanService = {
       }),
     ]);
 
+    try {
+      await bendaharaPengeluaranService.pullCmsWebStatusToLocal(data);
+    } catch (err) {
+      console.warn("Gagal sinkronisasi real-time CMS_WEB pada daftar kuitansi:", err);
+    }
+
     return {
       data,
       pagination: {
@@ -249,27 +260,81 @@ export const pengajuanService = {
       },
     });
 
+    if (kwitansi) {
+      try {
+        await bendaharaPengeluaranService.pullCmsWebStatusToLocal([kwitansi]);
+      } catch (err) {
+        console.warn("Gagal sinkronisasi real-time CMS_WEB pada detail kuitansi:", err);
+      }
+    }
+
     return kwitansi;
   },
 
   /**
    * Generate nomor kuitansi otomatis
+   * Spesifikasi: [no_urut]/[kd_unit]/KWT/[tahun]
+   * Contoh: 003681/1.02.5.02.0.00.02.00/KWT/2026
    */
-  async getNextKwitansiNumber(tahunAnggaran: number, kd_skpd?: string): Promise<string> {
-    const safeKode = kd_skpd || "";
-    const count = await prisma.tblKwitansi.count({
+  async getNextKwitansiNumber(
+    tahunAnggaran: number,
+    kd_unit?: string | null,
+    kd_skpd?: string | null,
+    db: Prisma.TransactionClient | typeof prisma = prisma
+  ): Promise<string> {
+    let kodeUnit = (kd_unit || kd_skpd || "").trim();
+
+    if (!kodeUnit && kd_skpd) {
+      kodeUnit = kd_skpd.trim();
+    }
+    if (!kodeUnit) {
+      kodeUnit = "0.00.0.00.0.00.00.00";
+    }
+
+    const rows = await db.tblKwitansi.findMany({
       where: {
         tahunAnggaran,
-        ...(safeKode ? { kd_skpd: safeKode } : {}),
+        ...(kd_unit
+          ? { kd_unit }
+          : kd_skpd
+            ? { kd_skpd }
+            : {}),
       },
+      select: { nomor: true },
     });
-    const nextSeq = String(count + 1).padStart(4, "0");
-    const cleanKode = safeKode.replace(/\./g, "") || "00";
-    return `KWIT/${cleanKode}/${nextSeq}/${tahunAnggaran}`;
+
+    let maxSeq = rows.length;
+    for (const r of rows) {
+      const parts = r.nomor.split("/");
+      // Format baru: [no_urut]/[kd_unit]/KWT/[tahun]
+      if (parts.length >= 2 && /^\d+$/.test(parts[0])) {
+        const num = parseInt(parts[0], 10);
+        if (!isNaN(num) && num > maxSeq) {
+          maxSeq = num;
+        }
+      } else if (parts.length >= 3 && /^\d+$/.test(parts[2])) {
+        // Format lama: KWIT/[kode]/[no_urut]/[tahun]
+        const num = parseInt(parts[2], 10);
+        if (!isNaN(num) && num > maxSeq) {
+          maxSeq = num;
+        }
+      }
+    }
+
+    let seq = maxSeq + 1;
+    let candidate = `${String(seq).padStart(6, "0")}/${kodeUnit}/KWT/${tahunAnggaran}`;
+
+    // Pastikan tidak bentrok dengan nomor yang sudah ada di database
+    while (await db.tblKwitansi.findUnique({ where: { nomor: candidate }, select: { id: true } })) {
+      seq++;
+      candidate = `${String(seq).padStart(6, "0")}/${kodeUnit}/KWT/${tahunAnggaran}`;
+    }
+
+    return candidate;
   },
 
   /**
-   * Buat kuitansi baru
+   * Buat kuitansi baru (dengan proteksi konkurensi / anti-bentrok nomor)
    */
   async createKwitansi(session: SessionPayload, input: CreateKwitansiInput) {
     // Validasi hak akses
@@ -305,20 +370,20 @@ export const pengajuanService = {
       }
     }
 
-    if (!kd_skpd || !nm_skpd) {
-      throw new Error("Data Perangkat Daerah (SKPD) tidak valid atau tidak ditemukan.");
+    if (!kd_unit && input.opdId) {
+      const defaultUnit = await prisma.unitKerja.findFirst({
+        where: { opdId: input.opdId, isActive: true },
+        orderBy: { kd_unit: "asc" },
+        select: { kd_unit: true, nm_unit: true },
+      });
+      if (defaultUnit) {
+        kd_unit = defaultUnit.kd_unit;
+        nm_unit = nm_unit || defaultUnit.nm_unit;
+      }
     }
 
-    const nomor =
-      input.nomor?.trim() ||
-      (await this.getNextKwitansiNumber(input.tahunAnggaran, kd_skpd));
-
-    // Periksa keunikan nomor
-    const existing = await prisma.tblKwitansi.findUnique({
-      where: { nomor },
-    });
-    if (existing) {
-      throw new Error(`Nomor kuitansi "${nomor}" sudah digunakan.`);
+    if (!kd_skpd || !nm_skpd) {
+      throw new Error("Data Perangkat Daerah (SKPD) tidak valid atau tidak ditemukan.");
     }
 
     // Hitung total potongan dan nilai bersih
@@ -355,71 +420,122 @@ export const pengajuanService = {
       }
     }
 
-    const created = await prisma.tblKwitansi.create({
-      data: {
-        nomor,
-        tanggal: new Date(input.tanggal),
-        tahunAnggaran: input.tahunAnggaran,
-        opdId: input.opdId,
-        unitKerjaId: input.unitKerjaId || null,
-        kd_skpd,
-        nm_skpd,
-        kd_unit: kd_unit || null,
-        nm_unit: nm_unit || null,
-        kd_program: input.kd_program || null,
-        nm_program: input.nm_program || null,
-        kd_kegiatan: input.kd_kegiatan || null,
-        nm_kegiatan: input.nm_kegiatan || null,
-        kd_sub_kegiatan: input.kd_sub_kegiatan,
-        nm_sub_kegiatan: input.nm_sub_kegiatan,
-        kd_rek6: input.kd_rek6,
-        nm_rek6: input.nm_rek6,
-        jns_beban: input.jns_beban,
-        uraian: input.uraian,
-        nilai: new Prisma.Decimal(nilaiBruto),
-        nilai_potongan: new Prisma.Decimal(totalPotongan),
-        nilai_bersih: new Prisma.Decimal(nilaiBersih),
-        pptkUserId,
-        pptkNama,
-        pptkNip,
-        paKpaUserId: sanitizeOptionalUserId(input.paKpaUserId),
-        paKpaNama: input.paKpaNama || null,
-        paKpaNip: input.paKpaNip || null,
-        bendaharaUserId: sanitizeOptionalUserId(input.bendaharaUserId),
-        bendaharaNama: input.bendaharaNama || null,
-        bendaharaNip: input.bendaharaNip || null,
-        status: "DRAFT",
-        catatan: input.catatan || null,
-        penerimaList: {
-          create: input.penerima.map((p) => ({
-            nm_penerima: p.nm_penerima,
-            alamat_penerima: p.alamat_penerima || null,
-            npwp_penerima: p.npwp_penerima || null,
-            nm_bank_penerima: p.nm_bank_penerima,
-            no_rek_penerima: p.no_rek_penerima,
-            an_rekening: p.an_rekening || p.nm_penerima,
-            nilai: new Prisma.Decimal(Number(p.nilai || 0)),
-            keterangan: p.keterangan || null,
-          })),
-        },
-        potonganList: {
-          create: potonganItems.map((pt) => ({
-            kd_rek6: pt.kd_rek6 || null,
-            nm_rek6: pt.nm_rek6 || null,
-            id_billing: pt.id_billing || null,
-            ntpn: pt.ntpn || null,
-            nilai: new Prisma.Decimal(Number(pt.nilai || 0)),
-            keterangan: pt.keterangan || null,
-          })),
-        },
-      },
-      include: {
-        penerimaList: true,
-        potonganList: true,
-      },
-    });
+    const targetKodeUnit = kd_unit || kd_skpd;
+    const lockKey = `kwitansi_num_${input.tahunAnggaran}_${targetKodeUnit}`;
+    const maxRetries = 5;
 
-    return created;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const created = await prisma.$transaction(async (tx) => {
+          // Kunci transaksi per tahun & unit di level PostgreSQL agar request bersamaan mengantre secara berurutan
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+
+          let nomor = input.nomor?.trim() || "";
+
+          if (nomor) {
+            const existing = await tx.tblKwitansi.findUnique({
+              where: { nomor },
+              select: { id: true },
+            });
+            // Jika nomor preview dari form sudah terpakai oleh user lain yang menyimpan bersamaan,
+            // otomatis ambil nomor urut berikutnya agar transaksi tidak gagal/bentrok
+            if (existing) {
+              nomor = await this.getNextKwitansiNumber(
+                input.tahunAnggaran,
+                targetKodeUnit,
+                kd_skpd,
+                tx
+              );
+            }
+          } else {
+            nomor = await this.getNextKwitansiNumber(
+              input.tahunAnggaran,
+              targetKodeUnit,
+              kd_skpd,
+              tx
+            );
+          }
+
+          return tx.tblKwitansi.create({
+            data: {
+              nomor,
+              tanggal: new Date(input.tanggal),
+              tahunAnggaran: input.tahunAnggaran,
+              opdId: input.opdId,
+              unitKerjaId: input.unitKerjaId || null,
+              kd_skpd,
+              nm_skpd,
+              kd_unit: kd_unit || null,
+              nm_unit: nm_unit || null,
+              kd_program: input.kd_program || null,
+              nm_program: input.nm_program || null,
+              kd_kegiatan: input.kd_kegiatan || null,
+              nm_kegiatan: input.nm_kegiatan || null,
+              kd_sub_kegiatan: input.kd_sub_kegiatan,
+              nm_sub_kegiatan: input.nm_sub_kegiatan,
+              kd_rek6: input.kd_rek6,
+              nm_rek6: input.nm_rek6,
+              jns_beban: input.jns_beban,
+              uraian: input.uraian,
+              nilai: new Prisma.Decimal(nilaiBruto),
+              nilai_potongan: new Prisma.Decimal(totalPotongan),
+              nilai_bersih: new Prisma.Decimal(nilaiBersih),
+              pptkUserId,
+              pptkNama,
+              pptkNip,
+              paKpaUserId: sanitizeOptionalUserId(input.paKpaUserId),
+              paKpaNama: input.paKpaNama || null,
+              paKpaNip: input.paKpaNip || null,
+              bendaharaUserId: sanitizeOptionalUserId(input.bendaharaUserId),
+              bendaharaNama: input.bendaharaNama || null,
+              bendaharaNip: input.bendaharaNip || null,
+              cair: input.cair !== undefined ? Number(input.cair) : 0,
+              status: "DRAFT",
+              catatan: input.catatan || null,
+              penerimaList: {
+                create: input.penerima.map((p, idx) => ({
+                  no_urut: p.no_urut?.trim() || `${nomor}-${idx + 1}`,
+                  nm_penerima: p.nm_penerima,
+                  alamat_penerima: p.alamat_penerima || null,
+                  npwp_penerima: p.npwp_penerima || null,
+                  nm_bank_penerima: p.nm_bank_penerima,
+                  no_rek_penerima: p.no_rek_penerima,
+                  an_rekening: p.an_rekening || p.nm_penerima,
+                  nilai: new Prisma.Decimal(Number(p.nilai || 0)),
+                  uraian: p.uraian || null,
+                  cair: p.cair !== undefined ? Number(p.cair) : 0,
+                  keterangan: p.keterangan || null,
+                })),
+              },
+              potonganList: {
+                create: potonganItems.map((pt) => ({
+                  kd_rek6: pt.kd_rek6 || null,
+                  nm_rek6: pt.nm_rek6 || null,
+                  id_billing: pt.id_billing || null,
+                  ntpn: pt.ntpn || null,
+                  nilai: new Prisma.Decimal(Number(pt.nilai || 0)),
+                  keterangan: pt.keterangan || null,
+                })),
+              },
+            },
+            include: {
+              penerimaList: true,
+              potonganList: true,
+            },
+          });
+        });
+
+        return created;
+      } catch (err: any) {
+        // Jika masih terjadi race condition unique constraint (P2002) pada field nomor, ulangi percobaan
+        if (err?.code === "P2002" && attempt < maxRetries) {
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    throw new Error("Gagal menghasilkan nomor kuitansi unik setelah beberapa percobaan. Silakan coba lagi.");
   },
 
   /**
@@ -460,12 +576,15 @@ export const pengajuanService = {
 
     // Gunakan transaction untuk update data pokok dan relasi penerima/potongan
     return prisma.$transaction(async (tx) => {
+      const nomorInduk = input.nomor?.trim() || existing.nomor;
+
       // Hapus penerima dan potongan lama jika ada input baru
       if (input.penerima) {
         await tx.tblKwitansiPenerima.deleteMany({ where: { kwitansiId: id } });
         await tx.tblKwitansiPenerima.createMany({
-          data: input.penerima.map((p) => ({
+          data: input.penerima.map((p, idx) => ({
             kwitansiId: id,
+            no_urut: p.no_urut?.trim() || `${nomorInduk}-${idx + 1}`,
             nm_penerima: p.nm_penerima,
             alamat_penerima: p.alamat_penerima || null,
             npwp_penerima: p.npwp_penerima || null,
@@ -473,6 +592,8 @@ export const pengajuanService = {
             no_rek_penerima: p.no_rek_penerima,
             an_rekening: p.an_rekening || p.nm_penerima,
             nilai: new Prisma.Decimal(Number(p.nilai || 0)),
+            uraian: p.uraian || null,
+            cair: p.cair !== undefined ? Number(p.cair) : 0,
             keterangan: p.keterangan || null,
           })),
         });
@@ -515,6 +636,7 @@ export const pengajuanService = {
           bendaharaUserId: input.bendaharaUserId !== undefined ? sanitizeOptionalUserId(input.bendaharaUserId) : undefined,
           bendaharaNama: input.bendaharaNama !== undefined ? input.bendaharaNama : undefined,
           bendaharaNip: input.bendaharaNip !== undefined ? input.bendaharaNip : undefined,
+          cair: input.cair !== undefined ? Number(input.cair) : undefined,
           catatan: input.catatan !== undefined ? input.catatan : undefined,
           status: "DRAFT", // reset ke DRAFT jika sebelumnya DITOLAK
         },
@@ -529,7 +651,7 @@ export const pengajuanService = {
   },
 
   /**
-   * Hapus kuitansi (hanya jika DRAFT)
+   * Hapus kuitansi (hanya jika DRAFT atau DITOLAK)
    */
   async deleteKwitansi(id: string, session: SessionPayload) {
     const existing = await prisma.tblKwitansi.findUnique({
@@ -540,7 +662,7 @@ export const pengajuanService = {
       throw new Error("Kuitansi tidak ditemukan.");
     }
 
-    if (existing.status !== "DRAFT") {
+    if (existing.status !== "DRAFT" && existing.status !== "DITOLAK") {
       throw new Error(`Kuitansi dengan status ${existing.status} tidak dapat dihapus.`);
     }
 

@@ -1,6 +1,25 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { SessionPayload } from "@/lib/session";
+import { getCmsDbPool } from "@/lib/cms-db";
+
+function formatSqlDate(dateVal: Date | string): string {
+  const d = new Date(dateVal);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function formatSqlDateTime(dateVal: Date = new Date()): string {
+  const yyyy = dateVal.getFullYear();
+  const mm = String(dateVal.getMonth() + 1).padStart(2, "0");
+  const dd = String(dateVal.getDate()).padStart(2, "0");
+  const hh = String(dateVal.getHours()).padStart(2, "0");
+  const mi = String(dateVal.getMinutes()).padStart(2, "0");
+  const ss = String(dateVal.getSeconds()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+}
 
 /**
  * Validasi otorisasi untuk Modul Bendahara Pengeluaran
@@ -9,6 +28,8 @@ import { SessionPayload } from "@/lib/session";
 export function isBendaharaAuthorized(session: SessionPayload): boolean {
   if (session.roleKode === "0" || session.roleKode === "SUPERADMIN") return true;
   if (session.roleKode === "1") return true; // BUD
+  if (session.roleKode === "7") return true; // PA / KPA
+  if (session.roleKode === "9") return true; // PPTK
   if (session.roleKode === "10") return true; // Bendahara Pengeluaran
 
   const perms = session.permissions || [];
@@ -510,6 +531,517 @@ export const bendaharaPengeluaranService = {
   // ---------------------------------------------------------------------------
   // 2 & 3. VALIDASI & PEMBUKUAN SPJ
   // ---------------------------------------------------------------------------
+  async getValidasiSpjKwitansiList(params: {
+    tahunAnggaran: number;
+    opdId?: string;
+    kd_unit?: string;
+    status?: string;
+    jns_beban?: string;
+  }) {
+    const andConditions: Prisma.TblKwitansiWhereInput[] = [
+      { tahunAnggaran: params.tahunAnggaran },
+    ];
+
+    // Hanya kuitansi dengan jenis beban UP / GU / TU
+    if (
+      params.jns_beban &&
+      params.jns_beban !== "SEMUA" &&
+      ["UP", "GU", "TU"].includes(params.jns_beban.toUpperCase())
+    ) {
+      andConditions.push({ jns_beban: params.jns_beban.toUpperCase() });
+    } else {
+      andConditions.push({ jns_beban: { in: ["UP", "GU", "TU"] } });
+    }
+
+    if (params.opdId && params.opdId !== "ALL") {
+      andConditions.push({ opdId: params.opdId });
+    }
+
+    if (params.kd_unit && params.kd_unit !== "ALL") {
+      andConditions.push({
+        OR: [
+          { kd_unit: params.kd_unit },
+          { kd_unit: null },
+          { kd_unit: "" },
+        ],
+      });
+    }
+
+    if (params.status && params.status !== "SEMUA") {
+      andConditions.push({ status: params.status });
+    }
+
+    const list = await prisma.tblKwitansi.findMany({
+      where: { AND: andConditions },
+      include: {
+        penerimaList: true,
+        potonganList: true,
+        opd: { select: { id: true, kd_skpd: true, nm_skpd: true } },
+        unitKerja: { select: { id: true, kd_unit: true, nm_unit: true } },
+      },
+      orderBy: [{ tanggal: "desc" }, { createdAt: "desc" }],
+    });
+
+    // Sinkronisasi real-time kolom Cair & Uraian dari CMS_WEB.trxspj ke tbl_kwitansi_penerima & tbl_kwitansi
+    try {
+      await this.pullCmsWebStatusToLocal(list);
+    } catch (err) {
+      console.warn("Gagal sinkronisasi real-time dari CMS_WEB:", err);
+    }
+
+    return list;
+  },
+
+  /**
+   * Sinkronisasi real-time nilai kolom Cair dan Uraian dari CMS_WEB (tabel trxspj)
+   * ke tabel lokal tbl_kwitansi_penerima dan tbl_kwitansi
+   */
+  async pullCmsWebStatusToLocal(kwitansiList: any[]) {
+    if (!kwitansiList || kwitansiList.length === 0) return;
+
+    const noBuktiSet = new Set<string>();
+    for (const doc of kwitansiList) {
+      if (!Array.isArray(doc.penerimaList)) continue;
+      doc.penerimaList.forEach((p: any, idx: number) => {
+        const noUrut = (p.no_urut || `${doc.nomor}-${idx + 1}`).trim();
+        if (noUrut) noBuktiSet.add(noUrut);
+      });
+    }
+
+    const noBuktiList = Array.from(noBuktiSet);
+    if (noBuktiList.length === 0) return;
+
+    const cmsPool = getCmsDbPool();
+    const placeholders = noBuktiList.map(() => "?").join(", ");
+    const [rows] = await cmsPool.query<any[]>(
+      `SELECT No_Bukti, Tahun, Cair, Uraian FROM trxspj WHERE No_Bukti IN (${placeholders})`,
+      noBuktiList
+    );
+
+    if (!Array.isArray(rows) || rows.length === 0) return;
+
+    const cmsMap = new Map<string, { cair: number; uraian: string | null }>();
+    for (const r of rows) {
+      const key = String(r.No_Bukti || "").trim();
+      if (!key) continue;
+      const rawCair = Number(r.Cair ?? 0);
+      const cair = isNaN(rawCair) ? 0 : rawCair;
+      const uraian =
+        r.Uraian !== null && r.Uraian !== undefined && String(r.Uraian).trim() !== ""
+          ? String(r.Uraian).trim()
+          : null;
+      cmsMap.set(key, { cair, uraian });
+    }
+
+    for (const doc of kwitansiList) {
+      if (!Array.isArray(doc.penerimaList)) continue;
+
+      let docTargetCair = Number(doc.cair || 0);
+      const penerimaCairValues: number[] = [];
+
+      for (let idx = 0; idx < doc.penerimaList.length; idx++) {
+        const p = doc.penerimaList[idx];
+        const noUrut = (p.no_urut || `${doc.nomor}-${idx + 1}`).trim();
+        const cmsItem = cmsMap.get(noUrut);
+
+        if (cmsItem) {
+          const currentCair = Number(p.cair ?? 0);
+          const currentUraian = p.uraian ?? null;
+
+          if (currentCair !== cmsItem.cair || currentUraian !== cmsItem.uraian || !p.no_urut) {
+            await prisma.tblKwitansiPenerima.update({
+              where: { id: p.id },
+              data: {
+                no_urut: noUrut,
+                cair: cmsItem.cair,
+                uraian: cmsItem.uraian,
+              },
+            });
+            p.no_urut = noUrut;
+            p.cair = cmsItem.cair;
+            p.uraian = cmsItem.uraian;
+          }
+          penerimaCairValues.push(cmsItem.cair);
+        } else {
+          penerimaCairValues.push(Number(p.cair ?? 0));
+        }
+      }
+
+      if (penerimaCairValues.includes(1)) {
+        docTargetCair = 1;
+      } else if (penerimaCairValues.includes(9)) {
+        docTargetCair = 9;
+      } else if (penerimaCairValues.length > 0) {
+        docTargetCair = penerimaCairValues[0];
+      }
+
+      if (Number(doc.cair ?? 0) !== docTargetCair) {
+        await prisma.tblKwitansi.update({
+          where: { id: doc.id },
+          data: { cair: docTargetCair },
+        });
+        doc.cair = docTargetCair;
+      }
+    }
+  },
+
+  /**
+   * Query 1 -> Query 2: Mengirim data kuitansi yang divalidasi ke tabel trxspj pada database CMS_WEB
+   */
+  async syncKwitansiToCmsWeb(kwitansiIds: string[]) {
+    if (!kwitansiIds || kwitansiIds.length === 0) {
+      return { syncedRows: 0 };
+    }
+
+    // Pastikan setiap penerima memiliki no_urut (fallback jika data lama belum memiliki no_urut)
+    const kwitansiDocs = await prisma.tblKwitansi.findMany({
+      where: { id: { in: kwitansiIds } },
+      include: { penerimaList: { orderBy: { createdAt: "asc" } } },
+    });
+
+    for (const doc of kwitansiDocs) {
+      for (let idx = 0; idx < doc.penerimaList.length; idx++) {
+        const p = doc.penerimaList[idx];
+        if (!p.no_urut) {
+          await prisma.tblKwitansiPenerima.update({
+            where: { id: p.id },
+            data: { no_urut: `${doc.nomor}-${idx + 1}` },
+          });
+        }
+      }
+    }
+
+    // Query 1 (Data Sumber dari PostgreSQL lokal)
+    interface Query1Row {
+      no_urut: string;
+      tanggal: Date;
+      uraian: string;
+      kd_skpd: string;
+      nm_skpd: string;
+      kd_unit_full: string | null;
+      nm_unit: string | null;
+      kd_urusan: string | null;
+      kd_bidang: string | null;
+      kd_unit: string | null;
+      kd_sub: string | null;
+      tahun: number;
+      bank_giro: string;
+      nm_giro: string | null;
+      rek_giro: string | null;
+      nm_penerima: string;
+      nm_bank_penerima: string;
+      no_rek_penerima: string;
+      npwp_penerima: string | null;
+      nilai: Prisma.Decimal | number | string;
+    }
+
+    const sourceRows = await prisma.$queryRaw<Query1Row[]>`
+      SELECT
+        b.no_urut,
+        a.tanggal,
+        a.uraian,
+        a.kd_skpd,
+        a.nm_skpd,
+        COALESCE(a.kd_unit, x.kd_unit) AS kd_unit_full,
+        COALESCE(a.nm_unit, x.nm_unit, a.nm_skpd) AS nm_unit,
+        LEFT(x.skpdbank, 1) AS kd_urusan,
+        SUBSTR(x.skpdbank, 2, 2) AS kd_bidang,
+        SUBSTR(x.skpdbank, 4, 2) AS kd_unit,
+        SUBSTR(x.skpdbank, 6, 2) AS kd_sub,
+        a."tahunAnggaran" AS tahun,
+        '117 Bank Sumut' AS bank_giro,
+        x.nama_penerima AS nm_giro,
+        x.rek_penerima AS rek_giro,
+        b.nm_penerima,
+        b.nm_bank_penerima,
+        b.no_rek_penerima,
+        b.npwp_penerima,
+        b.nilai
+      FROM tbl_kwitansi a
+      INNER JOIN tbl_kwitansi_penerima b ON a.id = b."kwitansiId"
+      LEFT JOIN LATERAL (
+        SELECT u.kd_unit, u.nm_unit, u.skpdbank, u.nama_penerima, u.rek_penerima
+        FROM ms_unit u
+        WHERE u.kd_unit = a.kd_unit
+           OR (a.kd_unit IS NULL AND u."opdId" = a."opdId")
+        ORDER BY (CASE WHEN u.kd_unit = a.kd_unit THEN 0 ELSE 1 END), u.kd_unit ASC
+        LIMIT 1
+      ) x ON true
+      WHERE a.id IN (${Prisma.join(kwitansiIds)})
+    `;
+
+    if (sourceRows.length === 0) {
+      return { syncedRows: 0 };
+    }
+
+    // Query 2 (Insert ke database tujuan CMS_WEB tabel trxspj)
+    const cmsPool = getCmsDbPool();
+    const conn = await cmsPool.getConnection();
+    const nowStr = formatSqlDateTime(new Date());
+
+    try {
+      await conn.beginTransaction();
+
+      for (const row of sourceRows) {
+        const tahun = String(row.tahun);
+        const bukti = row.no_urut || "";
+        const urusan = row.kd_urusan || "";
+        const bidang = row.kd_bidang || "";
+        const kdunit = row.kd_unit || "";
+        const sub = row.kd_sub || "";
+        const tanggal = formatSqlDate(row.tanggal);
+        const penerima = row.nm_penerima || "";
+        const bank_penerima = row.nm_bank_penerima || "";
+        const rek_penerima = row.no_rek_penerima || "";
+        const npwp = row.npwp_penerima || "";
+        const keperluan = row.uraian || "";
+        const bank = row.bank_giro || "117 Bank Sumut";
+        const rekening = row.rek_giro || "";
+        const jumlah = Number(row.nilai || 0);
+        const nmunit = row.nm_skpd || "";
+        const nmsub = row.nm_unit || row.nm_skpd || "";
+
+        // Hapus terlebih dahulu jika No_Bukti yang sama sudah ada agar tidak duplikat
+        await conn.execute(
+          `DELETE FROM trxspj WHERE No_Bukti = ? AND Tahun = ?`,
+          [bukti, tahun]
+        );
+
+        await conn.execute(
+          `INSERT INTO trxspj (
+            Tahun, No_Bukti, Jns_Dok, Kd_Urusan, Kd_Bidang, Kd_Unit, Kd_Sub, Tgl_Bukti,
+            Nm_Penerima, Bank_Penerima, Rek_Penerima, NPWP, Keterangan,
+            Nm_Bank, No_Rekening, Nilai, DateCreate, Cair, TglCair, Nm_Unit, Nm_Sub_Unit, Uraian
+          ) VALUES (
+            ?, ?, '1', ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, '0', NULL, ?, ?, ''
+          )`,
+          [
+            tahun,
+            bukti,
+            urusan,
+            bidang,
+            kdunit,
+            sub,
+            tanggal,
+            penerima,
+            bank_penerima,
+            rek_penerima,
+            npwp,
+            keperluan,
+            bank,
+            rekening,
+            jumlah,
+            nowStr,
+            nmunit,
+            nmsub,
+          ]
+        );
+      }
+
+      await conn.commit();
+      return { syncedRows: sourceRows.length };
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  },
+
+  /**
+   * Hapus data dari trxspj pada CMS_WEB saat validasi dibatalkan / ditolak
+   */
+  async removeKwitansiFromCmsWeb(kwitansiIds: string[]) {
+    if (!kwitansiIds || kwitansiIds.length === 0) {
+      return { deletedRows: 0 };
+    }
+
+    const docs = await prisma.tblKwitansi.findMany({
+      where: { id: { in: kwitansiIds } },
+      select: {
+        id: true,
+        nomor: true,
+        tahunAnggaran: true,
+        penerimaList: {
+          select: { no_urut: true },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    const targets: Array<{ no_urut: string; tahun: string }> = [];
+    for (const doc of docs) {
+      doc.penerimaList.forEach((p, idx) => {
+        targets.push({
+          no_urut: p.no_urut || `${doc.nomor}-${idx + 1}`,
+          tahun: String(doc.tahunAnggaran),
+        });
+      });
+    }
+
+    if (targets.length === 0) {
+      return { deletedRows: 0 };
+    }
+
+    const cmsPool = getCmsDbPool();
+    const conn = await cmsPool.getConnection();
+    try {
+      await conn.beginTransaction();
+      for (const t of targets) {
+        await conn.execute(
+          `DELETE FROM trxspj WHERE No_Bukti = ? AND Tahun = ?`,
+          [t.no_urut, t.tahun]
+        );
+      }
+      await conn.commit();
+      return { deletedRows: targets.length };
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  },
+
+  async updateValidasiSpjKwitansi(params: {
+    id?: string;
+    ids?: string[];
+    action: "DISETUJUI" | "DITOLAK" | "BATAL_VALIDASI";
+    catatan?: string;
+    session: SessionPayload;
+  }) {
+    const targetIds = Array.from(
+      new Set([
+        ...(params.ids || []),
+        ...(params.id ? [params.id] : []),
+      ].filter(Boolean))
+    );
+
+    if (targetIds.length === 0) {
+      throw new Error("Pilih minimal 1 dokumen kuitansi untuk diproses.");
+    }
+
+    const existingList = await prisma.tblKwitansi.findMany({
+      where: { id: { in: targetIds } },
+      include: { penerimaList: true },
+    });
+
+    if (existingList.length === 0) {
+      throw new Error("Dokumen kuitansi tidak ditemukan.");
+    }
+
+    // Sinkronkan status Cair & Uraian terbaru dari CMS_WEB sebelum memproses
+    try {
+      await this.pullCmsWebStatusToLocal(existingList);
+    } catch (err) {
+      console.warn("Gagal cek status real-time CMS_WEB:", err);
+    }
+
+    const validIds = existingList.map((item) => item.id);
+
+    // Jika aksi adalah BATAL_VALIDASI atau DITOLAK, pastikan tidak ada kuitansi yang status Cair = 1 atau 9
+    if (params.action === "BATAL_VALIDASI" || params.action === "DITOLAK") {
+      const lockedDocs = existingList.filter(
+        (doc) =>
+          doc.cair === 1 ||
+          doc.cair === 9 ||
+          doc.penerimaList.some((p) => p.cair === 1 || p.cair === 9)
+      );
+
+      if (lockedDocs.length > 0) {
+        const lockedNomor = lockedDocs.map((d) => d.nomor).join(", ");
+        throw new Error(
+          `Kuitansi [${lockedNomor}] telah terkunci karena status Cair pada CMS_WEB bernilai 1 atau 9 dan tidak dapat dibatalkan.`
+        );
+      }
+    }
+
+    if (params.action === "DISETUJUI") {
+      // 1. Kirim data Query 1 -> Query 2 (CMS_WEB.trxspj)
+      const cmsResult = await this.syncKwitansiToCmsWeb(validIds);
+
+      // 2. Update status di database lokal (tbl_kwitansi & tbl_kwitansi_penerima)
+      await prisma.$transaction(async (tx) => {
+        await tx.tblKwitansiPenerima.updateMany({
+          where: { kwitansiId: { in: validIds } },
+          data: { cair: 0 },
+        });
+
+        await tx.tblKwitansi.updateMany({
+          where: { id: { in: validIds } },
+          data: {
+            status: "DISETUJUI",
+            tgl_persetujuan: new Date(),
+            ...(params.catatan ? { catatan: params.catatan } : {}),
+          },
+        });
+      });
+
+      return {
+        processedCount: validIds.length,
+        syncedCmsRows: cmsResult.syncedRows,
+      };
+    }
+
+    if (params.action === "DITOLAK") {
+      // Hapus dari CMS_WEB jika sebelumnya sudah pernah masuk
+      try {
+        await this.removeKwitansiFromCmsWeb(validIds);
+      } catch (e) {
+        console.warn("Peringatan saat menghapus dari CMS_WEB pada penolakan:", e);
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.tblKwitansiPenerima.updateMany({
+          where: { kwitansiId: { in: validIds } },
+          data: { cair: 0 },
+        });
+
+        await tx.tblKwitansi.updateMany({
+          where: { id: { in: validIds } },
+          data: {
+            status: "DITOLAK",
+            cair: 0,
+            catatan: params.catatan || "Kuitansi ditolak pada Validasi SPJ",
+          },
+        });
+      });
+
+      return {
+        processedCount: validIds.length,
+      };
+    }
+
+    if (params.action === "BATAL_VALIDASI") {
+      // Hapus baris terkait di trxspj (CMS_WEB)
+      await this.removeKwitansiFromCmsWeb(validIds);
+
+      await prisma.$transaction(async (tx) => {
+        await tx.tblKwitansiPenerima.updateMany({
+          where: { kwitansiId: { in: validIds } },
+          data: { cair: 0 },
+        });
+
+        await tx.tblKwitansi.updateMany({
+          where: { id: { in: validIds } },
+          data: {
+            status: "DIAJUKAN",
+            cair: 0,
+            tgl_persetujuan: null,
+          },
+        });
+      });
+
+      return {
+        processedCount: validIds.length,
+      };
+    }
+
+    throw new Error(`Aksi ${params.action} tidak didukung.`);
+  },
+
   async getSpjList(params: {
     tahunAnggaran: number;
     opdId?: string;

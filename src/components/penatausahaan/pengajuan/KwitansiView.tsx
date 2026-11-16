@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
 import PaginationBar from "@/components/ui/PaginationBar";
+import ConfirmDeleteDialog from "@/components/ui/ConfirmDeleteDialog";
 import SearchableSelect, { SelectOption } from "@/components/ui/SearchableSelect";
 
 interface OpdItem {
@@ -67,6 +68,7 @@ interface UnitItem {
 
 interface KwitansiPenerima {
   id?: string;
+  no_urut?: string | null;
   nm_penerima: string;
   alamat_penerima?: string | null;
   npwp_penerima?: string | null;
@@ -74,6 +76,8 @@ interface KwitansiPenerima {
   no_rek_penerima: string;
   an_rekening?: string | null;
   nilai: number;
+  uraian?: string | null;
+  cair?: number;
   keterangan?: string | null;
 }
 
@@ -130,6 +134,7 @@ interface KwitansiItem {
   bendaharaUserId?: string | null;
   bendaharaNama?: string | null;
   bendaharaNip?: string | null;
+  cair?: number;
   status: "DRAFT" | "DIAJUKAN" | "DISETUJUI" | "DITOLAK" | "DIBUKUKAN";
   tgl_persetujuan?: string | null;
   catatan?: string | null;
@@ -231,13 +236,20 @@ export default function KwitansiView() {
   const [pageSize, setPageSize] = useState(10);
   const [totalItems, setTotalItems] = useState(0);
 
-  // Modal Detail / Print / Reject
+  // Modal Detail / Print / Reject / Delete
   const [showModalDetail, setShowModalDetail] = useState(false);
   const [selectedKwitansi, setSelectedKwitansi] = useState<KwitansiItem | null>(null);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectCatatan, setRejectCatatan] = useState("");
   const [rejectingId, setRejectingId] = useState<string | null>(null);
+
+  // State Confirm Delete Dialog (Kuitansi, Penerima, Potongan)
+  const [deleteTarget, setDeleteTarget] = useState<KwitansiItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletePenerimaIdx, setDeletePenerimaIdx] = useState<number | null>(null);
+  const [deletePotonganIdx, setDeletePotonganIdx] = useState<number | null>(null);
 
   // Step 4: Form State
   const [isEditing, setIsEditing] = useState(false);
@@ -459,11 +471,11 @@ export default function KwitansiView() {
       list.push({
         value: rkaId,
         label: activeRkaSubKegiatan.pptkNama,
-        badge: "PPTK RKA",
+        badge: "",
         badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200 font-bold",
         subLabel: activeRkaSubKegiatan.pptkNip
-          ? `Penugasan RKA • NIP. ${activeRkaSubKegiatan.pptkNip}`
-          : "Penugasan RKA",
+          ? `NIP. ${activeRkaSubKegiatan.pptkNip}`
+          : "",
       });
     }
 
@@ -795,12 +807,16 @@ export default function KwitansiView() {
     session?.roleNama?.toLowerCase().includes("kpa");
 
   // Open Form Create (Step 4)
-  const handleOpenCreate = () => {
+  const handleOpenCreate = async () => {
     if (!selectedOpd) return;
     setIsEditing(false);
     setEditingId(null);
     setFormOpdId(selectedOpd.id);
     setFormUnitId(selectedUnit?.id || "");
+    const targetKdUnit =
+      selectedUnit?.kd_unit ||
+      availableUnits[0]?.kd_unit ||
+      selectedOpd.kd_skpd;
     setFormNomor("");
     setFormTanggal(new Date().toISOString().split("T")[0]);
     setSelectedSubKegiatan(null);
@@ -832,6 +848,22 @@ export default function KwitansiView() {
     );
     setCurrentStep(4);
     window.scrollTo({ top: 0, behavior: "smooth" });
+
+    try {
+      const params = new URLSearchParams({
+        type: "next-nomor",
+        tahun: String(tahunAnggaran),
+        kd_unit: targetKdUnit,
+        kd_skpd: selectedOpd.kd_skpd,
+      });
+      const res = await fetch(`/api/penatausahaan/pengajuan/options?${params.toString()}`);
+      const json = await res.json();
+      if (json.success && json.data?.nomor) {
+        setFormNomor(json.data.nomor);
+      }
+    } catch (e) {
+      console.error("Gagal generate preview nomor kuitansi:", e);
+    }
   };
 
   // Open Form Edit (Step 4)
@@ -1031,27 +1063,35 @@ export default function KwitansiView() {
     }
   };
 
-  // Delete Kuitansi
-  const handleDelete = async (item: KwitansiItem) => {
-    if (item.status !== "DRAFT") {
-      alert(`Kuitansi dengan status ${item.status} tidak dapat dihapus.`);
-      return;
-    }
-    if (!confirm(`Hapus kuitansi ${item.nomor}? Tindakan ini tidak dapat dibatalkan.`)) {
-      return;
-    }
+  // Delete Kuitansi (Open Confirm Dialog)
+  const handleDelete = (item: KwitansiItem) => {
+    setDeleteTarget(item);
+    setDeleteError(null);
+  };
+
+  const confirmDeleteKwitansi = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError(null);
+    setMessage(null);
     try {
-      const res = await fetch(`/api/penatausahaan/pengajuan/kuitansi/${item.id}`, {
+      const res = await fetch(`/api/penatausahaan/pengajuan/kuitansi/${deleteTarget.id}`, {
         method: "DELETE",
       });
       const json = await res.json();
       if (!res.ok || !json.success) {
-        throw new Error(json.error || "Gagal menghapus kuitansi");
+        const errMsg = json.error || json.message || "Gagal menghapus kuitansi";
+        setDeleteError(errMsg);
+        setDeleting(false);
+        return;
       }
-      setMessage({ type: "success", text: `Kuitansi ${item.nomor} berhasil dihapus.` });
+      setMessage({ type: "success", text: `Kuitansi ${deleteTarget.nomor} berhasil dihapus.` });
+      setDeleteTarget(null);
+      setDeleting(false);
       fetchData();
     } catch (err: any) {
-      alert(err.message || "Gagal menghapus kuitansi");
+      setDeleteError(err.message || "Gagal menghapus kuitansi");
+      setDeleting(false);
     }
   };
 
@@ -1065,7 +1105,7 @@ export default function KwitansiView() {
       const res = await fetch(`/api/penatausahaan/pengajuan/kuitansi/${id}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, catatan }),
+        body: JSON.stringify({ status: action, action, catatan }),
       });
       const json = await res.json();
       if (!res.ok || !json.success) {
@@ -1085,7 +1125,10 @@ export default function KwitansiView() {
       }
       fetchData();
     } catch (err: any) {
-      alert(err.message || "Gagal memproses status");
+      setMessage({
+        type: "error",
+        text: err.message || "Gagal memproses status kuitansi",
+      });
     }
   };
 
@@ -1148,9 +1191,15 @@ export default function KwitansiView() {
   };
 
   const handleRemovePenerima = (idx: number) => {
+    setDeletePenerimaIdx(idx);
+  };
+
+  const confirmRemovePenerima = () => {
+    if (deletePenerimaIdx === null) return;
     const updated = [...formPenerimaList];
-    updated.splice(idx, 1);
+    updated.splice(deletePenerimaIdx, 1);
     setFormPenerimaList(updated);
+    setDeletePenerimaIdx(null);
   };
 
   // Modal Handlers: Potongan
@@ -1208,9 +1257,15 @@ export default function KwitansiView() {
   };
 
   const handleRemovePotongan = (idx: number) => {
+    setDeletePotonganIdx(idx);
+  };
+
+  const confirmRemovePotongan = () => {
+    if (deletePotonganIdx === null) return;
     const updated = [...formPotonganList];
-    updated.splice(idx, 1);
+    updated.splice(deletePotonganIdx, 1);
     setFormPotonganList(updated);
+    setDeletePotonganIdx(null);
   };
 
   // Status Badge Component
@@ -1225,7 +1280,7 @@ export default function KwitansiView() {
       case "DIAJUKAN":
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-            <Send className="w-3 h-3 text-amber-500" /> Diajukan (Menunggu PA/KPA)
+            <Send className="w-3 h-3 text-amber-500" /> Diajukan
           </span>
         );
       case "DISETUJUI":
@@ -1243,7 +1298,7 @@ export default function KwitansiView() {
       case "DIBUKUKAN":
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-            <CheckCircle2 className="w-3 h-3 text-blue-600" /> Dibukukan BKU
+            <CheckCircle2 className="w-3 h-3 text-blue-600" /> Dibukukan
           </span>
         );
       default:
@@ -1711,7 +1766,7 @@ export default function KwitansiView() {
                     <option value="SEMUA">Semua Status</option>
                     <option value="DRAFT">Draft</option>
                     <option value="DIAJUKAN">Diajukan</option>
-                    <option value="DISETUJUI">Disetujui PA/KPA</option>
+                    <option value="DISETUJUI">Disetujui</option>
                     <option value="DITOLAK">Ditolak</option>
                     <option value="DIBUKUKAN">Dibukukan</option>
                   </select>
@@ -1800,8 +1855,7 @@ export default function KwitansiView() {
                     <th className="py-3 px-3 min-w-[140px]">No. Kuitansi & Tgl</th>
                     <th className="py-3 px-3 min-w-[200px]">Sub Kegiatan & Rekening</th>
                     <th className="py-3 px-3 min-w-[220px]">Uraian Pembayaran</th>
-                    <th className="py-3 px-3 min-w-[170px]">Penerima & Rekening</th>
-                    <th className="py-3 px-3 min-w-[140px]">ID Billing / NTPN</th>
+                    <th className="py-3 px-3 min-w-[170px]">Nama PPTK</th>
                     <th className="py-3 px-3 text-right min-w-[120px]">Nilai Bruto</th>
                     <th className="py-3 px-3 text-right min-w-[110px]">Potongan</th>
                     <th className="py-3 px-3 text-right min-w-[120px]">Nilai Netto</th>
@@ -1858,56 +1912,15 @@ export default function KwitansiView() {
                           <p className="text-gray-700 leading-snug line-clamp-3">{item.uraian}</p>
                         </td>
                         <td className="py-3 px-3">
-                          {item.penerimaList && item.penerimaList.length > 0 ? (
-                            <div className="space-y-1">
-                              {item.penerimaList.map((p, pIdx) => (
-                                <div key={pIdx} className="text-[11px] leading-tight">
-                                  <span className="font-semibold text-gray-800">
-                                    {p.nm_penerima}
-                                  </span>
-                                  <div className="text-gray-500">
-                                    {p.nm_bank_penerima} •{" "}
-                                    <span className="font-mono">{p.no_rek_penerima}</span>
-                                  </div>
-                                </div>
-                              ))}
+                          {item.pptkNama ? (
+                            <div className="leading-tight">
+                              <div className="font-semibold text-slate-800">{item.pptkNama}</div>
                             </div>
                           ) : (
-                            <span className="text-gray-400 italic">-</span>
+                            <span className="text-slate-400 italic">-</span>
                           )}
                         </td>
-                        <td className="py-3 px-3">
-                          {item.potonganList && item.potonganList.length > 0 ? (
-                            <div className="space-y-1">
-                              {item.potonganList.map((pot, potIdx) => (
-                                <div key={potIdx} className="text-[11px] leading-tight">
-                                  <span className="font-medium text-gray-700">
-                                    {pot.nm_rek6 || "Potongan"}
-                                  </span>
-                                  :
-                                  {pot.id_billing ? (
-                                    <div className="text-[10px] text-gray-500">
-                                      Billing:{" "}
-                                      <span className="font-mono font-bold text-indigo-700">
-                                        {pot.id_billing}
-                                      </span>
-                                    </div>
-                                  ) : null}
-                                  {pot.ntpn ? (
-                                    <div className="text-[10px] text-gray-500">
-                                      NTPN:{" "}
-                                      <span className="font-mono font-bold text-emerald-700">
-                                        {pot.ntpn}
-                                      </span>
-                                    </div>
-                                  ) : null}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-gray-400 italic">Tanpa potongan</span>
-                          )}
-                        </td>
+
                         <td className="py-3 px-3 text-right font-semibold text-gray-900">
                           {formatRupiah(Number(item.nilai))}
                         </td>
@@ -1919,14 +1932,6 @@ export default function KwitansiView() {
                         </td>
                         <td className="py-3 px-3 text-center">
                           {renderStatusBadge(item.status)}
-                          {item.catatan && (
-                            <div
-                              className="text-[10px] text-gray-500 mt-1 italic truncate max-w-[140px]"
-                              title={item.catatan}
-                            >
-                              Catatan: {item.catatan}
-                            </div>
-                          )}
                         </td>
                         <td className="py-3 px-3 text-center">
                           <div className="flex items-center justify-center gap-1">
@@ -1978,27 +1983,7 @@ export default function KwitansiView() {
                               </>
                             )}
 
-                            {item.status === "DIAJUKAN" && isPaKpaUser && (
-                              <>
-                                <button
-                                  onClick={() => handleUpdateStatus(item.id, "DISETUJUI")}
-                                  className="p-1.5 text-gray-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
-                                  title="Setujui Kuitansi"
-                                >
-                                  <Check className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setRejectingId(item.id);
-                                    setShowRejectModal(true);
-                                  }}
-                                  className="p-1.5 text-gray-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                                  title="Tolak Kuitansi"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-                              </>
-                            )}
+
                           </div>
                         </td>
                       </tr>
@@ -2072,13 +2057,13 @@ export default function KwitansiView() {
                   </label>
                   <input
                     type="text"
-                    placeholder="Otomatis digenerate sistem"
+                    placeholder={`000001/${selectedUnit?.kd_unit || selectedOpd.kd_skpd}/KWT/${tahunAnggaran}`}
                     value={formNomor}
                     onChange={(e) => setFormNomor(e.target.value)}
                     className="w-full px-3 py-2 text-xs font-mono font-bold rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A] bg-slate-50/50"
                   />
                   <span className="text-[10px] text-slate-400 mt-1 block">
-                    Kosongkan untuk penomoran otomatis
+                    Format: [no_urut]/[kd_unit]/KWT/[tahun]
                   </span>
                 </div>
 
@@ -3181,12 +3166,12 @@ export default function KwitansiView() {
       {/* ============================================================== */}
       {showModalDetail && selectedKwitansi && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-5xl overflow-hidden animate-in fade-in">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2">
                 <Eye className="w-5 h-5 text-indigo-600" />
                 <h3 className="text-base font-bold text-gray-900">
-                  Rincian Dokumen Kuitansi: {selectedKwitansi.nomor}
+                  Rincian Dokumen Kuitansi
                 </h3>
               </div>
               <button
@@ -3198,7 +3183,7 @@ export default function KwitansiView() {
             </div>
 
             <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto text-xs">
-              <div className="grid grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
                 <div>
                   <span className="text-gray-500 font-medium">Nomor Kuitansi</span>
                   <p className="font-bold text-gray-900 text-sm">{selectedKwitansi.nomor}</p>
@@ -3218,8 +3203,42 @@ export default function KwitansiView() {
                   <p className="font-bold text-rose-700">Beban {selectedKwitansi.jns_beban}</p>
                 </div>
                 <div>
+                  <span className="text-gray-500 font-medium">Pejabat PPTK</span>
+                  <p className="font-semibold text-gray-900">
+                    {selectedKwitansi.pptkNama || "-"}
+                  </p>
+                </div>
+                <div>
                   <span className="text-gray-500 font-medium">Status</span>
                   <div className="mt-0.5">{renderStatusBadge(selectedKwitansi.status)}</div>
+                </div>
+                <div>
+                  <span className="text-gray-500 font-medium">Status Cair</span>
+                  <div className="mt-0.5">
+                    {Number(selectedKwitansi.cair) === 0 ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                        <Clock className="w-3 h-3" />
+                        MENUNGGU
+                      </span>
+                    ) : Number(selectedKwitansi.cair) === 2 ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                        <XCircle className="w-3 h-3" />
+                        GAGAL
+                      </span>
+                    ) : Number(selectedKwitansi.cair) === 9 ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                        <CheckCircle2 className="w-3 h-3" />
+                        SUCCESS IMPORT
+                      </span>
+                    ) : Number(selectedKwitansi.cair) === 1 ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <CheckCircle2 className="w-3 h-3" />
+                        CAIR
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 text-[10px]">TIDAK DIKETAHUI</span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -3227,13 +3246,11 @@ export default function KwitansiView() {
                 <h4 className="font-bold text-gray-800 mb-1">Sub Kegiatan & Rekening Belanja</h4>
                 <div className="p-3 rounded-lg border border-gray-200 space-y-1.5">
                   <div>
-                    <span className="text-gray-500 font-medium">Sub Kegiatan: </span>
                     <strong className="text-gray-900">
                       {selectedKwitansi.kd_sub_kegiatan} - {selectedKwitansi.nm_sub_kegiatan}
                     </strong>
                   </div>
                   <div>
-                    <span className="text-gray-500 font-medium">Kode Rekening: </span>
                     <strong className="text-gray-900">
                       {selectedKwitansi.kd_rek6} - {selectedKwitansi.nm_rek6}
                     </strong>
@@ -3250,37 +3267,83 @@ export default function KwitansiView() {
 
               {/* Rincian Penerima */}
               <div>
-                <h4 className="font-bold text-gray-800 mb-1">
-                  Rincian Penerima ({selectedKwitansi.penerimaList.length})
-                </h4>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1.5">
+                  <h4 className="font-bold text-gray-800">
+                    Rincian Penerima
+                  </h4>
+                </div>
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
                   <table className="w-full text-left">
                     <thead className="bg-gray-50 text-gray-600 border-b border-gray-200">
                       <tr>
-                        <th className="py-2 px-3">Nama Penerima</th>
-                        <th className="py-2 px-3">Bank</th>
-                        <th className="py-2 px-3">No. Rekening</th>
+                        <th className="py-2 px-3">No. Urut / Penerima</th>
+                        <th className="py-2 px-3">Bank & No. Rekening</th>
+                        <th className="py-2 px-3 text-center">Status Cair & Uraian</th>
                         <th className="py-2 px-3 text-right">Nilai Pembayaran</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {selectedKwitansi.penerimaList.map((p, idx) => (
-                        <tr key={idx}>
-                          <td className="py-2 px-3 font-semibold text-gray-900">
-                            {p.nm_penerima}
-                            {p.npwp_penerima && (
-                              <div className="text-[10px] text-gray-500 font-normal">
-                                NPWP: {p.npwp_penerima}
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-2 px-3 text-gray-700">{p.nm_bank_penerima}</td>
-                          <td className="py-2 px-3 font-mono text-gray-800">{p.no_rek_penerima}</td>
-                          <td className="py-2 px-3 text-right font-bold text-gray-900">
-                            {formatRupiah(Number(p.nilai))}
-                          </td>
-                        </tr>
-                      ))}
+                      {selectedKwitansi.penerimaList.map((p, idx) => {
+                        const cairVal = Number(p.cair ?? selectedKwitansi.cair ?? 0);
+                        const badgeCls =
+                          cairVal === 1
+                            ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                            : cairVal === 2
+                              ? "bg-rose-100 text-rose-800 border-rose-300"
+                              : cairVal === 9
+                                ? "bg-blue-100 text-blue-800 border-blue-300"
+                                : "bg-amber-100 text-amber-800 border-amber-300";
+                        return (
+                          <tr key={idx}>
+                            <td className="py-2 px-3">
+                              <div className="font-semibold text-gray-900">{p.nm_penerima}</div>
+                              {p.npwp_penerima && (
+                                <div className="text-[10px] text-gray-500 font-normal">
+                                  NPWP: {p.npwp_penerima}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-gray-700">
+                              <div>{p.nm_bank_penerima}</div>
+                              <div className="font-mono text-gray-800">{p.no_rek_penerima}</div>
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              {(() => {
+                                const cair = Number(p.cair);
+
+                                const badgeCls =
+                                  cair === 0
+                                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                                    : cair === 2
+                                      ? "bg-rose-50 text-rose-700 border-rose-200"
+                                      : cair === 9
+                                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                                        : cair === 1
+                                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                          : "bg-slate-50 text-slate-500 border-slate-200";
+
+                                const label =
+                                  cair === 0
+                                    ? "MENUNGGU"
+                                    : cair === 1
+                                      ? "CAIR"
+                                      : p.uraian || "";
+
+                                return label ? (
+                                  <span
+                                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${badgeCls}`}
+                                  >
+                                    {label}
+                                  </span>
+                                ) : null;
+                              })()}
+                            </td>
+                            <td className="py-2 px-3 text-right font-bold text-gray-900">
+                              {formatRupiah(Number(p.nilai))}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -3652,6 +3715,73 @@ export default function KwitansiView() {
           </div>
         </div>
       )}
+
+      {/* ============================================================== */}
+      {/* DIALOG KONFIRMASI HAPUS DOKUMEN KUITANSI                       */}
+      {/* ============================================================== */}
+      <ConfirmDeleteDialog
+        open={!!deleteTarget}
+        title="Konfirmasi Hapus Kuitansi"
+        entityName="Dokumen Kuitansi"
+        itemCode={deleteTarget?.nomor}
+        loading={deleting}
+        errorMessage={deleteError}
+        onCancel={() => {
+          if (!deleting) {
+            setDeleteTarget(null);
+            setDeleteError(null);
+          }
+        }}
+        onConfirm={confirmDeleteKwitansi}
+      />
+
+      {/* ============================================================== */}
+      {/* DIALOG KONFIRMASI HAPUS DATA PENERIMA                          */}
+      {/* ============================================================== */}
+      <ConfirmDeleteDialog
+        open={deletePenerimaIdx !== null}
+        title="Konfirmasi Hapus Penerima"
+        entityName="Data Penerima / Rekanan"
+        itemCode={
+          deletePenerimaIdx !== null
+            ? formPenerimaList[deletePenerimaIdx]?.no_rek_penerima
+            : undefined
+        }
+        itemLabel={
+          deletePenerimaIdx !== null && formPenerimaList[deletePenerimaIdx]
+            ? `${formPenerimaList[deletePenerimaIdx].nm_penerima} (${formatRupiah(
+              Number(formPenerimaList[deletePenerimaIdx].nilai || 0)
+            )})`
+            : undefined
+        }
+        description="Data penerima ini akan dihapus dari daftar rincian penerima pembayaran kuitansi."
+        onCancel={() => setDeletePenerimaIdx(null)}
+        onConfirm={confirmRemovePenerima}
+      />
+
+      {/* ============================================================== */}
+      {/* DIALOG KONFIRMASI HAPUS RINCIAN POTONGAN                       */}
+      {/* ============================================================== */}
+      <ConfirmDeleteDialog
+        open={deletePotonganIdx !== null}
+        title="Konfirmasi Hapus Potongan"
+        entityName="Rincian Potongan Pajak"
+        itemCode={
+          deletePotonganIdx !== null
+            ? formPotonganList[deletePotonganIdx]?.kd_rek6
+            : undefined
+        }
+        itemLabel={
+          deletePotonganIdx !== null && formPotonganList[deletePotonganIdx]
+            ? `${formPotonganList[deletePotonganIdx].nm_rek6} (${formatRupiah(
+              Number(formPotonganList[deletePotonganIdx].nilai || 0)
+            )})`
+            : undefined
+        }
+        description="Rincian potongan pajak ini akan dihapus dari daftar potongan kuitansi."
+        onCancel={() => setDeletePotonganIdx(null)}
+        onConfirm={confirmRemovePotongan}
+      />
     </div>
   );
 }

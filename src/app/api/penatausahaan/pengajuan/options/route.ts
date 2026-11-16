@@ -96,6 +96,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: true, data });
     }
 
+    if (type === "next-nomor") {
+      const kd_unit = searchParams.get("kd_unit") || undefined;
+      const nomor = await pengajuanService.getNextKwitansiNumber(
+        tahunAnggaran,
+        kd_unit || kd_skpd,
+        kd_skpd
+      );
+      return NextResponse.json({ success: true, data: { nomor } });
+    }
+
     if (type === "petugas") {
       if (!opdId) {
         return NextResponse.json(

@@ -152,6 +152,7 @@ export default function RekeningPage() {
   const [mapLo, setMapLo] = useState("");
   const [mapUtang, setMapUtang] = useState("");
   const [mapAset, setMapAset] = useState("");
+  const [mapPotongan, setMapPotongan] = useState("");
   const [sumberReferensi, setSumberReferensi] = useState(
     "Permendagri 90/2019 & Kepmendagri 050"
   );
@@ -249,6 +250,7 @@ export default function RekeningPage() {
     setMapLo("");
     setMapUtang("");
     setMapAset("");
+    setMapPotongan("");
     if (parentOptions.length > 0) {
       setParentId(parentOptions[0].id);
       setKode(`${getRekKode(parentOptions[0])}.`);
@@ -268,9 +270,11 @@ export default function RekeningPage() {
     setMapLo(item.map_lo || "");
     setMapUtang(item.map_utang || "");
     setMapAset(item.map_aset || "");
+    setMapPotongan(item.map_potongan || "");
     setSumberReferensi(item.sumberReferensi || "Permendagri 90/2019 & Kepmendagri 050");
     setShowForm(true);
     setFeedback(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -296,6 +300,7 @@ export default function RekeningPage() {
       payload.map_lo = mapLo.trim() || null;
       payload.map_utang = mapUtang.trim() || null;
       payload.map_aset = mapAset.trim() || null;
+      payload.map_potongan = mapPotongan.trim() || null;
       payload.sumberReferensi = sumberReferensi.trim() || null;
     }
 
@@ -536,7 +541,19 @@ export default function RekeningPage() {
                     className="w-full px-3 py-2 text-xs rounded-lg border border-gray-300 font-mono"
                   />
                 </div>
-                <div className="sm:col-span-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Mapping Potongan
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: 2.1.01.05... / PPN / PPh"
+                    value={mapPotongan}
+                    onChange={(e) => setMapPotongan(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-300 font-mono"
+                  />
+                </div>
+                <div className="sm:col-span-2">
                   <label className="block text-xs font-bold text-gray-700 mb-1">
                     Sumber Referensi
                   </label>
@@ -630,7 +647,7 @@ export default function RekeningPage() {
                 <th className="py-3 px-4 w-44">Kode {currentTab.label}</th>
                 <th className="py-3 px-4">Uraian {currentTab.label}</th>
                 {activeLevel === 6 && (
-                  <th className="py-3 px-4">Mapping (LO / Utang / Aset)</th>
+                  <th className="py-3 px-4">Mapping (LO / Utang / Aset / Potongan)</th>
                 )}
                 <th className="py-3 px-4">
                   {activeLevel === 1 ? "Kategori" : "Rekening Induk"}
@@ -670,7 +687,7 @@ export default function RekeningPage() {
                       </td>
                       {activeLevel === 6 && (
                         <td className="py-3 px-4 text-[11px]">
-                          {item.map_lo || item.map_utang || item.map_aset ? (
+                          {item.map_lo || item.map_utang || item.map_aset || item.map_potongan ? (
                             <div className="space-y-0.5 font-mono">
                               {item.map_lo && (
                                 <div>
@@ -688,6 +705,12 @@ export default function RekeningPage() {
                                 <div>
                                   <span className="text-gray-500 font-sans">Aset:</span>{" "}
                                   <span className="font-bold text-[#5E0E14]">{item.map_aset}</span>
+                                </div>
+                              )}
+                              {item.map_potongan && (
+                                <div>
+                                  <span className="text-gray-500 font-sans">Potongan:</span>{" "}
+                                  <span className="font-bold text-[#991B1B]">{item.map_potongan}</span>
                                 </div>
                               )}
                             </div>

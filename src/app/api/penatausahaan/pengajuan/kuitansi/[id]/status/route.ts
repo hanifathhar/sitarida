@@ -22,8 +22,9 @@ export async function POST(
     const { id } = await params;
     const body = await req.json();
 
-    const { status, catatan } = body;
-    if (!status || !["DIAJUKAN", "DISETUJUI", "DITOLAK", "DIBATALKAN"].includes(status)) {
+    const statusTarget = body.status || body.action;
+    const catatan = body.catatan;
+    if (!statusTarget || !["DIAJUKAN", "DISETUJUI", "DITOLAK", "DIBATALKAN"].includes(statusTarget)) {
       return NextResponse.json(
         { success: false, error: "Status target tidak valid" },
         { status: 400 }
@@ -33,13 +34,13 @@ export async function POST(
     const updated = await pengajuanService.updateStatusKwitansi(
       id,
       session,
-      status,
+      statusTarget,
       catatan
     );
 
     return NextResponse.json({
       success: true,
-      message: `Status kuitansi berhasil diubah menjadi ${status}`,
+      message: `Status kuitansi berhasil diubah menjadi ${statusTarget}`,
       data: updated,
     });
   } catch (err: any) {

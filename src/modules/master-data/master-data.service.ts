@@ -303,6 +303,21 @@ export async function listMsRek(params: {
     }),
     prisma.msRek6.count({ where }),
   ]);
+
+  // Pastikan kolom map_potongan selalu terbaca meskipun PrismaClient di memori dev server belum di-restart
+  if (items.length > 0) {
+    const ids = items.map((i) => i.id);
+    const rawRows = await prisma.$queryRaw<Array<{ id: string; map_potongan: string | null }>>`
+      SELECT id, map_potongan FROM ms_rek6 WHERE id IN (${Prisma.join(ids)})
+    `;
+    const potMap = new Map(rawRows.map((r) => [r.id, r.map_potongan]));
+    for (const item of items as any[]) {
+      if (item.map_potongan === undefined) {
+        item.map_potongan = potMap.get(item.id) ?? null;
+      }
+    }
+  }
+
   return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
@@ -394,8 +409,14 @@ export async function createMsRek(
     });
     return created;
   }
-  const data = msRek6Schema.parse(norm);
-  const created = await prisma.msRek6.create({ data });
+  const { map_potongan, ...restData } = msRek6Schema.parse(norm);
+  const created = await prisma.msRek6.create({ data: restData });
+  if (map_potongan !== undefined) {
+    await prisma.$executeRaw`
+      UPDATE ms_rek6 SET map_potongan = ${map_potongan ?? null} WHERE id = ${created.id}
+    `;
+    (created as any).map_potongan = map_potongan ?? null;
+  }
   await recordAuditLog({
     session,
     aksi: "CREATE",
@@ -487,8 +508,14 @@ export async function updateMsRek(
     });
     return updated;
   }
-  const data = msRek6Schema.partial().parse(norm);
-  const updated = await prisma.msRek6.update({ where: { id }, data });
+  const { map_potongan, ...restUpdateData } = msRek6Schema.partial().parse(norm);
+  const updated = await prisma.msRek6.update({ where: { id }, data: restUpdateData });
+  if (map_potongan !== undefined) {
+    await prisma.$executeRaw`
+      UPDATE ms_rek6 SET map_potongan = ${map_potongan ?? null} WHERE id = ${id}
+    `;
+    (updated as any).map_potongan = map_potongan ?? null;
+  }
   await recordAuditLog({
     session,
     aksi: "UPDATE",

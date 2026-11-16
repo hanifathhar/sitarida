@@ -63,6 +63,7 @@ export const msRek6Schema = z.object({
   map_lo: z.string().optional().nullable(),
   map_utang: z.string().optional().nullable(),
   map_aset: z.string().optional().nullable(),
+  map_potongan: z.string().optional().nullable(),
   sumberReferensi: z.string().optional().nullable(),
   isActive: z.boolean().default(true),
 });

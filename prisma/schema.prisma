@@ -340,6 +340,7 @@ model MsRek6 {
   map_lo          String?
   map_utang       String?
   map_aset        String?
+  map_potongan    String?
   sumberReferensi String?
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
@@ -1326,6 +1327,7 @@ model TblKwitansi {
   bendaharaUserId  String?
   bendaharaNama    String?
   bendaharaNip     String?
+  cair             Int      @default(0) // 0 = Belum Cair, 1 = Sudah Cair
   status           String   @default("DRAFT") // DRAFT, DIAJUKAN, DISETUJUI, DITOLAK, DIBUKUKAN
   tgl_persetujuan  DateTime?
   catatan          String?  @db.Text
@@ -1350,6 +1352,7 @@ model TblKwitansi {
 model TblKwitansiPenerima {
   id               String      @id @default(uuid())
   kwitansiId       String
+  no_urut          String?
   nm_penerima      String
   alamat_penerima  String?
   npwp_penerima    String?
@@ -1357,6 +1360,8 @@ model TblKwitansiPenerima {
   no_rek_penerima  String
   an_rekening      String?
   nilai            Decimal     @default(0) @db.Decimal(18, 2)
+  uraian           String?     @db.Text
+  cair             Int         @default(0) // 0 = Belum Cair, 1 = Sudah Cair
   keterangan       String?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
