@@ -84,7 +84,7 @@ export default function PengembalianView() {
   return (
     <BendaharaStepperWrapper
       title="Pengembalian Belanja"
-      subtitle="Pembukuan pengembalian belanja dari STS Belanja yang sudah berstatus Terbayar (verif = 1)"
+      subtitle=""
       step3Label="Daftar Pengembalian Belanja"
       step4Label="Pengisian Pengembalian Belanja"
     >
@@ -399,7 +399,7 @@ function PengembalianContent({
                 <h3 className="text-sm font-bold flex items-center gap-2">
                   <RotateCcw className="w-5 h-5 text-emerald-300" />
                   <span>
-                    Input Pengembalian Belanja — Pilih STS Belanja Sudah Bayar (Verif = 1)
+                    Input Pengembalian Belanja — Pilih STS Belanja Sudah Bayar
                   </span>
                 </h3>
                 <p className="text-xs text-white/80 mt-0.5">
@@ -458,7 +458,7 @@ function PengembalianContent({
                         <tr>
                           <td colSpan={6} className="py-12 text-center text-slate-400">
                             <RotateCcw className="w-10 h-10 mx-auto mb-2 text-slate-300" />
-                            Tidak ada STS Belanja berstatus Terbayar (verif = 1) yang
+                            Tidak ada STS Belanja berstatus Terbayar yang
                             menunggu dibukukan.
                           </td>
                         </tr>
