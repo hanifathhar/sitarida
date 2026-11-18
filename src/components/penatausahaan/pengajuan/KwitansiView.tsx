@@ -68,7 +68,7 @@ interface UnitItem {
 
 interface KwitansiPenerima {
   id?: string;
-  no_urut?: string | null;
+  no_bukti?: string | null;
   nm_penerima: string;
   alamat_penerima?: string | null;
   npwp_penerima?: string | null;
@@ -83,6 +83,7 @@ interface KwitansiPenerima {
 
 interface KwitansiPotongan {
   id?: string;
+  no_bukti?: string | null;
   kd_rek6: string;
   nm_rek6: string;
   id_billing?: string | null;

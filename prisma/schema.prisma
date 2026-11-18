@@ -116,6 +116,7 @@ model Opd {
   rekalList         Trhrekal[]
   lpjList           Trlpj[]
   kwitansiList      TblKwitansi[]
+  pengembalianList  TblPengembalian[]
 
   @@index([kd_skpd])
   @@index([nm_skpd])
@@ -962,8 +963,8 @@ model Trhsp2d {
 model Trhkasin {
   id              String      @id @default(uuid())
   tahunAnggaran   Int
-  no_kas          String      // No Transaksi / Buku Kas Masuk
-  tgl_kas         DateTime
+  no_bukti          String      // No Transaksi / Buku Kas Masuk
+  tgl_bukti         DateTime
   no_sts          String?     // No STS / Bukti Setor Penerimaan
   tgl_sts         DateTime?
   kd_skpd         String
@@ -987,9 +988,9 @@ model Trhkasin {
   opd             Opd         @relation(fields: [opdId], references: [id], onDelete: Cascade)
   rincianRekening Trdkasin[]
 
-  @@unique([tahunAnggaran, no_kas])
+  @@unique([tahunAnggaran, no_bukti])
   @@index([tahunAnggaran, kd_skpd])
-  @@index([tgl_kas])
+  @@index([tgl_bukti])
   @@index([status])
   @@map("trhkasin")
 }
@@ -997,7 +998,7 @@ model Trhkasin {
 model Trdkasin {
   id              String      @id @default(uuid())
   kasinId         String
-  no_kas          String
+  no_bukti          String
   kd_rek6         String      // Kode Akun 6 (cth: 4.1.01.01.0001)
   nm_rek6         String      // Nama Rekening Pendapatan / Penerimaan
   kd_sub_kegiatan String?
@@ -1352,7 +1353,7 @@ model TblKwitansi {
 model TblKwitansiPenerima {
   id               String      @id @default(uuid())
   kwitansiId       String
-  no_urut          String?
+  no_bukti         String?
   nm_penerima      String
   alamat_penerima  String?
   npwp_penerima    String?
@@ -1375,6 +1376,7 @@ model TblKwitansiPenerima {
 model TblKwitansiPotongan {
   id          String      @id @default(uuid())
   kwitansiId  String
+  no_bukti    String?
   kd_rek6     String?
   nm_rek6     String?
   id_billing  String?
@@ -1388,4 +1390,42 @@ model TblKwitansiPotongan {
 
   @@index([kwitansiId])
   @@map("tbl_kwitansi_potongan")
+}
+
+model TblPengembalian {
+  id                  String    @id @default(uuid())
+  tahunAnggaran       Int       @default(2026)
+  no_tetap            String
+  tgl_tetap           DateTime
+  no_sts              String?
+  tgl_sts             DateTime?
+  jenis_pengembalian  String    // "SISA_KAS" | "BELANJA" | "LAINNYA"
+  kd_skpd             String
+  nm_skpd             String
+  opdId               String
+  kd_unit             String?
+  nm_unit             String?
+  kd_sub_kegiatan     String?
+  nm_sub_kegiatan     String?
+  kd_rek6             String?
+  nm_rek6             String?
+  nama_penyetor       String?
+  alamat_penyetor     String?
+  uraian              String    @db.Text
+  nilai               Decimal   @default(0) @db.Decimal(18, 2)
+  status              String    @default("TERBIT")
+  verif               Int       @default(0)
+  kd_cabang           String?
+  kd_pengesahan       String?
+  tgl_bayar           DateTime?
+  nm_channel          String?
+  kd_terminal         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  opd                 Opd       @relation(fields: [opdId], references: [id], onDelete: Cascade)
+
+  @@index([tahunAnggaran, opdId])
+  @@index([no_sts])
+  @@map("tbl_pengembalian")
 }

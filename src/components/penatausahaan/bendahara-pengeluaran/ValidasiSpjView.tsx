@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import BendaharaStepperWrapper, {
   OpdItem,
   UnitItem,
+  ScopeData,
 } from "./BendaharaStepperWrapper";
 import PaginationBar from "@/components/ui/PaginationBar";
 import {
@@ -23,12 +24,13 @@ import {
   ClipboardCheck,
   RotateCcw,
   Lock,
+  ShieldAlert,
 } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
 
 interface KwitansiPenerima {
   id?: string;
-  no_urut?: string | null;
+  no_bukti?: string | null;
   nm_penerima: string;
   alamat_penerima?: string | null;
   npwp_penerima?: string | null;
@@ -149,8 +151,12 @@ export default function ValidasiSpjView() {
       subtitle=""
       step3Label="Daftar Kuitansi SPJ"
     >
-      {({ selectedOpd, selectedUnit }) => (
-        <ValidasiSpjContent selectedOpd={selectedOpd} selectedUnit={selectedUnit} />
+      {({ selectedOpd, selectedUnit, scopeData }) => (
+        <ValidasiSpjContent
+          selectedOpd={selectedOpd}
+          selectedUnit={selectedUnit}
+          scopeData={scopeData}
+        />
       )}
     </BendaharaStepperWrapper>
   );
@@ -159,15 +165,20 @@ export default function ValidasiSpjView() {
 function ValidasiSpjContent({
   selectedOpd,
   selectedUnit,
+  scopeData,
 }: {
   selectedOpd: OpdItem | null;
   selectedUnit: UnitItem | null;
+  scopeData: ScopeData | null;
 }) {
+  const isSuperadmin =
+    scopeData?.session?.roleKode === "0" ||
+    scopeData?.session?.roleKode === "SUPERADMIN";
   const [dataList, setDataList] = useState<KwitansiItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedBeban, setSelectedBeban] = useState("SEMUA");
-  const [selectedStatus, setSelectedStatus] = useState("SEMUA");
+  const [selectedStatus, setSelectedStatus] = useState("DIAJUKAN");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -184,7 +195,7 @@ function ValidasiSpjContent({
   // Multi-select Checklist State
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  // Modal Detail, Print & Reject
+  // Modal Detail, Print, Reject & Bypass Pencairan
   const [selectedKwitansi, setSelectedKwitansi] = useState<KwitansiItem | null>(null);
   const [showModalDetail, setShowModalDetail] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
@@ -192,6 +203,9 @@ function ValidasiSpjContent({
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectingBulk, setRejectingBulk] = useState(false);
   const [rejectCatatan, setRejectCatatan] = useState("");
+  const [showBypassModal, setShowBypassModal] = useState(false);
+  const [bypassTargetIds, setBypassTargetIds] = useState<string[]>([]);
+  const [bypassCatatan, setBypassCatatan] = useState("");
 
   const fetchData = async (silent = false) => {
     if (!selectedOpd) return;
@@ -237,7 +251,7 @@ function ValidasiSpjContent({
 
   const handleAction = async (
     target: string | string[],
-    action: "DISETUJUI" | "DITOLAK" | "BATAL_VALIDASI",
+    action: "DISETUJUI" | "DITOLAK" | "BATAL_VALIDASI" | "BYPASS_CAIR",
     catatan?: string
   ) => {
     const ids = Array.isArray(target) ? target : [target];
@@ -263,19 +277,16 @@ function ValidasiSpjContent({
         throw new Error(json.error || "Gagal memproses validasi kuitansi");
       }
 
-      const syncedInfo =
-        action === "DISETUJUI" && json.data?.syncedCmsRows !== undefined
-          ? ``
-          : "";
-
       setMessage({
         type: "success",
         text:
-          action === "DISETUJUI"
-            ? `${ids.length} Kuitansi SPJ berhasil divalidasi / disetujui${syncedInfo}.`
-            : action === "DITOLAK"
-              ? `${ids.length} Kuitansi SPJ telah ditolak / dikembalikan.`
-              : `Validasi ${ids.length} kuitansi SPJ berhasil dibatalkan.`,
+          action === "BYPASS_CAIR"
+            ? `Bypass Pencairan berhasil: ${ids.length} Kuitansi diset Cair = 1 & DISETUJUI pada database lokal.`
+            : action === "DISETUJUI"
+              ? `${ids.length} Kuitansi SPJ berhasil divalidasi / disetujui.`
+              : action === "DITOLAK"
+                ? `${ids.length} Kuitansi SPJ telah ditolak / dikembalikan.`
+                : `Validasi ${ids.length} kuitansi SPJ berhasil dibatalkan.`,
       });
 
       if (showRejectModal) {
@@ -283,6 +294,11 @@ function ValidasiSpjContent({
         setRejectCatatan("");
         setRejectingId(null);
         setRejectingBulk(false);
+      }
+      if (showBypassModal) {
+        setShowBypassModal(false);
+        setBypassCatatan("");
+        setBypassTargetIds([]);
       }
       if (showModalDetail) {
         setShowModalDetail(false);
@@ -551,7 +567,6 @@ function ValidasiSpjContent({
               }}
               className="w-full h-9 px-3 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#88131A] cursor-pointer"
             >
-              <option value="SEMUA">Semua Status</option>
               <option value="DIAJUKAN">Menunggu Validasi (Diajukan)</option>
               <option value="DISETUJUI">Tervalidasi (Disetujui)</option>
               <option value="DITOLAK">Ditolak</option>
@@ -697,6 +712,23 @@ function ValidasiSpjContent({
               )}
               <span>Batal Validasi</span>
             </button>
+
+            {isSuperadmin && (
+              <button
+                type="button"
+                disabled={bulkProcessing}
+                onClick={() => {
+                  setBypassTargetIds(selectedIds);
+                  setBypassCatatan("");
+                  setShowBypassModal(true);
+                }}
+                title="Bypass Pencairan (Khusus Superadmin): Set Cair = 1 & DISETUJUI di database lokal"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold shadow-xs transition cursor-pointer disabled:opacity-50"
+              >
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span>Bypass Cair ({selectedIds.length})</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -909,6 +941,22 @@ function ValidasiSpjContent({
                                 <RotateCcw className="w-3.5 h-3.5" />
                               </button>
                             )
+                          )}
+
+                          {isSuperadmin && item.cair !== 1 && (
+                            <button
+                              type="button"
+                              disabled={processingId === item.id || bulkProcessing}
+                              onClick={() => {
+                                setBypassTargetIds([item.id]);
+                                setBypassCatatan("");
+                                setShowBypassModal(true);
+                              }}
+                              className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                              title="Bypass Pencairan (Khusus Superadmin - Database Lokal)"
+                            >
+                              <ShieldAlert className="w-4 h-4" />
+                            </button>
                           )}
                         </div>
                       </td>
@@ -1499,6 +1547,120 @@ function ValidasiSpjContent({
                 Kirim Penolakan
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL BYPASS PENCAIRAN (KHUSUS SUPERADMIN - DATABASE LOKAL)    */}
+      {/* ============================================================== */}
+      {showBypassModal && isSuperadmin && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in border border-indigo-200">
+            <div className="px-6 py-4 bg-gradient-to-r from-indigo-700 to-indigo-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-amber-300 shrink-0" />
+                <h3 className="text-sm font-extrabold tracking-wide">
+                  Pencairan
+                </h3>
+              </div>
+              <button
+                type="button"
+                disabled={!!processingId || bulkProcessing}
+                onClick={() => {
+                  setShowBypassModal(false);
+                  setBypassCatatan("");
+                  setBypassTargetIds([]);
+                }}
+                className="text-white/80 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!bypassCatatan.trim() || bypassTargetIds.length === 0) return;
+                handleAction(
+                  bypassTargetIds.length === 1
+                    ? bypassTargetIds[0]
+                    : bypassTargetIds,
+                  "BYPASS_CAIR",
+                  bypassCatatan
+                );
+              }}
+              className="p-6 space-y-4"
+            >
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-relaxed">
+                <strong>Perhatian:</strong> Fitur ini hanya memperbarui status di{" "}
+                <strong>Kuitansi</strong> (menjadikan{" "}
+                <span className="font-mono font-bold">status Cair</span> dan{" "}
+                <span className="font-mono font-bold">status DISETUJUI</span>) tanpa
+                mengirim data ke <span className="font-mono font-bold">Sumut Net</span>.
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Dokumen Kuitansi Target ({bypassTargetIds.length}):
+                </div>
+                <div className="font-mono font-bold text-slate-800 space-y-0.5 max-h-24 overflow-y-auto">
+                  {dataList
+                    .filter((d) => bypassTargetIds.includes(d.id))
+                    .map((d) => (
+                      <div key={d.id} className="truncate">
+                        • {d.nomor} ({formatRupiah(Number(d.nilai_bersih))})
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Uraian / Catatan Kendala Teknis <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="Contoh: Kendala teknis sinkronisasi CMS Bank Sumut, pencairan diproses manual..."
+                  value={bypassCatatan}
+                  onChange={(e) => setBypassCatatan(e.target.value)}
+                  className="w-full p-3 text-xs rounded-xl border border-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={!!processingId || bulkProcessing}
+                  onClick={() => {
+                    setShowBypassModal(false);
+                    setBypassCatatan("");
+                    setBypassTargetIds([]);
+                  }}
+                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-xl cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={
+                    !bypassCatatan.trim() ||
+                    bypassTargetIds.length === 0 ||
+                    !!processingId ||
+                    bulkProcessing
+                  }
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-extrabold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm disabled:opacity-50 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>
+                    {processingId || bulkProcessing
+                      ? "Memproses..."
+                      : "Cairkan"}
+                  </span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

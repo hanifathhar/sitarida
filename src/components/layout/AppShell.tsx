@@ -115,6 +115,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/penatausahaan/bendahara-pengeluaran/penyetoran-potongan": "PENYETORAN POTONGAN",
   "/penatausahaan/bendahara-pengeluaran/setor-sisa-kas": "SETOR SISA KAS (UP/GU/TU)",
   "/penatausahaan/bendahara-pengeluaran/pengembalian": "PENGEMBALIAN",
+  "/penatausahaan/bendahara-pengeluaran/penerbitan-sts": "PENERBITAN STS",
   "/penatausahaan/bendahara-pengeluaran/rekal-transaksi": "REKAL TRANSAKSI",
   "/penatausahaan/bendahara-pengeluaran/lpj": "LAPORAN PERTANGGUNGJAWABAN (LPJ)",
   "/penatausahaan/bendahara-pengeluaran/lpj-kkpd": "LPJ-KKPD",
@@ -526,6 +527,11 @@ export default function AppShell({
     {
       label: "Pengembalian",
       href: "/penatausahaan/bendahara-pengeluaran/pengembalian",
+      perm: "menu:penatausahaan:bendahara-pengembalian",
+    },
+    {
+      label: "Penerbitan STS",
+      href: "/penatausahaan/bendahara-pengeluaran/penerbitan-sts",
       perm: "menu:penatausahaan:bendahara-pengembalian",
     },
     {

@@ -97,6 +97,46 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function PUT(req: NextRequest) {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!isBendaharaAuthorized(session)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Akses ditolak. Modul Bendahara Pengeluaran hanya dapat diakses oleh BUD, Bendahara Pengeluaran, dan Superadmin.",
+        },
+        { status: 403 }
+      );
+    }
+
+    const body = await req.json();
+    if (!body.sp2dId) {
+      return NextResponse.json(
+        { success: false, error: "ID SP2D wajib diisi" },
+        { status: 400 }
+      );
+    }
+
+    const result = await bendaharaPengeluaranService.updatePembukuanSp2d(body);
+    return NextResponse.json({
+      success: true,
+      message: `Pembukuan SP2D berhasil diperbarui (No. BKU ${result.no_bukti})`,
+      data: result,
+    });
+  } catch (err: any) {
+    console.error("PUT /api/penatausahaan/bendahara-pengeluaran/pembukuan-sp2d error:", err);
+    return NextResponse.json(
+      { success: false, error: err.message || "Gagal memperbarui pembukuan SP2D" },
+      { status: 400 }
+    );
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   try {
     const session = await getSession();

@@ -34,8 +34,8 @@ export interface PenerimaanFilter {
 export interface PenerimaanInput {
   id?: string;
   tahunAnggaran: number;
-  no_kas: string;
-  tgl_kas: string | Date;
+  no_bukti: string;
+  tgl_bukti: string | Date;
   no_sts?: string | null;
   tgl_sts?: string | Date | null;
   opdId: string;
@@ -89,19 +89,19 @@ export const budService = {
     }
 
     if (filter.startDate || filter.endDate) {
-      where.tgl_kas = {};
+      where.tgl_bukti = {};
       if (filter.startDate) {
-        where.tgl_kas.gte = new Date(`${filter.startDate}T00:00:00.000Z`);
+        where.tgl_bukti.gte = new Date(`${filter.startDate}T00:00:00.000Z`);
       }
       if (filter.endDate) {
-        where.tgl_kas.lte = new Date(`${filter.endDate}T23:59:59.999Z`);
+        where.tgl_bukti.lte = new Date(`${filter.endDate}T23:59:59.999Z`);
       }
     }
 
     if (filter.search && filter.search.trim()) {
       const q = filter.search.trim();
       where.OR = [
-        { no_kas: { contains: q, mode: "insensitive" } },
+        { no_bukti: { contains: q, mode: "insensitive" } },
         { no_sts: { contains: q, mode: "insensitive" } },
         { uraian: { contains: q, mode: "insensitive" } },
         { nm_skpd: { contains: q, mode: "insensitive" } },
@@ -119,7 +119,7 @@ export const budService = {
             select: { id: true, kd_skpd: true, nm_skpd: true },
           },
         },
-        orderBy: [{ tgl_kas: "desc" }, { createdAt: "desc" }],
+        orderBy: [{ tgl_bukti: "desc" }, { createdAt: "desc" }],
         skip,
         take: limit,
       }),
@@ -188,7 +188,7 @@ export const budService = {
       0
     );
 
-    const tglKas = new Date(payload.tgl_kas);
+    const tglKas = new Date(payload.tgl_bukti);
     const tglSts = payload.tgl_sts ? new Date(payload.tgl_sts) : null;
 
     if (id) {
@@ -203,8 +203,8 @@ export const budService = {
           where: { id },
           data: {
             tahunAnggaran: payload.tahunAnggaran,
-            no_kas: payload.no_kas,
-            tgl_kas: tglKas,
+            no_bukti: payload.no_bukti,
+            tgl_bukti: tglKas,
             no_sts: payload.no_sts,
             tgl_sts: tglSts,
             kd_skpd: opd.kd_skpd,
@@ -224,7 +224,7 @@ export const budService = {
             keterangan: payload.keterangan,
             rincianRekening: {
               create: rincianRekening.map((r) => ({
-                no_kas: payload.no_kas,
+                no_bukti: payload.no_bukti,
                 kd_rek6: r.kd_rek6,
                 nm_rek6: r.nm_rek6,
                 kd_sub_kegiatan: r.kd_sub_kegiatan,
@@ -246,15 +246,15 @@ export const budService = {
     } else {
       // Create New
       const noKas =
-        payload.no_kas && payload.no_kas.trim()
-          ? payload.no_kas.trim()
+        payload.no_bukti && payload.no_bukti.trim()
+          ? payload.no_bukti.trim()
           : await this.generateNoKas(payload.tahunAnggaran, payload.kd_unit || opd.kd_skpd);
 
       const created = await prisma.trhkasin.create({
         data: {
           tahunAnggaran: payload.tahunAnggaran,
-          no_kas: noKas,
-          tgl_kas: tglKas,
+          no_bukti: noKas,
+          tgl_bukti: tglKas,
           no_sts: payload.no_sts,
           tgl_sts: tglSts,
           kd_skpd: opd.kd_skpd,
@@ -274,7 +274,7 @@ export const budService = {
           keterangan: payload.keterangan,
           rincianRekening: {
             create: rincianRekening.map((r) => ({
-              no_kas: noKas,
+              no_bukti: noKas,
               kd_rek6: r.kd_rek6,
               nm_rek6: r.nm_rek6,
               kd_sub_kegiatan: r.kd_sub_kegiatan,
@@ -437,7 +437,7 @@ export const budService = {
           where: {
             tahunAnggaran: filter.tahunAnggaran,
             status: { not: "BATAL" },
-            tgl_kas: { lt: prevDate },
+            tgl_bukti: { lt: prevDate },
             ...(filter.opdId && filter.opdId !== "ALL"
               ? { opdId: filter.opdId }
               : {}),
@@ -474,12 +474,12 @@ export const budService = {
       whereIn.opdId = filter.opdId;
     }
     if (filter.startDate || filter.endDate) {
-      whereIn.tgl_kas = {};
+      whereIn.tgl_bukti = {};
       if (filter.startDate) {
-        whereIn.tgl_kas.gte = new Date(`${filter.startDate}T00:00:00.000Z`);
+        whereIn.tgl_bukti.gte = new Date(`${filter.startDate}T00:00:00.000Z`);
       }
       if (filter.endDate) {
-        whereIn.tgl_kas.lte = new Date(`${filter.endDate}T23:59:59.999Z`);
+        whereIn.tgl_bukti.lte = new Date(`${filter.endDate}T23:59:59.999Z`);
       }
     }
 
@@ -508,7 +508,7 @@ export const budService = {
           opd: { select: { kd_skpd: true, nm_skpd: true } },
           rincianRekening: true,
         },
-        orderBy: { tgl_kas: "asc" },
+        orderBy: { tgl_bukti: "asc" },
       }),
       prisma.trhsp2d.findMany({
         where: whereOut,
@@ -539,8 +539,8 @@ export const budService = {
     listIn.forEach((item) => {
       combined.push({
         id: `IN-${item.id}`,
-        tanggal: item.tgl_kas,
-        no_bukti: item.no_kas,
+        tanggal: item.tgl_bukti,
+        no_bukti: item.no_bukti,
         jenis: "PENERIMAAN",
         uraian: item.uraian,
         skpd: item.nm_skpd,
@@ -723,12 +723,12 @@ export const budService = {
     };
 
     if (filter.startDate || filter.endDate) {
-      where.tgl_kas = {};
+      where.tgl_bukti = {};
       if (filter.startDate) {
-        where.tgl_kas.gte = new Date(`${filter.startDate}T00:00:00.000Z`);
+        where.tgl_bukti.gte = new Date(`${filter.startDate}T00:00:00.000Z`);
       }
       if (filter.endDate) {
-        where.tgl_kas.lte = new Date(`${filter.endDate}T23:59:59.999Z`);
+        where.tgl_bukti.lte = new Date(`${filter.endDate}T23:59:59.999Z`);
       }
     }
 

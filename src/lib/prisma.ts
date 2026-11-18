@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 
-const PRISMA_SCHEMA_VERSION = "kwitansi-rek6-v4";
+const PRISMA_SCHEMA_VERSION = "kwitansi-nobukti-v5";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;

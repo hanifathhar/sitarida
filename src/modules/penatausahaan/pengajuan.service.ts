@@ -49,7 +49,7 @@ export function isPptk(session: SessionPayload): boolean {
 }
 
 export interface KwitansiPenerimaInput {
-  no_urut?: string | null;
+  no_bukti?: string | null;
   nm_penerima: string;
   alamat_penerima?: string | null;
   npwp_penerima?: string | null;
@@ -63,6 +63,7 @@ export interface KwitansiPenerimaInput {
 }
 
 export interface KwitansiPotonganInput {
+  no_bukti?: string | null;
   kd_rek6?: string | null;
   nm_rek6?: string | null;
   id_billing?: string | null;
@@ -456,7 +457,10 @@ export const pengajuanService = {
             );
           }
 
-          return tx.tblKwitansi.create({
+          const firstNoBukti =
+            input.penerima[0]?.no_bukti?.trim() || `${nomor}-1`;
+
+          const createdKwitansi = await tx.tblKwitansi.create({
             data: {
               nomor,
               tanggal: new Date(input.tanggal),
@@ -493,8 +497,7 @@ export const pengajuanService = {
               status: "DRAFT",
               catatan: input.catatan || null,
               penerimaList: {
-                create: input.penerima.map((p, idx) => ({
-                  no_urut: p.no_urut?.trim() || `${nomor}-${idx + 1}`,
+                create: input.penerima.map((p) => ({
                   nm_penerima: p.nm_penerima,
                   alamat_penerima: p.alamat_penerima || null,
                   npwp_penerima: p.npwp_penerima || null,
@@ -523,6 +526,27 @@ export const pengajuanService = {
               potonganList: true,
             },
           });
+
+          // Isi kolom no_bukti pada tbl_kwitansi_penerima dan tbl_kwitansi_potongan
+          for (let idx = 0; idx < createdKwitansi.penerimaList.length; idx++) {
+            const pRow = createdKwitansi.penerimaList[idx];
+            const noBuktiVal = input.penerima[idx]?.no_bukti?.trim() || `${nomor}-${idx + 1}`;
+            await tx.$executeRaw`
+              UPDATE tbl_kwitansi_penerima SET no_bukti = ${noBuktiVal} WHERE id = ${pRow.id}
+            `;
+            (pRow as any).no_bukti = noBuktiVal;
+          }
+
+          if (createdKwitansi.potonganList.length > 0) {
+            await tx.$executeRaw`
+              UPDATE tbl_kwitansi_potongan SET no_bukti = ${firstNoBukti} WHERE "kwitansiId" = ${createdKwitansi.id}
+            `;
+            for (const potRow of createdKwitansi.potonganList) {
+              (potRow as any).no_bukti = firstNoBukti;
+            }
+          }
+
+          return createdKwitansi;
         });
 
         return created;
@@ -577,26 +601,36 @@ export const pengajuanService = {
     // Gunakan transaction untuk update data pokok dan relasi penerima/potongan
     return prisma.$transaction(async (tx) => {
       const nomorInduk = input.nomor?.trim() || existing.nomor;
+      const firstNoBukti =
+        input.penerima?.[0]?.no_bukti?.trim() ||
+        (existing.penerimaList?.[0] as any)?.no_bukti ||
+        `${nomorInduk}-1`;
 
       // Hapus penerima dan potongan lama jika ada input baru
       if (input.penerima) {
         await tx.tblKwitansiPenerima.deleteMany({ where: { kwitansiId: id } });
-        await tx.tblKwitansiPenerima.createMany({
-          data: input.penerima.map((p, idx) => ({
-            kwitansiId: id,
-            no_urut: p.no_urut?.trim() || `${nomorInduk}-${idx + 1}`,
-            nm_penerima: p.nm_penerima,
-            alamat_penerima: p.alamat_penerima || null,
-            npwp_penerima: p.npwp_penerima || null,
-            nm_bank_penerima: p.nm_bank_penerima,
-            no_rek_penerima: p.no_rek_penerima,
-            an_rekening: p.an_rekening || p.nm_penerima,
-            nilai: new Prisma.Decimal(Number(p.nilai || 0)),
-            uraian: p.uraian || null,
-            cair: p.cair !== undefined ? Number(p.cair) : 0,
-            keterangan: p.keterangan || null,
-          })),
-        });
+        for (let idx = 0; idx < input.penerima.length; idx++) {
+          const p = input.penerima[idx];
+          const noBuktiVal = p.no_bukti?.trim() || `${nomorInduk}-${idx + 1}`;
+          const createdP = await tx.tblKwitansiPenerima.create({
+            data: {
+              kwitansiId: id,
+              nm_penerima: p.nm_penerima,
+              alamat_penerima: p.alamat_penerima || null,
+              npwp_penerima: p.npwp_penerima || null,
+              nm_bank_penerima: p.nm_bank_penerima,
+              no_rek_penerima: p.no_rek_penerima,
+              an_rekening: p.an_rekening || p.nm_penerima,
+              nilai: new Prisma.Decimal(Number(p.nilai || 0)),
+              uraian: p.uraian || null,
+              cair: p.cair !== undefined ? Number(p.cair) : 0,
+              keterangan: p.keterangan || null,
+            },
+          });
+          await tx.$executeRaw`
+            UPDATE tbl_kwitansi_penerima SET no_bukti = ${noBuktiVal} WHERE id = ${createdP.id}
+          `;
+        }
       }
 
       if (input.potongan) {
@@ -612,6 +646,9 @@ export const pengajuanService = {
             keterangan: pt.keterangan || null,
           })),
         });
+        await tx.$executeRaw`
+          UPDATE tbl_kwitansi_potongan SET no_bukti = ${firstNoBukti} WHERE "kwitansiId" = ${id}
+        `;
       }
 
       const updated = await tx.tblKwitansi.update({

@@ -54,8 +54,8 @@ interface RincianRekeningInput {
 interface PenerimaanItem {
   id: string;
   tahunAnggaran: number;
-  no_kas: string;
-  tgl_kas: string;
+  no_bukti: string;
+  tgl_bukti: string;
   no_sts: string | null;
   tgl_sts: string | null;
   kd_skpd: string;
@@ -106,8 +106,8 @@ export default function PenerimaanView() {
   // Form State
   const [formData, setFormData] = useState({
     id: "",
-    no_kas: "",
-    tgl_kas: new Date().toISOString().split("T")[0],
+    no_bukti: "",
+    tgl_bukti: new Date().toISOString().split("T")[0],
     no_sts: "",
     tgl_sts: new Date().toISOString().split("T")[0],
     opdId: "",
@@ -181,8 +181,8 @@ export default function PenerimaanView() {
     setFormError(null);
     setFormData({
       id: "",
-      no_kas: "",
-      tgl_kas: new Date().toISOString().split("T")[0],
+      no_bukti: "",
+      tgl_bukti: new Date().toISOString().split("T")[0],
       no_sts: "",
       tgl_sts: new Date().toISOString().split("T")[0],
       opdId: opdList.length > 0 ? opdList[0].id : "",
@@ -210,8 +210,8 @@ export default function PenerimaanView() {
     setFormError(null);
     setFormData({
       id: item.id,
-      no_kas: item.no_kas,
-      tgl_kas: item.tgl_kas ? new Date(item.tgl_kas).toISOString().split("T")[0] : "",
+      no_bukti: item.no_bukti,
+      tgl_bukti: item.tgl_bukti ? new Date(item.tgl_bukti).toISOString().split("T")[0] : "",
       no_sts: item.no_sts || "",
       tgl_sts: item.tgl_sts ? new Date(item.tgl_sts).toISOString().split("T")[0] : "",
       opdId: item.opdId,
@@ -233,8 +233,8 @@ export default function PenerimaanView() {
     setShowModal(true);
   };
 
-  const handleDelete = async (id: string, no_kas: string) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus transaksi penerimaan ${no_kas}?`)) {
+  const handleDelete = async (id: string, no_bukti: string) => {
+    if (!confirm(`Apakah Anda yakin ingin menghapus transaksi penerimaan ${no_bukti}?`)) {
       return;
     }
     try {
@@ -526,9 +526,9 @@ export default function PenerimaanView() {
                       {idx + 1}
                     </td>
                     <td className="px-3.5 py-3">
-                      <div className="font-mono font-bold text-slate-900">{item.no_kas}</div>
+                      <div className="font-mono font-bold text-slate-900">{item.no_bukti}</div>
                       <div className="text-[11px] text-slate-500">
-                        {item.tgl_kas ? new Date(item.tgl_kas).toLocaleDateString("id-ID") : "-"}
+                        {item.tgl_bukti ? new Date(item.tgl_bukti).toLocaleDateString("id-ID") : "-"}
                       </div>
                     </td>
                     <td className="px-3.5 py-3">
@@ -590,7 +590,7 @@ export default function PenerimaanView() {
                           <Printer className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(item.id, item.no_kas)}
+                          onClick={() => handleDelete(item.id, item.no_bukti)}
                           className="p-1 rounded-lg text-rose-600 hover:bg-rose-50"
                           title="Hapus"
                         >
@@ -661,8 +661,8 @@ export default function PenerimaanView() {
                   <input
                     type="text"
                     disabled={modalMode === "VIEW"}
-                    value={formData.no_kas}
-                    onChange={(e) => setFormData((p) => ({ ...p, no_kas: e.target.value }))}
+                    value={formData.no_bukti}
+                    onChange={(e) => setFormData((p) => ({ ...p, no_bukti: e.target.value }))}
                     placeholder="Otomatis Running ([URUT]/BUD/KAS-IN/2026)"
                     className="mt-1 w-full px-3 py-2 text-xs font-mono font-bold border border-slate-200 rounded-xl focus:outline-none focus:border-[#5E0E14] disabled:bg-slate-100"
                   />
@@ -675,8 +675,8 @@ export default function PenerimaanView() {
                   <input
                     type="date"
                     disabled={modalMode === "VIEW"}
-                    value={formData.tgl_kas}
-                    onChange={(e) => setFormData((p) => ({ ...p, tgl_kas: e.target.value }))}
+                    value={formData.tgl_bukti}
+                    onChange={(e) => setFormData((p) => ({ ...p, tgl_bukti: e.target.value }))}
                     className="mt-1 w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-[#5E0E14] disabled:bg-slate-100"
                   />
                 </div>
@@ -993,11 +993,11 @@ export default function PenerimaanView() {
               <div className="grid grid-cols-2 gap-2 text-[11px]">
                 <div>
                   <span className="font-semibold text-slate-600">Nomor Kas:</span>{" "}
-                  <span className="font-mono font-bold text-slate-900">{printItem.no_kas}</span>
+                  <span className="font-mono font-bold text-slate-900">{printItem.no_bukti}</span>
                 </div>
                 <div>
                   <span className="font-semibold text-slate-600">Tanggal:</span>{" "}
-                  <span>{new Date(printItem.tgl_kas).toLocaleDateString("id-ID")}</span>
+                  <span>{new Date(printItem.tgl_bukti).toLocaleDateString("id-ID")}</span>
                 </div>
                 <div>
                   <span className="font-semibold text-slate-600">No. Bukti / STS:</span>{" "}
