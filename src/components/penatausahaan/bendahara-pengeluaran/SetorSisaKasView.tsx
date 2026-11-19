@@ -63,8 +63,7 @@ interface BookedKasinItem {
   no_sts: string | null;
   tgl_sts: string | null;
   nama_penyetor: string | null;
-  nama_bank: string | null;
-  rek_bank: string | null;
+  jns_transaksi: string | null;
   uraian: string;
   nilai: number;
   status: string;
@@ -216,9 +215,11 @@ function SetorSisaKasContent({
         : new Date().toISOString().split("T")[0]
     );
     setJenisKas(
-      item.nama_bank === "GU" || item.nama_bank === "TU" ? item.nama_bank : "UP"
+      item.jns_transaksi === "GU" || item.jns_transaksi === "TU"
+        ? item.jns_transaksi
+        : "UP"
     );
-    setSelectedNoSp2d(item.rek_bank || "");
+    setSelectedNoSp2d("");
     setUraian(item.uraian || "");
     setFormError(null);
     setSuccessMsg(null);
@@ -601,7 +602,7 @@ function SetorSisaKasContent({
             <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
               <FileText className="w-4 h-4 text-[#88131A]" />
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                1. Ringkasan Setor Sisa Kas (trhkasin)
+                1. Ringkasan Setor Sisa Kas
               </h3>
             </div>
 
@@ -616,7 +617,7 @@ function SetorSisaKasContent({
                   value={
                     editingItem
                       ? editingItem.no_bukti
-                      : "Otomatis: [no_urut]/[kd_unit]/2026"
+                      : "Otomatis"
                   }
                   className="w-full px-3 py-2 text-xs font-mono font-bold rounded-xl border border-slate-200 bg-slate-100 text-slate-700"
                 />
@@ -983,7 +984,7 @@ function SetorSisaKasContent({
                     </td>
                     <td className="px-3.5 py-3">
                       <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-bold text-[10px]">
-                        {item.nama_bank || "UP"}
+                        {item.jns_transaksi || "UP"}
                       </span>
                     </td>
                     <td className="px-3.5 py-3 text-slate-700 max-w-md">
@@ -1097,7 +1098,7 @@ function SetorSisaKasContent({
                 <div>
                   <span className="text-slate-500 block">Jenis Kas</span>
                   <span className="font-semibold text-slate-800">
-                    {viewItem.nama_bank || "UP"}
+                    {viewItem.jns_transaksi || "UP"}
                   </span>
                 </div>
                 <div className="col-span-2">

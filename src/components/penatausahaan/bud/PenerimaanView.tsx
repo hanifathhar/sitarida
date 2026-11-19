@@ -65,8 +65,9 @@ interface PenerimaanItem {
   sumber_dana: string | null;
   nama_penyetor: string | null;
   alamat_penyetor: string | null;
-  nama_bank: string | null;
-  rek_bank: string | null;
+  jns_transaksi?: string | null;
+  nama_bank?: string | null;
+  rek_bank?: string | null;
   nilai: number;
   status: string;
   keterangan: string | null;

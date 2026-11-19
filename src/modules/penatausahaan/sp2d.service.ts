@@ -14,6 +14,8 @@ export interface SaveSp2dPayload {
   tgl_spp?: string | null;
   opdId: string;
   unitKerjaId?: string | null;
+  kd_unit?: string | null;
+  nm_unit?: string | null;
   jenis_sp2d: string; // UP, GU, TU, LS_GAJI, LS_BARANG_JASA, UP_KKPD, GU_KKPD
   bulan?: number | null;
   keperluan: string;
@@ -547,14 +549,34 @@ export async function saveSp2d(data: SaveSp2dPayload, userNama?: string) {
     throw new Error("Perangkat Daerah (OPD) tidak valid.");
   }
 
-  let unitInfo = { kd_unit: null as string | null, nm_unit: null as string | null };
-  if (unitKerjaId) {
+  // Ambil kd_unit, nm_unit, dan unitKerjaId dari data SPM sumber
+  const spmSource = spmId
+    ? await prisma.trhspm.findUnique({
+        where: { id: spmId },
+        select: { kd_unit: true, nm_unit: true, unitKerjaId: true },
+      })
+    : no_spm
+      ? await prisma.trhspm.findFirst({
+          where: { tahunAnggaran, no_spm: no_spm.trim() },
+          select: { kd_unit: true, nm_unit: true, unitKerjaId: true },
+        })
+      : null;
+
+  const resolvedUnitKerjaId = unitKerjaId || spmSource?.unitKerjaId || null;
+  let unitInfo = {
+    kd_unit: spmSource?.kd_unit || data.kd_unit || null,
+    nm_unit: spmSource?.nm_unit || data.nm_unit || null,
+  };
+  if ((!unitInfo.kd_unit || !unitInfo.nm_unit) && resolvedUnitKerjaId) {
     const unit = await prisma.unitKerja.findUnique({
-      where: { id: unitKerjaId },
+      where: { id: resolvedUnitKerjaId },
       select: { kd_unit: true, nm_unit: true },
     });
     if (unit) {
-      unitInfo = { kd_unit: unit.kd_unit, nm_unit: unit.nm_unit };
+      unitInfo = {
+        kd_unit: unitInfo.kd_unit || unit.kd_unit,
+        nm_unit: unitInfo.nm_unit || unit.nm_unit,
+      };
     }
   }
 
@@ -610,7 +632,7 @@ export async function saveSp2d(data: SaveSp2dPayload, userNama?: string) {
           opdId,
           kd_unit: unitInfo.kd_unit,
           nm_unit: unitInfo.nm_unit,
-          unitKerjaId: unitKerjaId || null,
+          unitKerjaId: resolvedUnitKerjaId,
           jenis_sp2d,
           bulan: bulan || null,
           keperluan,
@@ -651,7 +673,7 @@ export async function saveSp2d(data: SaveSp2dPayload, userNama?: string) {
           opdId,
           kd_unit: unitInfo.kd_unit,
           nm_unit: unitInfo.nm_unit,
-          unitKerjaId: unitKerjaId || null,
+          unitKerjaId: resolvedUnitKerjaId,
           jenis_sp2d,
           bulan: bulan || null,
           keperluan,

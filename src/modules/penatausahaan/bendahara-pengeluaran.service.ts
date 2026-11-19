@@ -112,11 +112,15 @@ export const bendaharaPengeluaranService = {
   ): Promise<number> {
     const { tahunAnggaran, opdId } = params;
 
-    const [sp2dList, transoutList, trmpotList, strpotList, kasinList] =
+    const [sp2dList, transinList, transoutList, trmpotList, strpotList, kasinList] =
       await Promise.all([
         db.trhsp2d.findMany({
           where: { tahunAnggaran, opdId, no_terima: { not: null } },
           select: { no_terima: true },
+        }),
+        db.trhtransin.findMany({
+          where: { tahunAnggaran, opdId, no_bukti: { not: "" } },
+          select: { no_bukti: true },
         }),
         db.trhtransout.findMany({
           where: { tahunAnggaran, opdId, no_bukti: { not: "" } },
@@ -147,6 +151,7 @@ export const bendaharaPengeluaranService = {
     };
 
     for (const item of sp2dList) checkCode(item.no_terima);
+    for (const item of transinList) checkCode(item.no_bukti);
     for (const item of transoutList) checkCode(item.no_bukti);
     for (const item of trmpotList) checkCode(item.no_bukti);
     for (const item of strpotList) checkCode(item.no_bukti);
@@ -254,21 +259,44 @@ export const bendaharaPengeluaranService = {
       orderBy: [{ tgl_cair: "desc" }, { no_sp2d: "desc" }],
     });
 
-    // Ambil daftar nomor SP2D yang sudah dibukukan di trhtransout (khusus LS)
-    const transoutList = await prisma.trhtransout.findMany({
-      where: {
-        tahunAnggaran: params.tahunAnggaran,
-        no_sp2d: { in: sp2dList.map((s) => s.no_sp2d) },
-      },
-      select: {
-        id: true,
-        no_bukti: true,
-        tgl_bukti: true,
-        no_sp2d: true,
-        pay_type: true,
-        uraian: true,
-        total: true,
-      },
+    // Ambil daftar nomor SP2D yang sudah dibukukan di trhtransin dan trhtransout
+    const noSp2dList = sp2dList.map((s) => s.no_sp2d);
+    const [transinList, transoutList] = await Promise.all([
+      prisma.trhtransin.findMany({
+        where: {
+          tahunAnggaran: params.tahunAnggaran,
+          no_sp2d: { in: noSp2dList },
+        },
+        select: {
+          id: true,
+          no_bukti: true,
+          tgl_bukti: true,
+          no_sp2d: true,
+          pay_type: true,
+          uraian: true,
+          total: true,
+        },
+      }),
+      prisma.trhtransout.findMany({
+        where: {
+          tahunAnggaran: params.tahunAnggaran,
+          no_sp2d: { in: noSp2dList },
+        },
+        select: {
+          id: true,
+          no_bukti: true,
+          tgl_bukti: true,
+          no_sp2d: true,
+          pay_type: true,
+          uraian: true,
+          total: true,
+        },
+      }),
+    ]);
+
+    const transinMap = new Map<string, (typeof transinList)[0]>();
+    transinList.forEach((t) => {
+      if (t.no_sp2d) transinMap.set(t.no_sp2d, t);
     });
 
     const bookedMap = new Map<string, (typeof transoutList)[0]>();
@@ -277,43 +305,33 @@ export const bendaharaPengeluaranService = {
     });
 
     const result = sp2dList.map((s) => {
+      const transin = transinMap.get(s.no_sp2d);
       const booked = bookedMap.get(s.no_sp2d);
       const isUpTuGu = ["UP", "GU", "TU", "UP_KKPD", "GU_KKPD"].includes(
         (s.jenis_sp2d || "").toUpperCase()
       );
 
-      // Untuk UP, GU, TU: status dibukukan dilihat dari status_pembukuan pada trhsp2d atau no_terima
-      // Untuk LS: dilihat dari keberadaan di trhtransout atau status_pembukuan
-      const isDibukukan = isUpTuGu
-        ? Boolean(s.status_pembukuan === "SUDAH_DIBUKUKAN" || s.no_terima)
-        : Boolean(booked || s.status_pembukuan === "SUDAH_DIBUKUKAN" || s.no_terima);
+      const isDibukukan = Boolean(
+        transin || booked || s.status_pembukuan === "SUDAH_DIBUKUKAN" || s.no_terima
+      );
 
-      const pembukuanData = isUpTuGu
-        ? (isDibukukan
-            ? {
-                id: s.id, // ID SP2D untuk pembatalan
-                no_bukti: s.no_terima || "-",
-                tgl_bukti: s.tgl_terima || s.tgl_cair || s.tgl_sp2d,
-                total: Number(s.nilai) || 0,
-              }
-            : null)
-        : (booked
-            ? {
-                id: booked.id,
-                no_bukti: booked.no_bukti,
-                tgl_bukti: booked.tgl_bukti,
-                pay_type: booked.pay_type,
-                uraian: booked.uraian,
-                total: Number(booked.total) || 0,
-              }
-            : (isDibukukan
-                ? {
-                    id: s.id,
-                    no_bukti: s.no_terima || "-",
-                    tgl_bukti: s.tgl_terima || s.tgl_cair || s.tgl_sp2d,
-                    total: Number(s.nilai) || 0,
-                  }
-                : null));
+      const pembukuanData = isDibukukan
+        ? {
+            id: transin?.id || booked?.id || s.id,
+            no_bukti: transin?.no_bukti || s.no_terima || booked?.no_bukti || "-",
+            no_bukti_out: !isUpTuGu ? booked?.no_bukti || null : null,
+            tgl_bukti:
+              transin?.tgl_bukti ||
+              booked?.tgl_bukti ||
+              s.tgl_terima ||
+              s.tgl_cair ||
+              s.tgl_sp2d,
+            pay_type: transin?.pay_type || booked?.pay_type || "BANK",
+            uraian: transin?.uraian || booked?.uraian || s.keperluan,
+            total:
+              Number(transin?.total ?? booked?.total ?? s.nilai) || 0,
+          }
+        : null;
 
       return {
         id: s.id,
@@ -414,7 +432,16 @@ export const bendaharaPengeluaranService = {
     const sp2d = await prisma.trhsp2d.findUnique({
       where: { id: payload.sp2dId },
       include: {
-        opd: true,
+        opd: {
+          include: {
+            unitKerjas: {
+              where: { isActive: true },
+              orderBy: { kd_unit: "asc" },
+              take: 1,
+              select: { kd_unit: true },
+            },
+          },
+        },
         spp: {
           include: {
             rincian: true,
@@ -432,134 +459,177 @@ export const bendaharaPengeluaranService = {
     );
 
     // Cek apakah sudah pernah dibukukan
-    if (isUpTuGu) {
-      if (sp2d.status_pembukuan === "SUDAH_DIBUKUKAN" || sp2d.no_terima) {
-        throw new Error(
-          `SP2D ${sp2d.no_sp2d} (${sp2d.jenis_sp2d}) sudah pernah dibukukan dengan No. BKU ${sp2d.no_terima}.`
-        );
-      }
-    } else {
-      const existing = await prisma.trhtransout.findFirst({
-        where: {
-          tahunAnggaran: sp2d.tahunAnggaran,
-          no_sp2d: sp2d.no_sp2d,
-        },
-      });
-
-      if (existing) {
-        throw new Error(
-          `SP2D ${sp2d.no_sp2d} sudah pernah dibukukan dengan No. Bukti ${existing.no_bukti}.`
-        );
-      }
+    if (sp2d.status_pembukuan === "SUDAH_DIBUKUKAN" || sp2d.no_terima) {
+      throw new Error(
+        `SP2D ${sp2d.no_sp2d} (${sp2d.jenis_sp2d}) sudah pernah dibukukan dengan No. Bukti ${sp2d.no_terima}.`
+      );
     }
 
-    // HITUNG NOMOR BKU BERIKUTNYA SECARA BERURUT DARI NO PENERIMAAN TRHSP2D & NO BUKTI TRHTRANSOUT
-    let noBukti = payload.no_bukti?.trim();
-    if (!noBukti) {
-      const { generatedNoBku } = await this.getNextBkuNumber({
+    const existingIn = await prisma.trhtransin.findFirst({
+      where: {
         tahunAnggaran: sp2d.tahunAnggaran,
-        opdId: sp2d.opdId,
-        kdUnitOrSkpd: sp2d.kd_unit || sp2d.kd_skpd,
+        OR: [{ sp2dId: sp2d.id }, { no_sp2d: sp2d.no_sp2d }],
+      },
+    });
+    if (existingIn) {
+      throw new Error(
+        `SP2D ${sp2d.no_sp2d} sudah pernah dibukukan dengan No. Bukti ${existingIn.no_bukti}.`
+      );
+    }
+
+    if (!isUpTuGu) {
+      const existingOut = await prisma.trhtransout.findFirst({
+        where: {
+          tahunAnggaran: sp2d.tahunAnggaran,
+          OR: [{ sp2dId: sp2d.id }, { no_sp2d: sp2d.no_sp2d }],
+        },
       });
-      noBukti = generatedNoBku;
+      if (existingOut) {
+        throw new Error(
+          `SP2D ${sp2d.no_sp2d} sudah pernah dibukukan dengan No. Bukti ${existingOut.no_bukti}.`
+        );
+      }
     }
 
     const tglBukti = payload.tgl_bukti
       ? new Date(payload.tgl_bukti)
       : sp2d.tgl_cair || sp2d.tgl_sp2d;
 
-    // ATURAN BARU:
-    // Jika SP2D jenis UP, TU, GU: TIDAK LAGI DI-INSERT KE TABEL trhtransout & trdtransout!
-    // Hanya dicatat dan diupdate ke tabel trhsp2d (tgl_terima, no_terima, status_pembukuan)
-    if (isUpTuGu) {
-      const updatedSp2d = await prisma.trhsp2d.update({
-        where: { id: sp2d.id },
-        data: {
-          tgl_terima: tglBukti,
-          no_terima: noBukti,
-          status_pembukuan: "SUDAH_DIBUKUKAN",
-        },
-      });
-
-      return {
-        id: updatedSp2d.id,
-        no_bukti: noBukti,
-        tgl_bukti: tglBukti,
-        isUpTuGu: true,
-        message: `SP2D ${sp2d.jenis_sp2d} berhasil dibukukan sebagai Penerimaan BKU dengan No. ${noBukti}.`,
-      };
-    }
-
-    // SELEBIHNYA (LS_GAJI, LS_BARJAS, dsb): TETAP DI-INSERT KE TABEL trhtransout & trdtransout
     const rincianList = sp2d.spp?.rincian || [];
     const totalNilai = rincianList.reduce(
       (sum, r) => sum + (Number(r.nilai) || 0),
       0
     );
+    const totalDecimal = new Prisma.Decimal(
+      totalNilai > 0 ? totalNilai : Number(sp2d.nilai)
+    );
 
-    const transout = await prisma.trhtransout.create({
-      data: {
-        tahunAnggaran: sp2d.tahunAnggaran,
-        no_bukti: noBukti,
-        tgl_bukti: tglBukti,
-        no_sp2d: sp2d.no_sp2d,
-        tgl_sp2d: sp2d.tgl_sp2d,
-        sp2dId: sp2d.id,
-        kd_skpd: sp2d.kd_skpd,
-        nm_skpd: sp2d.nm_skpd,
-        opdId: sp2d.opdId,
-        kd_unit: sp2d.kd_unit,
-        nm_unit: sp2d.nm_unit,
-        unitKerjaId: sp2d.unitKerjaId,
-        sumber_dana: sp2d.jenis_sp2d,
-        jenis_beban: sp2d.jenis_sp2d,
-        pay_type: payload.pay_type || "BANK",
-        uraian: payload.uraian || sp2d.keperluan,
-        total: new Prisma.Decimal(totalNilai > 0 ? totalNilai : Number(sp2d.nilai)),
-        status: "POSTING",
-        rincian: {
-          create:
-            rincianList.length > 0
-              ? rincianList.map((r) => ({
-                  no_bukti: noBukti,
-                  kd_sub_kegiatan: r.kd_sub_kegiatan,
-                  nm_sub_kegiatan: r.nm_sub_kegiatan,
-                  kd_rek6: r.kd_rek6,
-                  nm_rek6: r.nm_rek6,
-                  nilai: new Prisma.Decimal(Number(r.nilai) || 0),
-                  sumber_dana: sp2d.jenis_sp2d,
-                  keterangan: r.nm_rek6,
-                }))
-              : [
-                  {
-                    no_bukti: noBukti,
-                    kd_sub_kegiatan: null,
-                    nm_sub_kegiatan: null,
-                    kd_rek6: "5.1.02.99.99.9999",
-                    nm_rek6: sp2d.keperluan,
-                    nilai: sp2d.nilai,
-                    sumber_dana: sp2d.jenis_sp2d,
-                    keterangan: sp2d.keperluan,
-                  },
-                ],
+    const buildRincian = (noBuktiRow: string) =>
+      rincianList.length > 0
+        ? rincianList.map((r) => ({
+            no_bukti: noBuktiRow,
+            kd_sub_kegiatan: r.kd_sub_kegiatan,
+            nm_sub_kegiatan: r.nm_sub_kegiatan,
+            kd_rek6: r.kd_rek6,
+            nm_rek6: r.nm_rek6,
+            nilai: new Prisma.Decimal(Number(r.nilai) || 0),
+            sumber_dana: sp2d.jenis_sp2d,
+            keterangan: r.nm_rek6,
+          }))
+        : [
+            {
+              no_bukti: noBuktiRow,
+              kd_sub_kegiatan: null,
+              nm_sub_kegiatan: null,
+              kd_rek6: "5.1.02.99.99.9999",
+              nm_rek6: sp2d.keperluan,
+              nilai: sp2d.nilai,
+              sumber_dana: sp2d.jenis_sp2d,
+              keterangan: sp2d.keperluan,
+            },
+          ];
+
+    const unitPart = (
+      sp2d.kd_unit ||
+      sp2d.opd?.unitKerjas?.[0]?.kd_unit ||
+      sp2d.kd_skpd
+    ).replace(/[^a-zA-Z0-9.-]/g, "");
+
+    return await prisma.$transaction(async (tx) => {
+      let seq = await this.getNextBkuSeq(
+        { tahunAnggaran: sp2d.tahunAnggaran, opdId: sp2d.opdId },
+        tx
+      );
+      const formatNoBukti = (n: number) =>
+        `${String(n).padStart(5, "0")}/${unitPart}/${sp2d.tahunAnggaran}`;
+
+      const noBuktiIn = payload.no_bukti?.trim() || formatNoBukti(seq);
+
+      // 1. Semua SP2D (UP/GU/TU & LS) masuk ke trhtransin & trdtransin
+      const transin = await tx.trhtransin.create({
+        data: {
+          tahunAnggaran: sp2d.tahunAnggaran,
+          no_bukti: noBuktiIn,
+          tgl_bukti: tglBukti,
+          no_sp2d: sp2d.no_sp2d,
+          tgl_sp2d: sp2d.tgl_sp2d,
+          sp2dId: sp2d.id,
+          kd_skpd: sp2d.kd_skpd,
+          nm_skpd: sp2d.nm_skpd,
+          opdId: sp2d.opdId,
+          kd_unit: sp2d.kd_unit,
+          nm_unit: sp2d.nm_unit,
+          unitKerjaId: sp2d.unitKerjaId,
+          sumber_dana: sp2d.jenis_sp2d,
+          jenis_beban: sp2d.jenis_sp2d,
+          pay_type: payload.pay_type || "BANK",
+          uraian: payload.uraian || sp2d.keperluan,
+          total: totalDecimal,
+          status: "POSTING",
+          rincian: {
+            create: buildRincian(noBuktiIn),
+          },
         },
-      },
-      include: {
-        rincian: true,
-      },
-    });
+        include: {
+          rincian: true,
+        },
+      });
 
-    // Update status pembukuan & tanggal penerimaan pada tabel trhsp2d
-    await prisma.trhsp2d.update({
-      where: { id: sp2d.id },
-      data: {
-        tgl_terima: tglBukti,
-        no_terima: noBukti,
-        status_pembukuan: "SUDAH_DIBUKUKAN",
-      },
-    });
+      // 2. Khusus LS (LS-GAJI / LS-Barang dan Jasa, dll selain UP/GU/TU) juga masuk ke trhtransout & trdtransout dengan seq + 1
+      let noBuktiOut: string | null = null;
+      if (!isUpTuGu) {
+        seq += 1;
+        noBuktiOut = formatNoBukti(seq);
 
-    return transout;
+        await tx.trhtransout.create({
+          data: {
+            tahunAnggaran: sp2d.tahunAnggaran,
+            no_bukti: noBuktiOut,
+            tgl_bukti: tglBukti,
+            no_sp2d: sp2d.no_sp2d,
+            tgl_sp2d: sp2d.tgl_sp2d,
+            sp2dId: sp2d.id,
+            kd_skpd: sp2d.kd_skpd,
+            nm_skpd: sp2d.nm_skpd,
+            opdId: sp2d.opdId,
+            kd_unit: sp2d.kd_unit,
+            nm_unit: sp2d.nm_unit,
+            unitKerjaId: sp2d.unitKerjaId,
+            sumber_dana: sp2d.jenis_sp2d,
+            jenis_beban: sp2d.jenis_sp2d,
+            pay_type: payload.pay_type || "BANK",
+            uraian: payload.uraian || sp2d.keperluan,
+            total: totalDecimal,
+            status: "POSTING",
+            rincian: {
+              create: buildRincian(noBuktiOut),
+            },
+          },
+        });
+      }
+
+      // 3. Kunci / update status pembukuan pada trhsp2d
+      await tx.trhsp2d.update({
+        where: { id: sp2d.id },
+        data: {
+          tgl_terima: tglBukti,
+          no_terima: noBuktiIn,
+          status_pembukuan: "SUDAH_DIBUKUKAN",
+        },
+      });
+
+      return {
+        id: sp2d.id,
+        no_bukti: noBuktiIn,
+        no_bukti_out: noBuktiOut,
+        tgl_bukti: tglBukti,
+        isUpTuGu,
+        transin,
+        message: isUpTuGu
+          ? `SP2D ${sp2d.jenis_sp2d} berhasil dibukukan ke trhtransin dengan No. Bukti ${noBuktiIn}.`
+          : `SP2D ${sp2d.jenis_sp2d} berhasil dibukukan dengan No. Bukti Penerimaan ${noBuktiIn} dan Pengeluaran ${noBuktiOut}.`,
+      };
+    });
   },
 
   async updatePembukuanSp2d(payload: {
@@ -593,6 +663,30 @@ export const bendaharaPengeluaranService = {
         },
       });
 
+      const transin = await tx.trhtransin.findFirst({
+        where: {
+          tahunAnggaran: sp2d.tahunAnggaran,
+          OR: [{ sp2dId: sp2d.id }, { no_sp2d: sp2d.no_sp2d }],
+        },
+      });
+      if (transin) {
+        await tx.trhtransin.update({
+          where: { id: transin.id },
+          data: {
+            ...(noBukti ? { no_bukti: noBukti } : {}),
+            tgl_bukti: tglBukti,
+            ...(payload.pay_type ? { pay_type: payload.pay_type } : {}),
+            ...(payload.uraian !== undefined ? { uraian: payload.uraian } : {}),
+          },
+        });
+        if (noBukti && noBukti !== transin.no_bukti) {
+          await tx.trdtransin.updateMany({
+            where: { transinId: transin.id },
+            data: { no_bukti: noBukti },
+          });
+        }
+      }
+
       if (!isUpTuGu) {
         const transout = await tx.trhtransout.findFirst({
           where: {
@@ -604,18 +698,11 @@ export const bendaharaPengeluaranService = {
           await tx.trhtransout.update({
             where: { id: transout.id },
             data: {
-              ...(noBukti ? { no_bukti: noBukti } : {}),
               tgl_bukti: tglBukti,
               ...(payload.pay_type ? { pay_type: payload.pay_type } : {}),
               ...(payload.uraian !== undefined ? { uraian: payload.uraian } : {}),
             },
           });
-          if (noBukti && noBukti !== transout.no_bukti) {
-            await tx.trdtransout.updateMany({
-              where: { transoutId: transout.id },
-              data: { no_bukti: noBukti },
-            });
-          }
         }
       }
 
@@ -629,25 +716,78 @@ export const bendaharaPengeluaranService = {
   },
 
   async deletePembukuan(targetId: string) {
-    // 1. Cek apakah targetId adalah ID dari trhtransout (untuk LS)
-    const transout = await prisma.trhtransout.findUnique({
+    // Resolusi SP2D dari targetId (bisa berasal dari trhtransin.id, trhtransout.id, atau trhsp2d.id)
+    let resolvedSp2dId: string | null = null;
+    let resolvedNoSp2d: string | null = null;
+
+    const transin = await prisma.trhtransin.findUnique({
       where: { id: targetId },
       select: { id: true, sp2dId: true, no_sp2d: true },
     });
-
-    if (transout) {
-      if (transout.sp2dId) {
-        await prisma.trhsp2d.update({
-          where: { id: transout.sp2dId },
-          data: {
-            tgl_terima: null,
-            no_terima: null,
-            status_pembukuan: "BELUM_DIBUKUKAN",
-          },
+    if (transin) {
+      resolvedSp2dId = transin.sp2dId;
+      resolvedNoSp2d = transin.no_sp2d;
+    } else {
+      const transout = await prisma.trhtransout.findUnique({
+        where: { id: targetId },
+        select: { id: true, sp2dId: true, no_sp2d: true },
+      });
+      if (transout) {
+        resolvedSp2dId = transout.sp2dId;
+        resolvedNoSp2d = transout.no_sp2d;
+      } else {
+        const sp2d = await prisma.trhsp2d.findUnique({
+          where: { id: targetId },
+          select: { id: true, no_sp2d: true },
         });
-      } else if (transout.no_sp2d) {
-        await prisma.trhsp2d.updateMany({
-          where: { no_sp2d: transout.no_sp2d },
+        if (sp2d) {
+          resolvedSp2dId = sp2d.id;
+          resolvedNoSp2d = sp2d.no_sp2d;
+        }
+      }
+    }
+
+    if (!resolvedSp2dId && !resolvedNoSp2d) {
+      throw new Error("Dokumen pembukuan tidak ditemukan.");
+    }
+
+    const matchCondition = [
+      ...(resolvedSp2dId ? [{ sp2dId: resolvedSp2dId }] : []),
+      ...(resolvedNoSp2d ? [{ no_sp2d: resolvedNoSp2d }] : []),
+    ];
+
+    return await prisma.$transaction(async (tx) => {
+      const inHeaders = await tx.trhtransin.findMany({
+        where: { OR: matchCondition },
+        select: { id: true },
+      });
+      if (inHeaders.length > 0) {
+        const inIds = inHeaders.map((h) => h.id);
+        await tx.trdtransin.deleteMany({
+          where: { transinId: { in: inIds } },
+        });
+        await tx.trhtransin.deleteMany({
+          where: { id: { in: inIds } },
+        });
+      }
+
+      const outHeaders = await tx.trhtransout.findMany({
+        where: { OR: matchCondition },
+        select: { id: true },
+      });
+      if (outHeaders.length > 0) {
+        const outIds = outHeaders.map((h) => h.id);
+        await tx.trdtransout.deleteMany({
+          where: { transoutId: { in: outIds } },
+        });
+        await tx.trhtransout.deleteMany({
+          where: { id: { in: outIds } },
+        });
+      }
+
+      if (resolvedSp2dId) {
+        return await tx.trhsp2d.update({
+          where: { id: resolvedSp2dId },
           data: {
             tgl_terima: null,
             no_terima: null,
@@ -656,35 +796,15 @@ export const bendaharaPengeluaranService = {
         });
       }
 
-      return await prisma.trhtransout.delete({
-        where: { id: targetId },
-      });
-    }
-
-    // 2. Jika bukan di trhtransout, cek apakah targetId adalah ID dari trhsp2d (untuk UP/GU/TU)
-    const sp2d = await prisma.trhsp2d.findUnique({
-      where: { id: targetId },
-      select: { id: true, no_sp2d: true },
-    });
-
-    if (sp2d) {
-      await prisma.trhtransout.deleteMany({
-        where: {
-          OR: [{ sp2dId: sp2d.id }, { no_sp2d: sp2d.no_sp2d }],
-        },
-      });
-
-      return await prisma.trhsp2d.update({
-        where: { id: sp2d.id },
+      return await tx.trhsp2d.updateMany({
+        where: { no_sp2d: resolvedNoSp2d! },
         data: {
           tgl_terima: null,
           no_terima: null,
           status_pembukuan: "BELUM_DIBUKUKAN",
         },
       });
-    }
-
-    throw new Error("Dokumen pembukuan tidak ditemukan.");
+    });
   },
 
   // ---------------------------------------------------------------------------
@@ -2634,8 +2754,7 @@ export const bendaharaPengeluaranService = {
           sumber_dana: sumberDana,
           uraian: payload.uraian?.trim() || sts.uraian,
           nama_penyetor: sts.nama_penyetor || "Bendahara Pengeluaran",
-          nama_bank: payload.jenis_kas || (isPengembalian ? "BELANJA" : "UP"),
-          rek_bank: payload.no_sp2d || sts.kd_cabang || null,
+          jns_transaksi: payload.jenis_kas || (isPengembalian ? "BELANJA" : "UP"),
           nilai: sts.nilai,
           status: "TERIMA",
           rincianRekening: {
@@ -2691,8 +2810,7 @@ export const bendaharaPengeluaranService = {
       data: {
         tgl_bukti: tglKas,
         tgl_sts: tglKas,
-        nama_bank: payload.jenis_kas !== undefined ? payload.jenis_kas : existing.nama_bank,
-        rek_bank: payload.no_sp2d !== undefined ? payload.no_sp2d || null : existing.rek_bank,
+        jns_transaksi: payload.jenis_kas !== undefined ? payload.jenis_kas : existing.jns_transaksi,
         uraian: payload.uraian !== undefined ? payload.uraian : existing.uraian,
       },
       include: { rincianRekening: true },
@@ -2772,8 +2890,7 @@ export const bendaharaPengeluaranService = {
         sumber_dana: sumberDana,
         uraian: payload.uraian,
         nama_penyetor: "Bendahara Pengeluaran",
-        nama_bank: payload.nama_bank || "PT. Bank Sumut",
-        rek_bank: payload.rek_bank || "100.01.04.00001-9",
+        jns_transaksi: payload.tipe === "SISA_KAS" ? "UP" : "BELANJA",
         nilai: new Prisma.Decimal(payload.nilai),
         status: "TERIMA",
         rincianRekening: {
@@ -2800,12 +2917,20 @@ export const bendaharaPengeluaranService = {
   async getRekalList(params: {
     tahunAnggaran: number;
     opdId?: string;
+    kd_unit?: string;
+    bulan?: number;
   }) {
     const where: Prisma.TrhrekalWhereInput = {
       tahunAnggaran: params.tahunAnggaran,
     };
     if (params.opdId && params.opdId !== "ALL") {
       where.opdId = params.opdId;
+    }
+    if (params.kd_unit && params.kd_unit !== "ALL") {
+      where.kd_unit = params.kd_unit;
+    }
+    if (params.bulan) {
+      where.bulan = params.bulan;
     }
 
     return await prisma.trhrekal.findMany({
@@ -2814,7 +2939,7 @@ export const bendaharaPengeluaranService = {
         rincian: true,
         opd: { select: { kd_skpd: true, nm_skpd: true } },
       },
-      orderBy: { tgl_rekal: "desc" },
+      orderBy: [{ tgl_bukti: "desc" }, { no_bukti: "desc" }],
     });
   },
 
@@ -2823,6 +2948,7 @@ export const bendaharaPengeluaranService = {
     opdId: string;
     kd_unit?: string;
     nm_unit?: string;
+    unitKerjaId?: string;
     bulan: number;
     keterangan?: string;
   }) {
@@ -2832,64 +2958,410 @@ export const bendaharaPengeluaranService = {
     });
     if (!opd) throw new Error("OPD tidak valid");
 
-    const count = await prisma.trhrekal.count({
-      where: { tahunAnggaran: payload.tahunAnggaran, opdId: opd.id },
-    });
-    const urut = String(count + 1).padStart(5, "0");
-    const unitPart = (payload.kd_unit || opd.kd_skpd).replace(/[^a-zA-Z0-9.-]/g, "");
-    const noRekal = `${urut}/${unitPart}/REKAL/${payload.tahunAnggaran}`;
+    const bulan = Number(payload.bulan);
+    if (!bulan || bulan < 1 || bulan > 12) {
+      throw new Error("Bulan rekal tidak valid (1-12).");
+    }
 
-    // Hitung akumulasi dari trdtransout
-    const transoutItems = await prisma.trdtransout.findMany({
-      where: {
-        header: {
-          tahunAnggaran: payload.tahunAnggaran,
-          opdId: opd.id,
-        },
+    const startDate = new Date(Date.UTC(payload.tahunAnggaran, bulan - 1, 1, 0, 0, 0, 0));
+    const endDate = new Date(Date.UTC(payload.tahunAnggaran, bulan, 1, 0, 0, 0, 0));
+
+    const hasUnitFilter = Boolean(payload.kd_unit && payload.kd_unit !== "ALL");
+    const unitWhere = hasUnitFilter ? { kd_unit: payload.kd_unit } : {};
+
+    const baseWhere = {
+      tahunAnggaran: payload.tahunAnggaran,
+      opdId: opd.id,
+      ...unitWhere,
+      tgl_bukti: {
+        gte: startDate,
+        lt: endDate,
       },
-    });
+    };
 
-    const sumMap = new Map<string, { nm_rek6: string; total: number }>();
-    transoutItems.forEach((t) => {
-      const existing = sumMap.get(t.kd_rek6) || {
-        nm_rek6: t.nm_rek6,
-        total: 0,
-      };
-      existing.total += Number(t.nilai) || 0;
-      sumMap.set(t.kd_rek6, existing);
-    });
+    const [transinList, transoutList, trmpotList, strpotList, kasinList] =
+      await Promise.all([
+        prisma.trhtransin.findMany({
+          where: baseWhere,
+          include: { rincian: true },
+        }),
+        prisma.trhtransout.findMany({
+          where: baseWhere,
+          include: { rincian: true },
+        }),
+        prisma.trhtrmpot.findMany({
+          where: baseWhere,
+          include: { rincian: true },
+        }),
+        prisma.trhstrpot.findMany({
+          where: baseWhere,
+          include: { rincian: true },
+        }),
+        prisma.trhkasin.findMany({
+          where: baseWhere,
+          include: { rincianRekening: true },
+        }),
+      ]);
 
-    const totalMutasi = Array.from(sumMap.values()).reduce(
-      (acc, c) => acc + c.total,
-      0
-    );
+    type RekalDetailInput = {
+      kd_sub_kegiatan: string | null;
+      nm_sub_kegiatan: string | null;
+      kd_rek6: string;
+      nm_rek6: string;
+      terima: number;
+      keluar: number;
+      keterangan: string | null;
+      jenis_beban: string;
+    };
 
-    return await prisma.trhrekal.create({
-      data: {
+    type RekalHeaderInput = {
+      no_bukti: string;
+      tgl_bukti: Date;
+      kd_skpd: string;
+      nm_skpd: string;
+      opdId: string;
+      kd_unit: string | null;
+      nm_unit: string | null;
+      unitKerjaId: string | null;
+      bulan: number;
+      jenis_beban: string;
+      keterangan: string | null;
+      total: number;
+      rincian: RekalDetailInput[];
+    };
+
+    const itemsToPost: RekalHeaderInput[] = [];
+
+    // 1. trhtransin, trdtransin -> Penerimaan BKU
+    for (const h of transinList) {
+      const jenis = h.jenis_beban || "TRANS_IN";
+      const rincian: RekalDetailInput[] =
+        h.rincian.length > 0
+          ? h.rincian.map((d) => ({
+              kd_sub_kegiatan: d.kd_sub_kegiatan || null,
+              nm_sub_kegiatan: d.nm_sub_kegiatan || null,
+              kd_rek6: d.kd_rek6,
+              nm_rek6: d.nm_rek6,
+              terima: Number(d.nilai) || 0,
+              keluar: 0,
+              keterangan: d.keterangan || h.uraian || null,
+              jenis_beban: jenis,
+            }))
+          : [
+              {
+                kd_sub_kegiatan: null,
+                nm_sub_kegiatan: null,
+                kd_rek6: "-",
+                nm_rek6: h.uraian || "Penerimaan Kas",
+                terima: Number(h.total) || 0,
+                keluar: 0,
+                keterangan: h.uraian || null,
+                jenis_beban: jenis,
+              },
+            ];
+
+      itemsToPost.push({
+        no_bukti: h.no_bukti,
+        tgl_bukti: h.tgl_bukti,
+        kd_skpd: h.kd_skpd,
+        nm_skpd: h.nm_skpd,
+        opdId: h.opdId,
+        kd_unit: h.kd_unit || null,
+        nm_unit: h.nm_unit || null,
+        unitKerjaId: h.unitKerjaId || null,
+        bulan,
+        jenis_beban: jenis,
+        keterangan: h.uraian || payload.keterangan || null,
+        total: Number(h.total) || 0,
+        rincian,
+      });
+    }
+
+    // 2. trhtransout, trdtransout -> Pengeluaran BKU
+    for (const h of transoutList) {
+      const jenis = h.jenis_beban || "TRANS_OUT";
+      const rincian: RekalDetailInput[] =
+        h.rincian.length > 0
+          ? h.rincian.map((d) => ({
+              kd_sub_kegiatan: d.kd_sub_kegiatan || null,
+              nm_sub_kegiatan: d.nm_sub_kegiatan || null,
+              kd_rek6: d.kd_rek6,
+              nm_rek6: d.nm_rek6,
+              terima: 0,
+              keluar: Number(d.nilai) || 0,
+              keterangan: d.keterangan || h.uraian || null,
+              jenis_beban: jenis,
+            }))
+          : [
+              {
+                kd_sub_kegiatan: null,
+                nm_sub_kegiatan: null,
+                kd_rek6: "-",
+                nm_rek6: h.uraian || "Pengeluaran Kas",
+                terima: 0,
+                keluar: Number(h.total) || 0,
+                keterangan: h.uraian || null,
+                jenis_beban: jenis,
+              },
+            ];
+
+      itemsToPost.push({
+        no_bukti: h.no_bukti,
+        tgl_bukti: h.tgl_bukti,
+        kd_skpd: h.kd_skpd,
+        nm_skpd: h.nm_skpd,
+        opdId: h.opdId,
+        kd_unit: h.kd_unit || null,
+        nm_unit: h.nm_unit || null,
+        unitKerjaId: h.unitKerjaId || null,
+        bulan,
+        jenis_beban: jenis,
+        keterangan: h.uraian || payload.keterangan || null,
+        total: Number(h.total) || 0,
+        rincian,
+      });
+    }
+
+    // 3. trhtrmpot, trdtrmpot -> Penerimaan BKU
+    for (const h of trmpotList) {
+      const jenis = "TRM_POT";
+      const rincian: RekalDetailInput[] =
+        h.rincian.length > 0
+          ? h.rincian.map((d) => ({
+              kd_sub_kegiatan: null,
+              nm_sub_kegiatan: null,
+              kd_rek6: d.kd_rek6,
+              nm_rek6: d.nm_rek6,
+              terima: Number(d.nilai) || 0,
+              keluar: 0,
+              keterangan: d.keterangan || h.uraian || null,
+              jenis_beban: jenis,
+            }))
+          : [
+              {
+                kd_sub_kegiatan: null,
+                nm_sub_kegiatan: null,
+                kd_rek6: "-",
+                nm_rek6: h.uraian || "Terima Potongan Pajak",
+                terima: Number(h.total) || 0,
+                keluar: 0,
+                keterangan: h.uraian || null,
+                jenis_beban: jenis,
+              },
+            ];
+
+      itemsToPost.push({
+        no_bukti: h.no_bukti,
+        tgl_bukti: h.tgl_bukti,
+        kd_skpd: h.kd_skpd,
+        nm_skpd: h.nm_skpd,
+        opdId: h.opdId,
+        kd_unit: h.kd_unit || null,
+        nm_unit: h.nm_unit || null,
+        unitKerjaId: h.unitKerjaId || null,
+        bulan,
+        jenis_beban: jenis,
+        keterangan: h.uraian || payload.keterangan || null,
+        total: Number(h.total) || 0,
+        rincian,
+      });
+    }
+
+    // 4. trhstrpot, trdstrpot -> Pengeluaran BKU
+    for (const h of strpotList) {
+      const jenis = "STR_POT";
+      const rincian: RekalDetailInput[] =
+        h.rincian.length > 0
+          ? h.rincian.map((d) => ({
+              kd_sub_kegiatan: null,
+              nm_sub_kegiatan: null,
+              kd_rek6: d.kd_rek6,
+              nm_rek6: d.nm_rek6,
+              terima: 0,
+              keluar: Number(d.nilai) || 0,
+              keterangan: d.keterangan || h.uraian || null,
+              jenis_beban: jenis,
+            }))
+          : [
+              {
+                kd_sub_kegiatan: null,
+                nm_sub_kegiatan: null,
+                kd_rek6: "-",
+                nm_rek6: h.uraian || "Setor Potongan Pajak",
+                terima: 0,
+                keluar: Number(h.total) || 0,
+                keterangan: h.uraian || null,
+                jenis_beban: jenis,
+              },
+            ];
+
+      itemsToPost.push({
+        no_bukti: h.no_bukti,
+        tgl_bukti: h.tgl_bukti,
+        kd_skpd: h.kd_skpd,
+        nm_skpd: h.nm_skpd,
+        opdId: h.opdId,
+        kd_unit: h.kd_unit || null,
+        nm_unit: h.nm_unit || null,
+        unitKerjaId: h.unitKerjaId || null,
+        bulan,
+        jenis_beban: jenis,
+        keterangan: h.uraian || payload.keterangan || null,
+        total: Number(h.total) || 0,
+        rincian,
+      });
+    }
+
+    // 5 & 6. trhkasin, trdkasin:
+    // - jns_transaksi = UP/GU/TU -> Pengeluaran BKU (keluar)
+    // - jns_transaksi = BELANJA -> Penerimaan sekaligus Pengeluaran BKU (terima & keluar)
+    for (const h of kasinList) {
+      const jns = (h.jns_transaksi || "").toUpperCase().trim();
+      const isBelanja = jns === "BELANJA";
+      const isUpGuTu = ["UP", "GU", "TU", "UP/GU/TU", "SISA_KAS"].includes(jns);
+      if (!isBelanja && !isUpGuTu) continue;
+
+      const jenis = jns || "UP";
+      const rincian: RekalDetailInput[] =
+        h.rincianRekening.length > 0
+          ? h.rincianRekening.map((d) => {
+              const val = Number(d.nilai) || 0;
+              return {
+                kd_sub_kegiatan: d.kd_sub_kegiatan || null,
+                nm_sub_kegiatan: d.nm_sub_kegiatan || null,
+                kd_rek6: d.kd_rek6,
+                nm_rek6: d.nm_rek6,
+                terima: isBelanja ? val : 0,
+                keluar: val,
+                keterangan: d.keterangan || h.uraian || null,
+                jenis_beban: jenis,
+              };
+            })
+          : [
+              {
+                kd_sub_kegiatan: null,
+                nm_sub_kegiatan: null,
+                kd_rek6: "-",
+                nm_rek6: h.uraian || "Setor Kas",
+                terima: isBelanja ? Number(h.nilai) || 0 : 0,
+                keluar: Number(h.nilai) || 0,
+                keterangan: h.uraian || null,
+                jenis_beban: jenis,
+              },
+            ];
+
+      itemsToPost.push({
+        no_bukti: h.no_bukti,
+        tgl_bukti: h.tgl_bukti,
+        kd_skpd: h.kd_skpd,
+        nm_skpd: h.nm_skpd,
+        opdId: h.opdId,
+        kd_unit: h.kd_unit || null,
+        nm_unit: h.nm_unit || null,
+        unitKerjaId: h.unitKerjaId || null,
+        bulan,
+        jenis_beban: jenis,
+        keterangan: h.uraian || payload.keterangan || null,
+        total: Number(h.nilai) || 0,
+        rincian,
+      });
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      // Replace data berdasarkan tahunAnggaran + opdId + bulan (+ kd_unit jika dipilih)
+      const replaceWhere: Prisma.TrhrekalWhereInput = {
         tahunAnggaran: payload.tahunAnggaran,
-        no_rekal: noRekal,
-        tgl_rekal: new Date(),
-        kd_skpd: opd.kd_skpd,
-        nm_skpd: opd.nm_skpd,
         opdId: opd.id,
-        kd_unit: payload.kd_unit,
-        nm_unit: payload.nm_unit,
-        bulan: payload.bulan,
-        keterangan: payload.keterangan || `Rekal Transaksi Bulan ke-${payload.bulan}`,
-        total_mutasi: new Prisma.Decimal(totalMutasi),
-        status: "SELESAI",
-        rincian: {
-          create: Array.from(sumMap.entries()).map(([kd, val]) => ({
-            no_rekal: noRekal,
-            kd_rek6: kd,
-            nm_rek6: val.nm_rek6,
-            nilai_lalu: new Prisma.Decimal(0),
-            nilai_ini: new Prisma.Decimal(val.total),
-            nilai_total: new Prisma.Decimal(val.total),
-          })),
-        },
-      },
-      include: { rincian: true },
+        bulan,
+        ...unitWhere,
+      };
+
+      const existingHeaders = await tx.trhrekal.findMany({
+        where: replaceWhere,
+        select: { id: true },
+      });
+      if (existingHeaders.length > 0) {
+        const ids = existingHeaders.map((e) => e.id);
+        await tx.trdrekal.deleteMany({
+          where: { rekalId: { in: ids } },
+        });
+        await tx.trhrekal.deleteMany({
+          where: { id: { in: ids } },
+        });
+      }
+
+      // Pastikan no_bukti unik pada tahunAnggaran
+      const otherMonthsNoBukti = await tx.trhrekal.findMany({
+        where: { tahunAnggaran: payload.tahunAnggaran },
+        select: { no_bukti: true },
+      });
+      const usedNoBukti = new Set(otherMonthsNoBukti.map((r) => r.no_bukti));
+
+      const createdRecords = [];
+      let totalTerima = 0;
+      let totalKeluar = 0;
+
+      for (const item of itemsToPost) {
+        let uniqueNoBukti = item.no_bukti;
+        let suffix = 1;
+        while (usedNoBukti.has(uniqueNoBukti)) {
+          uniqueNoBukti = `${item.no_bukti}-${suffix}`;
+          suffix += 1;
+        }
+        usedNoBukti.add(uniqueNoBukti);
+
+        item.rincian.forEach((r) => {
+          totalTerima += r.terima;
+          totalKeluar += r.keluar;
+        });
+
+        const created = await tx.trhrekal.create({
+          data: {
+            tahunAnggaran: payload.tahunAnggaran,
+            no_bukti: uniqueNoBukti,
+            tgl_bukti: item.tgl_bukti,
+            kd_skpd: item.kd_skpd,
+            nm_skpd: item.nm_skpd,
+            opdId: item.opdId,
+            kd_unit: item.kd_unit,
+            nm_unit: item.nm_unit,
+            unitKerjaId: item.unitKerjaId,
+            bulan: item.bulan,
+            jenis_beban: item.jenis_beban,
+            keterangan: item.keterangan,
+            total: new Prisma.Decimal(item.total),
+            status: "SELESAI",
+            rincian: {
+              create: item.rincian.map((r) => ({
+                no_bukti: uniqueNoBukti,
+                tgl_bukti: item.tgl_bukti,
+                kd_skpd: item.kd_skpd,
+                nm_skpd: item.nm_skpd,
+                kd_unit: item.kd_unit,
+                nm_unit: item.nm_unit,
+                kd_sub_kegiatan: r.kd_sub_kegiatan,
+                nm_sub_kegiatan: r.nm_sub_kegiatan,
+                kd_rek6: r.kd_rek6,
+                nm_rek6: r.nm_rek6,
+                terima: new Prisma.Decimal(r.terima),
+                keluar: new Prisma.Decimal(r.keluar),
+                keterangan: r.keterangan,
+                jenis_beban: r.jenis_beban,
+              })),
+            },
+          },
+          include: { rincian: true },
+        });
+        createdRecords.push(created);
+      }
+
+      return {
+        bulan,
+        totalDokumen: createdRecords.length,
+        totalTerima,
+        totalKeluar,
+        records: createdRecords,
+      };
     });
   },
 

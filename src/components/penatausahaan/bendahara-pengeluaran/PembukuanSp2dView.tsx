@@ -56,6 +56,7 @@ interface Sp2dRow {
   pembukuan: {
     id: string;
     no_bukti: string;
+    no_bukti_out?: string | null;
     tgl_bukti: string;
     pay_type?: string | null;
     uraian?: string | null;
@@ -118,6 +119,7 @@ function PembukuanSp2dContent({
   // Form Pembukuan State
   const [bukuPayType, setBukuPayType] = useState<"BANK" | "TUNAI">("BANK");
   const [bukuNoBukti, setBukuNoBukti] = useState("");
+  const [bukuNoBuktiOut, setBukuNoBuktiOut] = useState("");
   const [bukuTgl, setBukuTgl] = useState(new Date().toISOString().split("T")[0]);
   const [bukuUraian, setBukuUraian] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -208,6 +210,7 @@ function PembukuanSp2dContent({
     setInputSearch("");
     setSelectedSp2d(null);
     setBukuNoBukti("");
+    setBukuNoBuktiOut("");
     setBukuTgl(new Date().toISOString().split("T")[0]);
     setBukuUraian("");
     setBukuPayType("BANK");
@@ -221,6 +224,7 @@ function PembukuanSp2dContent({
     setIsEditing(true);
     setSelectedSp2d(item);
     setBukuNoBukti(item.pembukuan?.no_bukti || item.no_terima || "");
+    setBukuNoBuktiOut(item.pembukuan?.no_bukti_out || "");
     const tglVal = item.pembukuan?.tgl_bukti || item.tgl_terima || item.tgl_cair || item.tgl_sp2d;
     setBukuTgl(tglVal ? new Date(tglVal).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]);
     setBukuPayType(item.pembukuan?.pay_type === "TUNAI" ? "TUNAI" : "BANK");
@@ -257,15 +261,20 @@ function PembukuanSp2dContent({
       const json = await res.json();
       if (json.success && json.generatedNoBku) {
         setBukuNoBukti(json.generatedNoBku);
+        setBukuNoBuktiOut(!isUpTuGu ? json.generatedNoBkuOut || "" : "");
       } else {
         const bookedCount = dataList.filter((d) => d.isDibukukan).length;
         const urut = String(bookedCount + 1).padStart(5, "0");
+        const urutOut = String(bookedCount + 2).padStart(5, "0");
         setBukuNoBukti(`${urut}/${unitPart}/2026`);
+        setBukuNoBuktiOut(!isUpTuGu ? `${urutOut}/${unitPart}/2026` : "");
       }
     } catch {
       const bookedCount = dataList.filter((d) => d.isDibukukan).length;
       const urut = String(bookedCount + 1).padStart(5, "0");
+      const urutOut = String(bookedCount + 2).padStart(5, "0");
       setBukuNoBukti(`${urut}/${unitPart}/2026`);
+      setBukuNoBuktiOut(!isUpTuGu ? `${urutOut}/${unitPart}/2026` : "");
     }
 
     setBukuTgl(
@@ -313,10 +322,12 @@ function PembukuanSp2dContent({
           isEditing
             ? `Pembukuan SP2D ${selectedSp2d.no_sp2d} berhasil diperbarui (No. BKU ${json.data?.no_bukti || bukuNoBukti
             }).`
-            : `SP2D ${selectedSp2d.no_sp2d} berhasil dibukukan dengan No. BKU ${json.data?.no_bukti || bukuNoBukti
+            : json.data?.message ||
+            `SP2D ${selectedSp2d.no_sp2d} berhasil dibukukan dengan No. BKU ${json.data?.no_bukti || bukuNoBukti
             }.`
         );
         setSelectedSp2d(null);
+        setBukuNoBuktiOut("");
         setIsEditing(false);
         setCurrentStep(3);
         await fetchData();
@@ -414,46 +425,120 @@ function PembukuanSp2dContent({
                 </div>
               </div>
 
-              {!isEditing && (
+              {!isEditing && selectedSp2d && (
                 <button
                   type="button"
                   onClick={() => {
-                    setInputSearch("");
-                    setShowSp2dModal(true);
+                    setSelectedSp2d(null);
+                    setBukuNoBukti("");
+                    setBukuNoBuktiOut("");
+                    setFormError(null);
                   }}
-                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#5E0E14] to-[#88131A] px-4 py-2 text-xs font-bold text-white shadow-md transition hover:opacity-95 cursor-pointer self-start sm:self-auto"
+                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-xs transition hover:bg-slate-50 cursor-pointer self-start sm:self-auto"
                 >
-                  <FileCheck className="h-4 w-4" />
-                  <span>
-                    {selectedSp2d ? "Ganti Dokumen SP2D" : "Pilih Dokumen SP2D"}
-                  </span>
+                  <ArrowLeft className="h-4 w-4" />
+                  <span>Ganti Dokumen SP2D</span>
                 </button>
               )}
             </div>
 
             {!selectedSp2d ? (
-              <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-8 text-center space-y-3">
-                <Receipt className="w-10 h-10 mx-auto text-slate-400" />
-                <div>
-                  <p className="text-xs font-bold text-slate-700">
-                    Belum ada dokumen SP2D Cair yang dipilih
-                  </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Klik tombol <strong>&quot;Pilih Dokumen SP2D&quot;</strong> di kanan
-                    atas untuk menarik data SP2D Cair yang siap dibukukan ke BKU.
-                  </p>
+              <div className="mt-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      value={inputSearch}
+                      onChange={(e) => setInputSearch(e.target.value)}
+                      placeholder="Cari nomor SP2D cair, SPM, atau uraian keperluan..."
+                      className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-[#5E0E14]"
+                    />
+                  </div>
+                  <div className="text-xs font-semibold text-slate-500">
+                    Siap Dibukukan:{" "}
+                    <strong className="text-[#5E0E14]">
+                      {availableSp2dCair.length} SP2D Cair
+                    </strong>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputSearch("");
-                    setShowSp2dModal(true);
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#5E0E14] hover:bg-[#46090E] px-4 py-2 text-xs font-bold text-white shadow-xs transition cursor-pointer"
-                >
-                  <FileCheck className="h-4 w-4" />
-                  <span>Pilih Dokumen SP2D ({availableSp2dCair.length} Tersedia)</span>
-                </button>
+
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs text-slate-600">
+                      <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                        <tr>
+                          <th className="px-3.5 py-2.5 text-center w-12">No</th>
+                          <th className="px-3.5 py-2.5 w-48">No. SP2D</th>
+                          <th className="px-3.5 py-2.5 w-28">Tgl. Cair</th>
+                          <th className="px-3.5 py-2.5 w-44">No. SPM</th>
+                          <th className="px-3.5 py-2.5">Keperluan Belanja</th>
+                          <th className="px-3.5 py-2.5 text-right w-36">Nilai SP2D</th>
+                          <th className="px-3.5 py-2.5 text-center w-32">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {availableSp2dCair.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={7}
+                              className="py-12 text-center text-xs text-slate-400"
+                            >
+                              <BadgeCheck className="w-10 h-10 mx-auto mb-2 text-teal-400" />
+                              Seluruh SP2D yang berstatus CAIR telah dibukukan!
+                            </td>
+                          </tr>
+                        ) : (
+                          availableSp2dCair.map((s, idx) => (
+                            <tr
+                              key={s.id}
+                              className="hover:bg-slate-50/80 transition-colors"
+                            >
+                              <td className="px-3.5 py-3 text-center text-slate-400 font-mono">
+                                {idx + 1}
+                              </td>
+                              <td className="px-3.5 py-3">
+                                <div className="font-mono font-bold text-slate-900">
+                                  {s.no_sp2d}
+                                </div>
+                                <span className="inline-block mt-0.5 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-[#88131A] border border-rose-200">
+                                  SP2D {s.jenis_sp2d.replace(/_/g, " ")}
+                                </span>
+                              </td>
+                              <td className="px-3.5 py-3 text-slate-700 whitespace-nowrap">
+                                {s.tgl_cair
+                                  ? new Date(s.tgl_cair).toLocaleDateString("id-ID")
+                                  : "-"}
+                              </td>
+                              <td className="px-3.5 py-3 text-slate-700 font-mono text-[11px]">
+                                {s.no_spm}
+                              </td>
+                              <td
+                                className="px-3.5 py-3 max-w-xs text-slate-700 line-clamp-2"
+                                title={s.keperluan}
+                              >
+                                {s.keperluan}
+                              </td>
+                              <td className="px-3.5 py-3 text-right font-mono font-bold text-emerald-700 whitespace-nowrap">
+                                {formatRupiah(s.nilai)}
+                              </td>
+                              <td className="px-3.5 py-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSelectSp2dForBuku(s)}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#5E0E14] hover:bg-[#46090E] text-white text-xs font-bold shadow-xs transition-colors cursor-pointer whitespace-nowrap"
+                                >
+                                  <span>Pilih &amp; Bukukan</span>
+                                  <ArrowRight className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="mt-5 space-y-5">
@@ -461,9 +546,7 @@ function PembukuanSp2dContent({
                 <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-700">
-                      {isUpTuGu
-                        ? "Nomor BKU (Bukti Penerimaan Kas)"
-                        : "Nomor BKU (Bukti Kas Keluar)"}{" "}
+                      Nomor BKU Penerimaan{" "}
                       <span className="text-rose-500">*</span>
                     </label>
                     <input
@@ -597,11 +680,6 @@ function PembukuanSp2dContent({
                   <h3 className="text-base font-bold text-slate-900">
                     Rincian Rekening SP2D
                   </h3>
-                  <p className="text-xs text-slate-500">
-                    {isUpTuGu
-                      ? "Daftar rincian SP2D UP/GU/TU sumber (informasi referensi)."
-                      : "Daftar rincian rekening belanja yang akan dibukukan ke trdtransout."}
-                  </p>
                 </div>
                 <div className="text-right">
                   <span className="text-[11px] text-slate-500">Total Rincian:</span>
@@ -1018,14 +1096,13 @@ function PembukuanSp2dContent({
                       <div className="font-mono font-bold text-slate-900">
                         {item.pembukuan?.no_bukti || "-"}
                       </div>
-                      <div className="mt-0.5">
-                        {item.isUpTuGu ? (
-                          <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
-                            Penerimaan
-                          </span>
-                        ) : (
-                          <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-[#88131A] border border-rose-200">
-                            Pengeluaran
+                      <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                        <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                          Trans In
+                        </span>
+                        {!item.isUpTuGu && item.pembukuan?.no_bukti_out && (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-[#88131A] border border-rose-200 font-mono">
+                            Out: {item.pembukuan.no_bukti_out}
                           </span>
                         )}
                       </div>

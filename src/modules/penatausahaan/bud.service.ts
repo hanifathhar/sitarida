@@ -46,6 +46,7 @@ export interface PenerimaanInput {
   sumber_dana?: string | null;
   nama_penyetor?: string | null;
   alamat_penyetor?: string | null;
+  jns_transaksi?: string | null;
   nama_bank?: string | null;
   rek_bank?: string | null;
   nilai?: number;
@@ -217,8 +218,7 @@ export const budService = {
             sumber_dana: payload.sumber_dana || "PAD",
             nama_penyetor: payload.nama_penyetor,
             alamat_penyetor: payload.alamat_penyetor,
-            nama_bank: payload.nama_bank,
-            rek_bank: payload.rek_bank,
+            jns_transaksi: payload.jns_transaksi ?? payload.nama_bank,
             nilai: new Prisma.Decimal(totalNilai),
             status: payload.status || "TERIMA",
             keterangan: payload.keterangan,
@@ -267,8 +267,7 @@ export const budService = {
           sumber_dana: payload.sumber_dana || "PAD",
           nama_penyetor: payload.nama_penyetor,
           alamat_penyetor: payload.alamat_penyetor,
-          nama_bank: payload.nama_bank,
-          rek_bank: payload.rek_bank,
+          jns_transaksi: payload.jns_transaksi ?? payload.nama_bank,
           nilai: new Prisma.Decimal(totalNilai),
           status: payload.status || "TERIMA",
           keterangan: payload.keterangan,
@@ -547,7 +546,7 @@ export const budService = {
         debit: Number(item.nilai) || 0,
         kredit: 0,
         sumber_dana: item.sumber_dana,
-        no_rek: item.rek_bank,
+        no_rek: "-",
       });
     });
 

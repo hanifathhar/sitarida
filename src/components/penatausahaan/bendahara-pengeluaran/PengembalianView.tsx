@@ -65,8 +65,7 @@ interface BookedPengembalianItem {
   no_sts: string | null;
   tgl_sts: string | null;
   nama_penyetor: string | null;
-  nama_bank: string | null;
-  rek_bank: string | null;
+  jns_transaksi: string | null;
   uraian: string;
   nilai: number;
   status: string;
@@ -217,7 +216,7 @@ function PengembalianContent({
         ? new Date(item.tgl_bukti).toISOString().split("T")[0]
         : new Date().toISOString().split("T")[0]
     );
-    setSelectedNoSp2d(item.rek_bank || "");
+    setSelectedNoSp2d("");
     setUraian(item.uraian || "");
     setFormError(null);
     setSuccessMsg(null);
@@ -619,7 +618,7 @@ function PengembalianContent({
             <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
               <FileText className="w-4 h-4 text-[#88131A]" />
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                1. Ringkasan Pengembalian Belanja (trhkasin)
+                1. Ringkasan Pengembalian Belanja
               </h3>
             </div>
 
@@ -634,7 +633,7 @@ function PengembalianContent({
                   value={
                     editingItem
                       ? editingItem.no_bukti
-                      : "Otomatis: [no_urut]/[kd_unit]/2026"
+                      : "Otomatis"
                   }
                   className="w-full px-3 py-2 text-xs font-mono font-bold rounded-xl border border-slate-200 bg-slate-100 text-slate-700"
                 />

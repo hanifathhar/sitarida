@@ -36,13 +36,20 @@ export async function GET(req: NextRequest) {
       : session.tahunAnggaran || 2026;
 
     if (action === "next-bku" && opdId) {
-      const kdUnitOrSkpd = searchParams.get("kdUnitOrSkpd") || kd_unit || undefined;
-      const bkuRes = await bendaharaPengeluaranService.getNextBkuNumber({
+      const kdUnitOrSkpd = searchParams.get("kdUnitOrSkpd") || kd_unit || "1.01.2.22.0.00.01.0000";
+      const nextSeq = await bendaharaPengeluaranService.getNextBkuSeq({
         tahunAnggaran,
         opdId,
-        kdUnitOrSkpd,
       });
-      return NextResponse.json({ success: true, ...bkuRes });
+      const unitPart = kdUnitOrSkpd.replace(/[^a-zA-Z0-9.-]/g, "");
+      const generatedNoBku = `${String(nextSeq).padStart(5, "0")}/${unitPart}/${tahunAnggaran}`;
+      const generatedNoBkuOut = `${String(nextSeq + 1).padStart(5, "0")}/${unitPart}/${tahunAnggaran}`;
+      return NextResponse.json({
+        success: true,
+        nextSeq,
+        generatedNoBku,
+        generatedNoBkuOut,
+      });
     }
 
     const data = await bendaharaPengeluaranService.getPembukuanSp2dList({
