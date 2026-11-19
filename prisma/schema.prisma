@@ -768,6 +768,7 @@ model Trhspp {
   nilai           Decimal   @default(0) @db.Decimal(18, 2)
   no_spd          String?
   tgl_spd         DateTime?
+  no_lpj          String?
   nama_penerima   String?
   bank_penerima   String?
   rek_penerima    String?
@@ -795,6 +796,7 @@ model Trhspp {
   @@index([tahunAnggaran, kd_skpd])
   @@index([jenis_spp])
   @@index([status])
+  @@index([no_lpj])
   @@map("trhspp")
 }
 
@@ -846,6 +848,7 @@ model Trhspm {
   nilai_bersih    Decimal   @default(0) @db.Decimal(18, 2)
   no_spd          String?
   tgl_spd         DateTime?
+  no_lpj          String?
   nama_penerima   String?
   bank_penerima   String?
   rek_penerima    String?
@@ -1041,16 +1044,21 @@ model Trhtransout {
   uraian          String         @db.Text
   total           Decimal        @default(0) @db.Decimal(18, 2)
   status          String         @default("POSTING") // DRAFT, POSTING, BATAL
+  lpjId           String?
+  no_lpj          String?
+  status_lpj      String?        @default("BELUM_LPJ") // BELUM_LPJ, SUDAH_LPJ
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
   opd             Opd            @relation(fields: [opdId], references: [id], onDelete: Cascade)
+  lpj             Trlpj?         @relation(fields: [lpjId], references: [id], onDelete: SetNull)
   rincian         Trdtransout[]
 
   @@unique([tahunAnggaran, no_bukti])
   @@index([tahunAnggaran, kd_skpd])
   @@index([tgl_bukti])
   @@index([no_sp2d])
+  @@index([lpjId])
   @@map("trhtransout")
 }
 
@@ -1283,23 +1291,29 @@ model Trlpj {
   tgl_awal        DateTime    // Rentang awal transaksi
   tgl_akhir       DateTime    // Rentang akhir transaksi
   jenis_lpj       String      // UP, GU, TU, KKPD
+  no_sp2d         String?
   kd_skpd         String
   nm_skpd         String
   opdId           String
   kd_unit         String?
   nm_unit         String?
   unitKerjaId     String?
+  no_bukti        String
+  tgl_bukti       String
+  kd_sub_kegiatan String
+  nm_sub_kegiatan String
+  kd_rek6         String
+  nm_rek6         String
+  nilai           Decimal     @default(0) @db.Decimal(18, 2)
   keterangan      String      @db.Text
-  total_belanja   Decimal     @default(0) @db.Decimal(18, 2)
-  total_potongan  Decimal     @default(0) @db.Decimal(18, 2)
-  total_bersih    Decimal     @default(0) @db.Decimal(18, 2)
   status          String      @default("DRAFT") // DRAFT, DIAJUKAN, DISETUJUI, DITOLAK
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
   opd             Opd         @relation(fields: [opdId], references: [id], onDelete: Cascade)
+  transouts       Trhtransout[]
 
-  @@unique([tahunAnggaran, no_lpj])
+  @@index([tahunAnggaran, no_lpj])
   @@index([tahunAnggaran, kd_skpd])
   @@index([jenis_lpj])
   @@map("trlpj")

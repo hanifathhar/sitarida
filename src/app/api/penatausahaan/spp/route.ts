@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import {
+  getAvailableLpjForSpp,
   getSppScopeData,
   listSppByScope,
   saveSpp,
@@ -18,6 +19,7 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
+    const action = searchParams.get("action");
     const scopeOnly = searchParams.get("scope") === "true";
 
     if (scopeOnly) {
@@ -31,6 +33,7 @@ export async function GET(req: NextRequest) {
     const tahunParam = searchParams.get("tahun");
     const opdId = searchParams.get("opdId");
     const unitKerjaId = searchParams.get("unitKerjaId") || undefined;
+    const kd_unit = searchParams.get("kd_unit") || undefined;
     const jenisSpp = searchParams.get("jenisSpp") || undefined;
     const search = searchParams.get("q") || undefined;
     const status = searchParams.get("status") || undefined;
@@ -44,6 +47,18 @@ export async function GET(req: NextRequest) {
         { success: false, error: "Parameter opdId wajib disertakan" },
         { status: 400 }
       );
+    }
+
+    if (action === "available-lpj") {
+      const include_no_lpj = searchParams.get("include_no_lpj") || undefined;
+      const lpjs = await getAvailableLpjForSpp({
+        tahunAnggaran,
+        opdId,
+        kd_unit: kd_unit === "ALL" ? undefined : kd_unit,
+        jenis_spp: jenisSpp || "GU",
+        include_no_lpj,
+      });
+      return NextResponse.json({ success: true, data: lpjs });
     }
 
     const result = await listSppByScope({

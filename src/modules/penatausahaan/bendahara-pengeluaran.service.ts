@@ -1817,6 +1817,11 @@ export const bendaharaPengeluaranService = {
       if (!existing) {
         throw new Error("Data pembukuan SPJ tidak ditemukan.");
       }
+      if (existing.status_lpj === "SUDAH_LPJ" || existing.no_lpj) {
+        throw new Error(
+          `Transaksi ini sudah di-LPJ-kan (No. LPJ: ${existing.no_lpj || "-"}) sehingga tidak dapat diubah atau dihapus.`
+        );
+      }
 
       let nextSp2dNo = existing.no_sp2d;
       let nextSp2dTgl = existing.tgl_sp2d;
@@ -1899,6 +1904,11 @@ export const bendaharaPengeluaranService = {
       });
       if (!existing) {
         throw new Error("Data pembukuan SPJ tidak ditemukan.");
+      }
+      if (existing.status_lpj === "SUDAH_LPJ" || existing.no_lpj) {
+        throw new Error(
+          `Transaksi ini sudah di-LPJ-kan (No. LPJ: ${existing.no_lpj || "-"}) sehingga tidak dapat diubah atau dihapus.`
+        );
       }
 
       // Hapus penerimaan & penyetoran potongan otomatis terkait kuitansi ini (jika ada)
@@ -3371,7 +3381,8 @@ export const bendaharaPengeluaranService = {
   async getLpjList(params: {
     tahunAnggaran: number;
     opdId?: string;
-    jenis_lpj?: string; // "UP", "GU", "TU", "KKPD"
+    kd_unit?: string;
+    jenis_lpj?: string; // "REGULAR" | "UP" | "GU" | "TU" | "KKPD"
   }) {
     const where: Prisma.TrlpjWhereInput = {
       tahunAnggaran: params.tahunAnggaran,
@@ -3379,17 +3390,251 @@ export const bendaharaPengeluaranService = {
     if (params.opdId && params.opdId !== "ALL") {
       where.opdId = params.opdId;
     }
-    if (params.jenis_lpj && params.jenis_lpj !== "ALL") {
+    if (params.kd_unit && params.kd_unit !== "ALL") {
+      where.kd_unit = params.kd_unit;
+    }
+    if (params.jenis_lpj === "REGULAR") {
+      where.jenis_lpj = { in: ["UP", "GU", "TU"] };
+    } else if (params.jenis_lpj && params.jenis_lpj !== "ALL") {
       where.jenis_lpj = params.jenis_lpj;
     }
 
-    return await prisma.trlpj.findMany({
+    const rows = await prisma.trlpj.findMany({
       where,
       include: {
         opd: { select: { kd_skpd: true, nm_skpd: true } },
       },
-      orderBy: { tgl_lpj: "desc" },
+      orderBy: [{ tgl_lpj: "desc" }, { no_lpj: "desc" }, { no_bukti: "asc" }],
     });
+
+    const sp2dNos = Array.from(
+      new Set(rows.map((r) => r.no_sp2d).filter(Boolean) as string[])
+    );
+    const lpjNos = Array.from(new Set(rows.map((r) => r.no_lpj)));
+    const sp2dMap = new Map<string, number>();
+    const sppByLpjMap = new Map<string, string>();
+
+    const [sp2ds, linkedSpps] = await Promise.all([
+      sp2dNos.length > 0
+        ? prisma.trhsp2d.findMany({
+            where: { tahunAnggaran: params.tahunAnggaran, no_sp2d: { in: sp2dNos } },
+            select: { no_sp2d: true, nilai: true },
+          })
+        : Promise.resolve([]),
+      lpjNos.length > 0
+        ? prisma.trhspp.findMany({
+            where: {
+              tahunAnggaran: params.tahunAnggaran,
+              no_lpj: { in: lpjNos },
+              status: { notIn: ["DITOLAK", "BATAL"] },
+            },
+            select: { no_lpj: true, no_spp: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    sp2ds.forEach((s) => sp2dMap.set(s.no_sp2d, Number(s.nilai) || 0));
+    linkedSpps.forEach((s) => {
+      if (s.no_lpj) sppByLpjMap.set(s.no_lpj, s.no_spp);
+    });
+
+    const grouped = new Map<string, any>();
+    for (const r of rows) {
+      const existing = grouped.get(r.no_lpj);
+      const val = Number(r.nilai) || 0;
+      const detail = {
+        id: r.id,
+        no_bukti: r.no_bukti,
+        tgl_bukti: r.tgl_bukti,
+        kd_sub_kegiatan: r.kd_sub_kegiatan,
+        nm_sub_kegiatan: r.nm_sub_kegiatan,
+        kd_rek6: r.kd_rek6,
+        nm_rek6: r.nm_rek6,
+        nilai: val,
+        keterangan: r.keterangan,
+      };
+      if (!existing) {
+        grouped.set(r.no_lpj, {
+          id: r.id,
+          no_lpj: r.no_lpj,
+          tgl_lpj: r.tgl_lpj,
+          tgl_awal: r.tgl_awal,
+          tgl_akhir: r.tgl_akhir,
+          jenis_lpj: r.jenis_lpj,
+          no_sp2d: r.no_sp2d || null,
+          sp2d_nilai: r.no_sp2d ? sp2dMap.get(r.no_sp2d) || 0 : 0,
+          no_spp: sppByLpjMap.get(r.no_lpj) || null,
+          isLockedBySpp: sppByLpjMap.has(r.no_lpj),
+          kd_skpd: r.kd_skpd,
+          nm_skpd: r.nm_skpd,
+          kd_unit: r.kd_unit,
+          nm_unit: r.nm_unit,
+          keterangan: r.keterangan,
+          status:
+            sppByLpjMap.has(r.no_lpj) && r.status === "DRAFT"
+              ? "DIAJUKAN"
+              : r.status,
+          total_belanja: val,
+          total_potongan: 0,
+          total_bersih: val,
+          rincian: [detail],
+        });
+      } else {
+        existing.total_belanja += val;
+        existing.total_bersih += val;
+        existing.rincian.push(detail);
+      }
+    }
+
+    return Array.from(grouped.values());
+  },
+
+  async getNextNoLpj(
+    params: {
+      tahunAnggaran: number;
+      opdId: string;
+      kdUnitOrSkpd?: string;
+    },
+    tx?: Prisma.TransactionClient
+  ) {
+    const db = tx || prisma;
+    const distinctLpjs = await db.trlpj.findMany({
+      where: { tahunAnggaran: params.tahunAnggaran, opdId: params.opdId },
+      distinct: ["no_lpj"],
+      select: { no_lpj: true },
+    });
+
+    let maxSeq = 0;
+    for (const item of distinctLpjs) {
+      const firstPart = String(item.no_lpj || "").split("/")[0];
+      const num = parseInt(firstPart, 10);
+      if (!isNaN(num) && num > maxSeq) {
+        maxSeq = num;
+      }
+    }
+
+    const nextSeq = maxSeq + 1;
+    const urut = String(nextSeq).padStart(5, "0");
+    const unitPart = (params.kdUnitOrSkpd || "1.01.2.22.0.00.01.0000").replace(
+      /[^a-zA-Z0-9.-]/g,
+      ""
+    );
+    const generatedNoLpj = `${urut}/${unitPart}/LPJ/${params.tahunAnggaran}`;
+
+    return { nextSeq, generatedNoLpj };
+  },
+
+  async getAvailableSp2dForLpj(params: {
+    tahunAnggaran: number;
+    opdId: string;
+    kd_unit?: string;
+    jenis_lpj: string;
+  }) {
+    const jenisUpper = (params.jenis_lpj || "GU").toUpperCase();
+    const jenisVariants =
+      jenisUpper === "KKPD"
+        ? ["UP_KKPD", "GU_KKPD", "KKPD"]
+        : [jenisUpper];
+
+    const where: Prisma.Trhsp2dWhereInput = {
+      tahunAnggaran: params.tahunAnggaran,
+      opdId: params.opdId,
+      status: "CAIR",
+      jenis_sp2d: { in: jenisVariants },
+    };
+    if (params.kd_unit && params.kd_unit !== "ALL") {
+      where.kd_unit = params.kd_unit;
+    }
+
+    const sp2ds = await prisma.trhsp2d.findMany({
+      where,
+      select: {
+        id: true,
+        no_sp2d: true,
+        tgl_sp2d: true,
+        jenis_sp2d: true,
+        keperluan: true,
+        nilai: true,
+      },
+      orderBy: [{ tgl_cair: "desc" }, { no_sp2d: "desc" }],
+    });
+
+    return sp2ds.map((s) => ({
+      ...s,
+      nilai: Number(s.nilai) || 0,
+    }));
+  },
+
+  async getAvailableTransoutForLpj(params: {
+    tahunAnggaran: number;
+    opdId: string;
+    kd_unit?: string;
+    tgl_awal: string;
+    tgl_akhir: string;
+    jenis_lpj: string;
+    no_sp2d?: string;
+    include_no_lpj?: string;
+  }) {
+    const start = new Date(params.tgl_awal);
+    const end = new Date(params.tgl_akhir);
+    end.setUTCHours(23, 59, 59, 999);
+
+    const jenisUpper = (params.jenis_lpj || "GU").toUpperCase();
+    const jenisVariants =
+      jenisUpper === "KKPD"
+        ? ["KKPD", "UP_KKPD", "GU_KKPD"]
+        : [jenisUpper];
+
+    const unlinkedCondition: Prisma.TrhtransoutWhereInput = {
+      lpjId: null,
+      no_lpj: null,
+      OR: [{ status_lpj: null }, { status_lpj: { not: "SUDAH_LPJ" } }],
+    };
+
+    const where: Prisma.TrhtransoutWhereInput = {
+      tahunAnggaran: params.tahunAnggaran,
+      opdId: params.opdId,
+      status: { not: "BATAL" },
+      ...(params.include_no_lpj
+        ? { OR: [unlinkedCondition, { no_lpj: params.include_no_lpj }] }
+        : unlinkedCondition),
+      tgl_bukti: {
+        gte: start,
+        lte: end,
+      },
+      jenis_beban: { in: jenisVariants },
+    };
+
+    if (params.kd_unit && params.kd_unit !== "ALL") {
+      where.kd_unit = params.kd_unit;
+    }
+    if (params.no_sp2d && params.no_sp2d.trim()) {
+      where.no_sp2d = params.no_sp2d.trim();
+    }
+
+    const list = await prisma.trhtransout.findMany({
+      where,
+      include: { rincian: true },
+      orderBy: [{ tgl_bukti: "asc" }, { no_bukti: "asc" }],
+    });
+
+    return list.map((h) => ({
+      id: h.id,
+      no_bukti: h.no_bukti,
+      tgl_bukti: h.tgl_bukti,
+      jenis_beban: h.jenis_beban,
+      no_lpj: h.no_lpj || null,
+      uraian: h.uraian,
+      total: Number(h.total) || 0,
+      rincian: h.rincian.map((d) => ({
+        id: d.id,
+        kd_sub_kegiatan: d.kd_sub_kegiatan || "-",
+        nm_sub_kegiatan: d.nm_sub_kegiatan || "-",
+        kd_rek6: d.kd_rek6,
+        nm_rek6: d.nm_rek6,
+        nilai: Number(d.nilai) || 0,
+        keterangan: d.keterangan || h.uraian,
+      })),
+    }));
   },
 
   async saveLpj(payload: {
@@ -3397,12 +3642,15 @@ export const bendaharaPengeluaranService = {
     opdId: string;
     kd_unit?: string;
     nm_unit?: string;
+    unitKerjaId?: string;
     no_lpj?: string;
+    no_sp2d?: string;
     tgl_lpj: string | Date;
     tgl_awal: string | Date;
     tgl_akhir: string | Date;
     jenis_lpj: string;
     keterangan: string;
+    transoutIds?: string[];
   }) {
     const opd = await prisma.opd.findUnique({
       where: { id: payload.opdId },
@@ -3410,50 +3658,306 @@ export const bendaharaPengeluaranService = {
     });
     if (!opd) throw new Error("OPD tidak valid");
 
-    let noLpj = payload.no_lpj?.trim();
-    if (!noLpj) {
-      const count = await prisma.trlpj.count({
-        where: { tahunAnggaran: payload.tahunAnggaran, opdId: opd.id },
-      });
-      const urut = String(count + 1).padStart(5, "0");
-      const unitPart = (payload.kd_unit || opd.kd_skpd).replace(/[^a-zA-Z0-9.-]/g, "");
-      noLpj = `${urut}/${unitPart}/LPJ-${payload.jenis_lpj}/${payload.tahunAnggaran}`;
+    const selectedIds = payload.transoutIds || [];
+    if (selectedIds.length === 0) {
+      throw new Error("Pilih minimal 1 transaksi SPJ untuk dibuatkan LPJ.");
     }
 
-    // Ambil transaksi pengeluaran pada rentang tanggal tersebut
-    const trans = await prisma.trhtransout.aggregate({
+    return await prisma.$transaction(async (tx) => {
+      const transouts = await tx.trhtransout.findMany({
+        where: {
+          id: { in: selectedIds },
+          tahunAnggaran: payload.tahunAnggaran,
+          opdId: opd.id,
+        },
+        include: { rincian: true },
+        orderBy: [{ tgl_bukti: "asc" }, { no_bukti: "asc" }],
+      });
+
+      if (transouts.length === 0) {
+        throw new Error("Transaksi pengeluaran yang dipilih tidak ditemukan.");
+      }
+
+      const alreadyLpj = transouts.find(
+        (t) => t.status_lpj === "SUDAH_LPJ" || Boolean(t.no_lpj) || Boolean(t.lpjId)
+      );
+      if (alreadyLpj) {
+        throw new Error(
+          `Transaksi ${alreadyLpj.no_bukti} sudah pernah di-LPJ-kan (${alreadyLpj.no_lpj || "-"}) dan tidak dapat di-LPJ-kan kembali.`
+        );
+      }
+
+      let noLpj = payload.no_lpj?.trim();
+      if (!noLpj) {
+        const { generatedNoLpj } = await this.getNextNoLpj(
+          {
+            tahunAnggaran: payload.tahunAnggaran,
+            opdId: opd.id,
+            kdUnitOrSkpd: payload.kd_unit || opd.kd_skpd,
+          },
+          tx
+        );
+        noLpj = generatedNoLpj;
+      }
+
+      const tglLpj = new Date(payload.tgl_lpj);
+      const tglAwal = new Date(payload.tgl_awal);
+      const tglAkhir = new Date(payload.tgl_akhir);
+
+      let firstLpjId: string | null = null;
+      let totalInserted = 0;
+
+      for (const h of transouts) {
+        const tglBuktiStr = new Date(h.tgl_bukti).toISOString().split("T")[0];
+        const details =
+          h.rincian.length > 0
+            ? h.rincian
+            : [
+                {
+                  kd_sub_kegiatan: "-",
+                  nm_sub_kegiatan: "-",
+                  kd_rek6: "-",
+                  nm_rek6: h.uraian,
+                  nilai: h.total,
+                  keterangan: h.uraian,
+                },
+              ];
+
+        for (const d of details) {
+          const created = await tx.trlpj.create({
+            data: {
+              tahunAnggaran: payload.tahunAnggaran,
+              no_lpj: noLpj,
+              tgl_lpj: tglLpj,
+              tgl_awal: tglAwal,
+              tgl_akhir: tglAkhir,
+              jenis_lpj: payload.jenis_lpj,
+              no_sp2d: payload.no_sp2d?.trim() || h.no_sp2d || null,
+              kd_skpd: h.kd_skpd || opd.kd_skpd,
+              nm_skpd: h.nm_skpd || opd.nm_skpd,
+              opdId: opd.id,
+              kd_unit: h.kd_unit || payload.kd_unit || null,
+              nm_unit: h.nm_unit || payload.nm_unit || null,
+              unitKerjaId: h.unitKerjaId || payload.unitKerjaId || null,
+              no_bukti: h.no_bukti,
+              tgl_bukti: tglBuktiStr,
+              kd_sub_kegiatan: d.kd_sub_kegiatan || "-",
+              nm_sub_kegiatan: d.nm_sub_kegiatan || "-",
+              kd_rek6: d.kd_rek6,
+              nm_rek6: d.nm_rek6,
+              nilai: d.nilai,
+              keterangan: payload.keterangan || d.keterangan || h.uraian,
+              status: "DRAFT",
+            },
+          });
+          if (!firstLpjId) firstLpjId = created.id;
+          totalInserted += 1;
+        }
+      }
+
+      await tx.trhtransout.updateMany({
+        where: { id: { in: transouts.map((t) => t.id) } },
+        data: {
+          lpjId: firstLpjId,
+          no_lpj: noLpj,
+          status_lpj: "SUDAH_LPJ",
+        },
+      });
+
+      return { no_lpj: noLpj, count: totalInserted };
+    });
+  },
+
+  async updateLpj(payload: {
+    tahunAnggaran: number;
+    original_no_lpj: string;
+    opdId: string;
+    kd_unit?: string;
+    nm_unit?: string;
+    unitKerjaId?: string;
+    no_lpj?: string;
+    no_sp2d?: string;
+    tgl_lpj: string | Date;
+    tgl_awal: string | Date;
+    tgl_akhir: string | Date;
+    jenis_lpj: string;
+    keterangan: string;
+    transoutIds?: string[];
+  }) {
+    const opd = await prisma.opd.findUnique({
+      where: { id: payload.opdId },
+      select: { id: true, kd_skpd: true, nm_skpd: true },
+    });
+    if (!opd) throw new Error("OPD tidak valid");
+
+    const selectedIds = payload.transoutIds || [];
+    if (selectedIds.length === 0) {
+      throw new Error("Pilih minimal 1 transaksi SPJ untuk LPJ ini.");
+    }
+
+    const linkedSpp = await prisma.trhspp.findFirst({
       where: {
         tahunAnggaran: payload.tahunAnggaran,
-        opdId: opd.id,
-        tgl_bukti: {
-          gte: new Date(payload.tgl_awal),
-          lte: new Date(payload.tgl_akhir),
-        },
+        no_lpj: payload.original_no_lpj,
+        status: { notIn: ["DITOLAK", "BATAL"] },
       },
-      _sum: { total: true },
+      select: { no_spp: true },
     });
+    if (linkedSpp) {
+      throw new Error(
+        `LPJ ${payload.original_no_lpj} sudah dibuatkan SPP (${linkedSpp.no_spp}) sehingga terkunci dan tidak dapat diubah.`
+      );
+    }
 
-    const totalBelanja = trans._sum.total ? Number(trans._sum.total) : 0;
+    return await prisma.$transaction(async (tx) => {
+      // 1. Lepas ikatan lama
+      await tx.trhtransout.updateMany({
+        where: {
+          tahunAnggaran: payload.tahunAnggaran,
+          no_lpj: payload.original_no_lpj,
+        },
+        data: {
+          lpjId: null,
+          no_lpj: null,
+          status_lpj: "BELUM_LPJ",
+        },
+      });
 
-    return await prisma.trlpj.create({
-      data: {
-        tahunAnggaran: payload.tahunAnggaran,
-        no_lpj: noLpj,
-        tgl_lpj: new Date(payload.tgl_lpj),
-        tgl_awal: new Date(payload.tgl_awal),
-        tgl_akhir: new Date(payload.tgl_akhir),
-        jenis_lpj: payload.jenis_lpj,
-        kd_skpd: opd.kd_skpd,
-        nm_skpd: opd.nm_skpd,
-        opdId: opd.id,
-        kd_unit: payload.kd_unit,
-        nm_unit: payload.nm_unit,
-        keterangan: payload.keterangan,
-        total_belanja: new Prisma.Decimal(totalBelanja),
-        total_potongan: new Prisma.Decimal(0),
-        total_bersih: new Prisma.Decimal(totalBelanja),
-        status: "DRAFT",
+      // 2. Hapus baris trlpj lama
+      await tx.trlpj.deleteMany({
+        where: {
+          tahunAnggaran: payload.tahunAnggaran,
+          no_lpj: payload.original_no_lpj,
+        },
+      });
+
+      // 3. Validasi & insert ulang
+      const transouts = await tx.trhtransout.findMany({
+        where: {
+          id: { in: selectedIds },
+          tahunAnggaran: payload.tahunAnggaran,
+          opdId: opd.id,
+        },
+        include: { rincian: true },
+        orderBy: [{ tgl_bukti: "asc" }, { no_bukti: "asc" }],
+      });
+
+      if (transouts.length === 0) {
+        throw new Error("Transaksi pengeluaran yang dipilih tidak ditemukan.");
+      }
+
+      const alreadyLpj = transouts.find(
+        (t) => t.status_lpj === "SUDAH_LPJ" || Boolean(t.no_lpj) || Boolean(t.lpjId)
+      );
+      if (alreadyLpj) {
+        throw new Error(
+          `Transaksi ${alreadyLpj.no_bukti} sudah terdaftar di LPJ lain (${alreadyLpj.no_lpj || "-"}).`
+        );
+      }
+
+      const noLpj = payload.no_lpj?.trim() || payload.original_no_lpj;
+      const tglLpj = new Date(payload.tgl_lpj);
+      const tglAwal = new Date(payload.tgl_awal);
+      const tglAkhir = new Date(payload.tgl_akhir);
+
+      let firstLpjId: string | null = null;
+      let totalInserted = 0;
+
+      for (const h of transouts) {
+        const tglBuktiStr = new Date(h.tgl_bukti).toISOString().split("T")[0];
+        const details =
+          h.rincian.length > 0
+            ? h.rincian
+            : [
+                {
+                  kd_sub_kegiatan: "-",
+                  nm_sub_kegiatan: "-",
+                  kd_rek6: "-",
+                  nm_rek6: h.uraian,
+                  nilai: h.total,
+                  keterangan: h.uraian,
+                },
+              ];
+
+        for (const d of details) {
+          const created = await tx.trlpj.create({
+            data: {
+              tahunAnggaran: payload.tahunAnggaran,
+              no_lpj: noLpj,
+              tgl_lpj: tglLpj,
+              tgl_awal: tglAwal,
+              tgl_akhir: tglAkhir,
+              jenis_lpj: payload.jenis_lpj,
+              no_sp2d: payload.no_sp2d?.trim() || h.no_sp2d || null,
+              kd_skpd: h.kd_skpd || opd.kd_skpd,
+              nm_skpd: h.nm_skpd || opd.nm_skpd,
+              opdId: opd.id,
+              kd_unit: h.kd_unit || payload.kd_unit || null,
+              nm_unit: h.nm_unit || payload.nm_unit || null,
+              unitKerjaId: h.unitKerjaId || payload.unitKerjaId || null,
+              no_bukti: h.no_bukti,
+              tgl_bukti: tglBuktiStr,
+              kd_sub_kegiatan: d.kd_sub_kegiatan || "-",
+              nm_sub_kegiatan: d.nm_sub_kegiatan || "-",
+              kd_rek6: d.kd_rek6,
+              nm_rek6: d.nm_rek6,
+              nilai: d.nilai,
+              keterangan: payload.keterangan || d.keterangan || h.uraian,
+              status: "DRAFT",
+            },
+          });
+          if (!firstLpjId) firstLpjId = created.id;
+          totalInserted += 1;
+        }
+      }
+
+      await tx.trhtransout.updateMany({
+        where: { id: { in: transouts.map((t) => t.id) } },
+        data: {
+          lpjId: firstLpjId,
+          no_lpj: noLpj,
+          status_lpj: "SUDAH_LPJ",
+        },
+      });
+
+      return { no_lpj: noLpj, count: totalInserted };
+    });
+  },
+
+  async deleteLpj(params: { tahunAnggaran: number; no_lpj: string }) {
+    const linkedSpp = await prisma.trhspp.findFirst({
+      where: {
+        tahunAnggaran: params.tahunAnggaran,
+        no_lpj: params.no_lpj,
+        status: { notIn: ["DITOLAK", "BATAL"] },
       },
+      select: { no_spp: true },
+    });
+    if (linkedSpp) {
+      throw new Error(
+        `LPJ ${params.no_lpj} sudah dibuatkan SPP (${linkedSpp.no_spp}) sehingga terkunci dan tidak dapat dihapus.`
+      );
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      await tx.trhtransout.updateMany({
+        where: {
+          tahunAnggaran: params.tahunAnggaran,
+          no_lpj: params.no_lpj,
+        },
+        data: {
+          lpjId: null,
+          no_lpj: null,
+          status_lpj: "BELUM_LPJ",
+        },
+      });
+
+      return await tx.trlpj.deleteMany({
+        where: {
+          tahunAnggaran: params.tahunAnggaran,
+          no_lpj: params.no_lpj,
+        },
+      });
     });
   },
 

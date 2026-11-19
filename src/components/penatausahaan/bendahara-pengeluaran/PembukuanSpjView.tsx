@@ -90,6 +90,8 @@ interface BookedSpjItem {
   uraian: string;
   total: number;
   status: string;
+  no_lpj?: string | null;
+  status_lpj?: string | null;
   rincian?: {
     kd_sub_kegiatan: string;
     nm_sub_kegiatan?: string;
@@ -1280,35 +1282,54 @@ function PembukuanSpjContent({
                       {formatRupiah(Number(item.total))}
                     </td>
                     <td className="px-4 py-3 align-top text-center">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-teal-50 text-teal-800 border border-teal-200 text-[11px] font-bold">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
-                        <span>{item.status}</span>
-                      </span>
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-teal-50 text-teal-800 border border-teal-200 text-[11px] font-bold">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+                          <span>{item.status}</span>
+                        </span>
+                        {(item.status_lpj === "SUDAH_LPJ" || item.no_lpj) && (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 text-[10px] font-bold"
+                            title={item.no_lpj ? `No. LPJ: ${item.no_lpj}` : "Telah di-LPJ-kan"}
+                          >
+                            Telah di-LPJ-kan
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 align-top text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenStep4Edit(item)}
-                          className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors"
-                          title="Edit Pembukuan SPJ"
+                      {item.status_lpj === "SUDAH_LPJ" || item.no_lpj ? (
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 text-slate-500 text-[10px] font-semibold"
+                          title={`Terkunci karena sudah masuk LPJ (${item.no_lpj || "-"})`}
                         >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteItem(item)}
-                          disabled={deletingId === item.id}
-                          className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors disabled:opacity-40"
-                          title="Hapus Pembukuan SPJ"
-                        >
-                          {deletingId === item.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
+                          Terkunci (LPJ)
+                        </span>
+                      ) : (
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenStep4Edit(item)}
+                            className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors"
+                            title="Edit Pembukuan SPJ"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteItem(item)}
+                            disabled={deletingId === item.id}
+                            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors disabled:opacity-40"
+                            title="Hapus Pembukuan SPJ"
+                          >
+                            {deletingId === item.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))

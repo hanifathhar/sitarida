@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import SearchableSelect from "@/components/ui/SearchableSelect";
 import {
   Building2,
   GitBranch,
@@ -192,6 +193,7 @@ export default function SppManagementView({
     keperluan: "",
     no_spd: "",
     tgl_spd: "",
+    no_lpj: "",
     nama_penerima: "",
     bank_penerima: "",
     rek_penerima: "",
@@ -213,6 +215,37 @@ export default function SppManagementView({
   const [formRincian, setFormRincian] = useState<SppRincianItem[]>([]);
   const [loadingForm, setLoadingForm] = useState(false);
   const [savingSpp, setSavingSpp] = useState(false);
+  const [lpjOptions, setLpjOptions] = useState<any[]>([]);
+  const [loadingLpjOptions, setLoadingLpjOptions] = useState(false);
+
+  const isSppGu = jenisSpp === "GU" || jenisSpp === "GU_KKPD";
+
+  async function loadAvailableLpjForSpp(
+    opdId: string,
+    includeNoLpj?: string
+  ) {
+    setLoadingLpjOptions(true);
+    try {
+      const q = new URLSearchParams();
+      q.set("action", "available-lpj");
+      q.set("tahun", String(tahunAnggaran));
+      q.set("opdId", opdId);
+      q.set("jenisSpp", jenisSpp);
+      if (selectedUnit?.kd_unit) q.set("kd_unit", selectedUnit.kd_unit);
+      if (includeNoLpj) q.set("include_no_lpj", includeNoLpj);
+      const res = await fetch(`/api/penatausahaan/spp?${q.toString()}`);
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        setLpjOptions(json.data);
+      } else {
+        setLpjOptions([]);
+      }
+    } catch {
+      setLpjOptions([]);
+    } finally {
+      setLoadingLpjOptions(false);
+    }
+  }
 
   // Rekening Belanja Selector Modal
   const [showRekeningModal, setShowRekeningModal] = useState(false);
@@ -595,6 +628,7 @@ export default function SppManagementView({
       keperluan: `Pembayaran ${title} ${selectedOpd.nm_skpd} Tahun ${tahunAnggaran}`,
       no_spd: "",
       tgl_spd: "",
+      no_lpj: "",
       nama_penerima:
         jenisSpp.startsWith("UP") || jenisSpp.startsWith("GU") || jenisSpp === "TU"
           ? defaultBendahara?.nama
@@ -674,6 +708,9 @@ export default function SppManagementView({
           nilai: 0,
         },
       ]);
+    } else if (jenisSpp === "GU" || jenisSpp === "GU_KKPD") {
+      setFormRincian([]);
+      await loadAvailableLpjForSpp(selectedOpd.id);
     } else {
       setFormRincian([]);
     }
@@ -705,6 +742,7 @@ export default function SppManagementView({
           keperluan: d.keperluan || "",
           no_spd: d.no_spd || "",
           tgl_spd: d.tgl_spd || "",
+          no_lpj: d.no_lpj || "",
           nama_penerima: d.nama_penerima || "",
           bank_penerima: d.bank_penerima || "",
           rek_penerima: d.rek_penerima || "",
@@ -738,6 +776,13 @@ export default function SppManagementView({
             sumberDana: r.sumberDana,
           }))
         );
+
+        if (d.jenis_spp === "GU" || d.jenis_spp === "GU_KKPD") {
+          const targetOpdId = d.opdId || selectedOpd?.id;
+          if (targetOpdId) {
+            await loadAvailableLpjForSpp(targetOpdId, d.no_lpj || undefined);
+          }
+        }
 
         // Jika SPP-TU belum memiliki rincian, set otomatis ke 1.1.01.03.01.0001 Kas di Bendahara Pengeluaran
         if (d.jenis_spp === "TU" && (!d.rincian || d.rincian.length === 0)) {
@@ -993,6 +1038,7 @@ export default function SppManagementView({
         keperluan: formHeader.keperluan.trim(),
         no_spd: formHeader.no_spd.trim() || null,
         tgl_spd: formHeader.tgl_spd || null,
+        no_lpj: formHeader.no_lpj?.trim() || null,
         nama_penerima: formHeader.nama_penerima.trim() || null,
         bank_penerima: formHeader.bank_penerima.trim() || null,
         rek_penerima: formHeader.rek_penerima.trim() || null,
@@ -1532,8 +1578,8 @@ export default function SppManagementView({
                     {st === "ALL"
                       ? "Semua"
                       : st === "TELAH DIBUAT SPM"
-                      ? "Telah SPM"
-                      : st}
+                        ? "Telah SPM"
+                        : st}
                   </button>
                 ))}
               </div>
@@ -1937,6 +1983,68 @@ export default function SppManagementView({
                 />
               </div>
 
+              {isSppGu && (
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Nomor LPJ ({jenisSpp === "GU_KKPD" ? "KKPD" : "GU"}){" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <SearchableSelect
+                    options={lpjOptions.map((l) => ({
+                      value: l.no_lpj,
+                      label: l.keterangan || l.no_lpj,
+                      badge: l.no_lpj,
+                      subLabel: `${new Date(l.tgl_awal).toLocaleDateString(
+                        "id-ID"
+                      )} s/d ${new Date(l.tgl_akhir).toLocaleDateString(
+                        "id-ID"
+                      )} • ${formatRupiah(Number(l.total_nilai) || 0)}`,
+                    }))}
+                    value={formHeader.no_lpj}
+                    disabled={formHeader.isLocked || loadingLpjOptions}
+                    onChange={(val) => {
+                      const chosen = lpjOptions.find((l) => l.no_lpj === val);
+                      if (chosen) {
+                        setFormHeader({
+                          ...formHeader,
+                          no_lpj: chosen.no_lpj,
+                          keperluan:
+                            chosen.keterangan ||
+                            `Penggantian Uang Persediaan (SPP-GU) atas LPJ ${chosen.no_lpj}`,
+                        });
+                        setFormRincian(
+                          (chosen.rincian || []).map((r: any) => ({
+                            kd_program: r.kd_program || "-",
+                            nm_program: r.nm_program || "-",
+                            kd_kegiatan: r.kd_kegiatan || "-",
+                            nm_kegiatan: r.nm_kegiatan || "-",
+                            kd_sub_kegiatan: r.kd_sub_kegiatan,
+                            nm_sub_kegiatan: r.nm_sub_kegiatan,
+                            kd_rek6: r.kd_rek6,
+                            nm_rek6: r.nm_rek6,
+                            nilai: Number(r.nilai) || 0,
+                          }))
+                        );
+                      } else {
+                        setFormHeader({ ...formHeader, no_lpj: "" });
+                        setFormRincian([]);
+                      }
+                    }}
+                    placeholder={
+                      loadingLpjOptions
+                        ? "Memuat daftar LPJ..."
+                        : "-- Pilih Nomor LPJ --"
+                    }
+                    searchPlaceholder="Cari nomor LPJ atau keterangan..."
+                    clearLabel="-- Pilih Nomor LPJ --"
+                    allowClear={!formHeader.isLocked}
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Hanya LPJ yang belum pernah diajukan menjadi SPP yang ditampilkan. Rincian rekening belanja otomatis diringkas dari LPJ terpilih.
+                  </p>
+                </div>
+              )}
+
               {/* Box Informasi Akumulasi Pagu dan Sisa SPD Terpilih */}
               {formHeader.no_spd && selectedSpdInfo && (
                 <div className="md:col-span-3 p-4 rounded-xl border border-blue-200 bg-blue-50/70 space-y-2.5">
@@ -2329,8 +2437,8 @@ export default function SppManagementView({
                   {jenisSpp === "UP" || jenisSpp === "UP_KKPD"
                     ? "Nilai Uang Persediaan ditarik otomatis dari Penetapan UP SKPD"
                     : jenisSpp === "TU"
-                    ? "Rincian otomatis diset ke rekening 1.1.01.03.01.0001 (Kas di Bendahara Pengeluaran), masukkan nilai nominal secara manual"
-                    : "Pilih rekening belanja dari DPA yang telah tersedia alokasi dana pada SPD"}
+                      ? "Rincian otomatis diset ke rekening 1.1.01.03.01.0001 (Kas di Bendahara Pengeluaran), masukkan nilai nominal secara manual"
+                      : "Pilih rekening belanja dari DPA yang telah tersedia alokasi dana pada SPD"}
                 </p>
               </div>
 
@@ -2371,6 +2479,11 @@ export default function SppManagementView({
                   <RotateCcw className="w-3.5 h-3.5" />
                   Reset Rekening Kas
                 </button>
+              ) : isSppGu ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-xl text-xs font-bold">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />
+                  Rincian Otomatis dari LPJ
+                </span>
               ) : (
                 <button
                   type="button"
@@ -2505,7 +2618,7 @@ export default function SppManagementView({
                           <input
                             type="number"
                             min="0"
-                            disabled={formHeader.isLocked}
+                            disabled={formHeader.isLocked || isSppGu}
                             value={item.nilai || ""}
                             onChange={(e) =>
                               handleChangeRincianNilai(
@@ -2513,17 +2626,20 @@ export default function SppManagementView({
                                 Number(e.target.value) || 0
                               )
                             }
-                            className={`w-full px-3 py-1.5 text-xs text-right font-black font-mono rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A] ${
-                              formHeader.isLocked
-                                ? "bg-slate-100 text-slate-500 cursor-not-allowed"
-                                : ""
-                            }`}
+                            className={`w-full px-3 py-1.5 text-xs text-right font-black font-mono rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A] ${formHeader.isLocked || isSppGu
+                              ? "bg-slate-100 text-slate-600 cursor-not-allowed"
+                              : ""
+                              }`}
                           />
                         </td>
                         <td className="py-3 px-3 text-center">
                           {formHeader.isLocked ? (
                             <span className="text-[10px] text-purple-600 font-semibold bg-purple-50 px-2 py-1 rounded border border-purple-100">
                               Terkunci
+                            </span>
+                          ) : isSppGu ? (
+                            <span className="text-[10px] text-indigo-700 font-semibold bg-indigo-50 px-2 py-1 rounded border border-indigo-200">
+                              Otomatis
                             </span>
                           ) : jenisSpp === "UP" || jenisSpp === "UP_KKPD" || jenisSpp === "TU" ? (
                             <span className="text-[10px] text-slate-400 font-semibold bg-slate-100 px-2 py-1 rounded">

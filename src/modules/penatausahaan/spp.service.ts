@@ -36,6 +36,7 @@ export interface SaveSppPayload {
   keperluan: string;
   no_spd?: string | null;
   tgl_spd?: string | null;
+  no_lpj?: string | null;
   nama_penerima?: string | null;
   bank_penerima?: string | null;
   rek_penerima?: string | null;
@@ -429,6 +430,7 @@ export async function saveSpp(data: SaveSppPayload, userNama?: string) {
     keperluan,
     no_spd,
     tgl_spd,
+    no_lpj,
     nama_penerima,
     bank_penerima,
     rek_penerima,
@@ -467,6 +469,7 @@ export async function saveSpp(data: SaveSppPayload, userNama?: string) {
   }
 
   // Validasi jika SPP telah diterbitkan SPM maka data dikunci
+  let previousNoLpj: string | null = null;
   if (id) {
     const existing = await prisma.trhspp.findUnique({
       where: { id },
@@ -485,6 +488,7 @@ export async function saveSpp(data: SaveSppPayload, userNama?: string) {
         }. Data telah dikunci dan tidak dapat diubah.`
       );
     }
+    previousNoLpj = existing?.no_lpj || null;
   }
 
   // Cek duplikasi nomor SPP pada tahun yang sama
@@ -497,6 +501,28 @@ export async function saveSpp(data: SaveSppPayload, userNama?: string) {
   });
   if (existingNo) {
     throw new Error(`Nomor SPP "${no_spp}" sudah digunakan pada Tahun Anggaran ${tahunAnggaran}`);
+  }
+
+  // Validasi khusus SPP GU / GU_KKPD: wajib memilih LPJ dan LPJ belum pernah dibuatkan SPP
+  const isSppGu = jenis_spp === "GU" || jenis_spp === "GU_KKPD";
+  if (isSppGu) {
+    if (!no_lpj || !no_lpj.trim()) {
+      throw new Error("Untuk SPP GU, Nomor LPJ wajib dipilih terlebih dahulu.");
+    }
+    const existingLpjSpp = await prisma.trhspp.findFirst({
+      where: {
+        tahunAnggaran,
+        no_lpj: no_lpj.trim(),
+        status: { notIn: ["DITOLAK", "BATAL"] },
+        ...(id ? { NOT: { id } } : {}),
+      },
+      select: { no_spp: true },
+    });
+    if (existingLpjSpp) {
+      throw new Error(
+        `LPJ "${no_lpj.trim()}" sudah pernah dibuatkan SPP (${existingLpjSpp.no_spp}) dan tidak dapat diajukan menjadi SPP lagi.`
+      );
+    }
   }
 
   const parsedTglSpp = new Date(tgl_spp);
@@ -561,6 +587,7 @@ export async function saveSpp(data: SaveSppPayload, userNama?: string) {
           nilai: totalNilai,
           no_spd: no_spd || null,
           tgl_spd: parsedTglSpd,
+          no_lpj: no_lpj?.trim() || null,
           nama_penerima: nama_penerima || null,
           bank_penerima: bank_penerima || null,
           rek_penerima: rek_penerima || null,
@@ -602,6 +629,7 @@ export async function saveSpp(data: SaveSppPayload, userNama?: string) {
           nilai: totalNilai,
           no_spd: no_spd || null,
           tgl_spd: parsedTglSpd,
+          no_lpj: no_lpj?.trim() || null,
           nama_penerima: nama_penerima || null,
           bank_penerima: bank_penerima || null,
           rek_penerima: rek_penerima || null,
@@ -644,6 +672,20 @@ export async function saveSpp(data: SaveSppPayload, userNama?: string) {
       });
     }
 
+    // Update status LPJ menjadi DIAJUKAN ketika sudah dibuat SPP
+    if (previousNoLpj && previousNoLpj !== no_lpj?.trim()) {
+      await tx.trlpj.updateMany({
+        where: { tahunAnggaran, no_lpj: previousNoLpj },
+        data: { status: "DRAFT" },
+      });
+    }
+    if (isSppGu && no_lpj && no_lpj.trim()) {
+      await tx.trlpj.updateMany({
+        where: { tahunAnggaran, no_lpj: no_lpj.trim() },
+        data: { status: "DIAJUKAN" },
+      });
+    }
+
     return header;
   });
 
@@ -673,8 +715,20 @@ export async function deleteSpp(id: string) {
     );
   }
 
-  await prisma.trhspp.delete({
-    where: { id },
+  await prisma.$transaction(async (tx) => {
+    await tx.trhspp.delete({
+      where: { id },
+    });
+
+    if (spp.no_lpj) {
+      await tx.trlpj.updateMany({
+        where: {
+          tahunAnggaran: spp.tahunAnggaran,
+          no_lpj: spp.no_lpj,
+        },
+        data: { status: "DRAFT" },
+      });
+    }
   });
 
   return { success: true };
@@ -974,6 +1028,180 @@ export async function getNextSppSequence(params: {
   }
 
   return maxSeq + 1;
+}
+
+export async function getAvailableLpjForSpp(params: {
+  tahunAnggaran: number;
+  opdId: string;
+  kd_unit?: string;
+  jenis_spp: string;
+  include_no_lpj?: string;
+}) {
+  const targetJenisList =
+    params.jenis_spp === "GU_KKPD" ? ["KKPD", "UP_KKPD", "GU_KKPD"] : ["UP", "GU"];
+
+  // Ambil no_lpj yang sudah pernah dibuatkan SPP aktif
+  const usedSpps = await prisma.trhspp.findMany({
+    where: {
+      tahunAnggaran: params.tahunAnggaran,
+      no_lpj: { not: null },
+      status: { notIn: ["DITOLAK", "BATAL"] },
+    },
+    select: { no_lpj: true },
+  });
+  const usedSet = new Set(
+    usedSpps
+      .map((s) => s.no_lpj)
+      .filter((n): n is string => Boolean(n) && n !== params.include_no_lpj)
+  );
+
+  const whereLpj: any = {
+    tahunAnggaran: params.tahunAnggaran,
+    opdId: params.opdId,
+    jenis_lpj: { in: targetJenisList },
+  };
+  if (params.kd_unit && params.kd_unit !== "ALL") {
+    whereLpj.OR = [
+      { kd_unit: params.kd_unit },
+      { kd_unit: null },
+      { kd_unit: "" },
+    ];
+  }
+
+  const lpjRows = await prisma.trlpj.findMany({
+    where: whereLpj,
+    orderBy: [{ tgl_lpj: "desc" }, { no_lpj: "desc" }],
+  });
+
+  // Ambil referensi program & kegiatan dari trdrka untuk opd terkait
+  const opd = await prisma.opd.findUnique({
+    where: { id: params.opdId },
+    select: { kd_skpd: true },
+  });
+  const rkaRefs = opd
+    ? await prisma.trdrka.findMany({
+        where: { tahunAnggaran: params.tahunAnggaran, kd_skpd: opd.kd_skpd },
+        select: {
+          kd_program: true,
+          nm_program: true,
+          kd_kegiatan: true,
+          nm_kegiatan: true,
+          kd_sub_kegiatan: true,
+          nm_sub_kegiatan: true,
+        },
+      })
+    : [];
+  const subMetaMap = new Map<
+    string,
+    {
+      kd_program: string;
+      nm_program: string;
+      kd_kegiatan: string;
+      nm_kegiatan: string;
+      nm_sub_kegiatan: string;
+    }
+  >();
+  for (const r of rkaRefs) {
+    if (!subMetaMap.has(r.kd_sub_kegiatan)) {
+      subMetaMap.set(r.kd_sub_kegiatan, {
+        kd_program: r.kd_program,
+        nm_program: r.nm_program,
+        kd_kegiatan: r.kd_kegiatan,
+        nm_kegiatan: r.nm_kegiatan,
+        nm_sub_kegiatan: r.nm_sub_kegiatan,
+      });
+    }
+  }
+
+  const grouped = new Map<
+    string,
+    {
+      no_lpj: string;
+      tgl_lpj: Date;
+      tgl_awal: Date;
+      tgl_akhir: Date;
+      jenis_lpj: string;
+      no_sp2d: string | null;
+      keterangan: string;
+      total_nilai: number;
+      summaryMap: Map<
+        string,
+        {
+          kd_program: string;
+          nm_program: string;
+          kd_kegiatan: string;
+          nm_kegiatan: string;
+          kd_sub_kegiatan: string;
+          nm_sub_kegiatan: string;
+          kd_rek6: string;
+          nm_rek6: string;
+          nilai: number;
+        }
+      >;
+    }
+  >();
+
+  for (const r of lpjRows) {
+    if (usedSet.has(r.no_lpj)) continue;
+    let g = grouped.get(r.no_lpj);
+    if (!g) {
+      g = {
+        no_lpj: r.no_lpj,
+        tgl_lpj: r.tgl_lpj,
+        tgl_awal: r.tgl_awal,
+        tgl_akhir: r.tgl_akhir,
+        jenis_lpj: r.jenis_lpj,
+        no_sp2d: r.no_sp2d || null,
+        keterangan: r.keterangan,
+        total_nilai: 0,
+        summaryMap: new Map(),
+      };
+      grouped.set(r.no_lpj, g);
+    }
+
+    const val = Number(r.nilai) || 0;
+    g.total_nilai += val;
+
+    const sumKey = `${r.kd_sub_kegiatan}__${r.kd_rek6}`;
+    const existingItem = g.summaryMap.get(sumKey);
+    if (existingItem) {
+      existingItem.nilai += val;
+    } else {
+      const meta = subMetaMap.get(r.kd_sub_kegiatan);
+      const parts = String(r.kd_sub_kegiatan || "").split(".");
+      g.summaryMap.set(sumKey, {
+        kd_program:
+          meta?.kd_program ||
+          (parts.length >= 3 ? parts.slice(0, 3).join(".") : "-"),
+        nm_program: meta?.nm_program || "-",
+        kd_kegiatan:
+          meta?.kd_kegiatan ||
+          (parts.length >= 5 ? parts.slice(0, 5).join(".") : "-"),
+        nm_kegiatan: meta?.nm_kegiatan || "-",
+        kd_sub_kegiatan: r.kd_sub_kegiatan,
+        nm_sub_kegiatan: meta?.nm_sub_kegiatan || r.nm_sub_kegiatan,
+        kd_rek6: r.kd_rek6,
+        nm_rek6: r.nm_rek6,
+        nilai: val,
+      });
+    }
+  }
+
+  return Array.from(grouped.values()).map((g) => ({
+    no_lpj: g.no_lpj,
+    tgl_lpj: g.tgl_lpj,
+    tgl_awal: g.tgl_awal,
+    tgl_akhir: g.tgl_akhir,
+    jenis_lpj: g.jenis_lpj,
+    no_sp2d: g.no_sp2d,
+    keterangan: g.keterangan,
+    total_nilai: g.total_nilai,
+    rincian: Array.from(g.summaryMap.values()).sort((a, b) =>
+      `${a.kd_sub_kegiatan}.${a.kd_rek6}`.localeCompare(
+        `${b.kd_sub_kegiatan}.${b.kd_rek6}`
+      )
+    ),
+  }));
 }
 
 /**

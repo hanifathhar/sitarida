@@ -79,7 +79,7 @@ function formatShortId(val: number): string {
   return n.toLocaleString("id-ID");
 }
 
-type PrintReportType = "BKU" | "FUNGSIONAL" | "PAJAK" | "RINCIAN_OBJEK";
+type PrintReportType = "BKU" | "FUNGSIONAL" | "PAJAK" | "RINCIAN_OBJEK" | "DTH";
 
 export default function RekalTransaksiView() {
   return (
@@ -1905,6 +1905,214 @@ function RekalTransaksiContent({
     win.document.close();
   };
 
+  const handleCetakDth = async () => {
+    const win = window.open("", "_blank", "width=1300,height=820");
+    if (!win) {
+      alert("Pop-up diblokir browser. Izinkan pop-up untuk mencetak laporan.");
+      return;
+    }
+
+    const tahun = new Date().getFullYear();
+    let dthRows: Array<{
+      no_spm: string;
+      nilai_spm: number;
+      no_sp2d: string;
+      nilai_sp2d: number;
+      kd_rek6: string;
+      pajak_kd_rek6: string;
+      pajak_nm_rek6: string;
+      pajak_jumlah: number;
+      npwp: string;
+      rekanan: string;
+      id_billing: string;
+      ntpn: string;
+      keterangan: string;
+    }> = [];
+
+    try {
+      const q = new URLSearchParams();
+      q.set("action", "dth-data");
+      q.set("tahun", String(tahun));
+      if (selectedOpd?.id) q.set("opdId", selectedOpd.id);
+      if (selectedUnit?.kd_unit) q.set("kd_unit", selectedUnit.kd_unit);
+      if (cfgBulan > 0) q.set("bulan", String(cfgBulan));
+      const res = await fetch(
+        `/api/penatausahaan/bendahara-pengeluaran/rekal?${q.toString()}`
+      );
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        dthRows = json.data;
+      }
+    } catch {
+      // tetap render meski gagal fetch
+    }
+
+    let totSpm = 0;
+    let totSp2d = 0;
+    let totPajak = 0;
+
+    const trsHtml = dthRows
+      .map((r) => {
+        totSpm += r.nilai_spm || 0;
+        totSp2d += r.nilai_sp2d || 0;
+        totPajak += r.pajak_jumlah || 0;
+        return `
+          <tr>
+            <td class="font-mono">${r.no_spm}</td>
+            <td class="text-right">${formatNum(r.nilai_spm)}</td>
+            <td class="font-mono">${r.no_sp2d}</td>
+            <td class="text-right">${formatNum(r.nilai_sp2d)}</td>
+            <td class="text-center font-mono">${r.kd_rek6}</td>
+            <td class="text-center font-mono">${r.pajak_kd_rek6 || ""}</td>
+            <td>${r.pajak_nm_rek6 || ""}</td>
+            <td class="text-right">${formatNum(r.pajak_jumlah)}</td>
+            <td class="text-center font-mono">${r.npwp || "-"}</td>
+            <td>${r.rekanan || "-"}</td>
+            <td class="text-center font-mono">${r.id_billing || ""}</td>
+            <td class="text-center font-mono">${r.ntpn || ""}</td>
+            <td>${r.keterangan || "-"}</td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    const kdSkpd = selectedOpd?.kd_skpd || "-";
+    const urusanKode = kdSkpd !== "-" ? kdSkpd.split(".").slice(0, 2).join(".") : "-";
+    const orgText = selectedOpd
+      ? `${selectedOpd.kd_skpd} - ${selectedOpd.nm_skpd}`
+      : "-";
+    const unitText = selectedUnit
+      ? `${selectedUnit.kd_unit} - ${selectedUnit.nm_unit}`
+      : orgText;
+    const bulanLabel = cfgBulan
+      ? `BULAN ${NAMA_BULAN[cfgBulan - 1].toUpperCase()}`
+      : "SEMUA BULAN";
+
+    const tglCetakFormatted = (
+      cfgTglCetak ? new Date(cfgTglCetak) : new Date()
+    ).toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+    const paNipText = cfgPaNip.trim()
+      ? `NIP. ${cfgPaNip.trim()}`
+      : "NIP. ........................................";
+    const bendNipText = cfgBendaharaNip.trim()
+      ? `NIP. ${cfgBendaharaNip.trim()}`
+      : "NIP. ........................................";
+    const tempatText = cfgTempat.trim() || "Sipirok";
+
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>DAFTAR TRANSAKSI HARIAN BELANJA DAERAH (DTH)</title>
+        <style>
+          @page { size: ${cfgKertas}; margin: 8mm; }
+          body { font-family: "Times New Roman", Times, serif; font-size: 8.5px; color: #000; margin: 0; padding: 8px; }
+          .title-wrap { text-align: center; margin-bottom: 8px; }
+          .title-wrap h1 { font-size: 11px; margin: 0; font-weight: bold; text-transform: uppercase; }
+          .title-wrap h2 { font-size: 10.5px; margin: 2px 0 0; font-weight: bold; text-transform: uppercase; }
+          .title-wrap p { font-size: 9.5px; margin: 2px 0 0; font-weight: bold; text-transform: uppercase; }
+          .meta { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 8.5px; }
+          .meta td { padding: 1px 4px; vertical-align: top; }
+          table.dth { width: 100%; border-collapse: collapse; font-size: 7.8px; }
+          table.dth th, table.dth td { border: 1px solid #000; padding: 3px 4px; vertical-align: top; }
+          table.dth th { text-align: center; font-weight: bold; background: #fff; }
+          .text-right { text-align: right; white-space: nowrap; }
+          .text-center { text-align: center; }
+          .font-mono { white-space: nowrap; }
+          .total-row td { font-weight: bold; background: #f9fafb; }
+          .ttd { width: 100%; margin-top: 18px; page-break-inside: avoid; font-size: 8.5px; }
+          .ttd td { width: 50%; text-align: center; vertical-align: top; }
+          .ttd-space { height: 48px; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <div class="title-wrap">
+          <h1>DAFTAR TRANSAKSI HARIAN BELANJA DAERAH (DTH)</h1>
+          <h2>PEMERINTAH KABUPATEN TAPANULI SELATAN</h2>
+          <p>${bulanLabel}<br/>TAHUN ANGGARAN ${tahun}</p>
+        </div>
+
+        <table class="meta">
+          <tr><td style="width:190px;">Urusan Pemerintahan</td><td>: ${urusanKode}</td></tr>
+          <tr><td>Organisasi</td><td>: ${orgText}</td></tr>
+          <tr><td>Unit/UPT</td><td>: ${unitText}</td></tr>
+          <tr><td>Pengguna/Kuasa Pengguna Anggaran</td><td>: ${cfgPaNama.trim() || "-"}</td></tr>
+          <tr><td>Bendahara Pengeluaran</td><td>: ${cfgBendaharaNama.trim() || "-"}</td></tr>
+        </table>
+
+        <table class="dth">
+          <thead>
+            <tr>
+              <th colspan="2">SPM/SPD</th>
+              <th colspan="2">SP2D</th>
+              <th rowspan="2" style="width:82px;">Kode Akun<br/>Belanja</th>
+              <th colspan="3">Potongan Pajak</th>
+              <th rowspan="2" style="width:85px;">NPWP</th>
+              <th rowspan="2" style="width:105px;">Rekanan</th>
+              <th rowspan="2" style="width:80px;">Billing</th>
+              <th rowspan="2" style="width:80px;">NTPN</th>
+              <th rowspan="2">Keterangan</th>
+            </tr>
+            <tr>
+              <th style="width:125px;">Nomor</th>
+              <th style="width:72px;">Nilai</th>
+              <th style="width:125px;">SP2D</th>
+              <th style="width:72px;">Nilai</th>
+              <th style="width:72px;">Kode Akun</th>
+              <th style="width:80px;">Jenis Akun</th>
+              <th style="width:68px;">Jumlah</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${trsHtml ||
+      `<tr><td colspan="13" class="text-center">Belum ada transaksi belanja / pajak pada periode ini.</td></tr>`
+      }
+            <tr class="total-row">
+              <td class="text-right">JUMLAH</td>
+              <td class="text-right">${formatNum(totSpm)}</td>
+              <td></td>
+              <td class="text-right">${formatNum(totSp2d)}</td>
+              <td colspan="3"></td>
+              <td class="text-right">${formatNum(totPajak)}</td>
+              <td colspan="5"></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <table class="ttd">
+          <tr>
+            <td>
+              <div>Mengetahui,</div>
+              <div><strong>${cfgPaJabatan || "Pengguna Anggaran / Kuasa Pengguna Anggaran"}</strong></div>
+              <div class="ttd-space"></div>
+              <div><u><strong>${cfgPaNama.trim() || "(....................................................)"}</strong></u></div>
+              <div>${paNipText}</div>
+            </td>
+            <td>
+              <div>${tempatText}, ${tglCetakFormatted}</div>
+              <div><strong>${cfgBendaharaJabatan || "Bendahara Pengeluaran"}</strong></div>
+              <div class="ttd-space"></div>
+              <div><u><strong>${cfgBendaharaNama.trim() || "(....................................................)"}</strong></u></div>
+              <div>${bendNipText}</div>
+            </td>
+          </tr>
+        </table>
+
+        <script>
+          window.onload = function () { setTimeout(function () { window.print(); }, 250); };
+        </script>
+      </body>
+      </html>
+    `);
+    win.document.close();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOpd) return;
@@ -2034,7 +2242,18 @@ function RekalTransaksiContent({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-50 text-teal-800 border border-teal-200 hover:bg-teal-100 transition-colors cursor-pointer"
           >
             <BookOpen className="w-3.5 h-3.5" />
-            <span>Cetak BKU</span>
+            <span>Buku Kas Umum</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCfgBulan(printBulan);
+              setPrintDialogType("DTH");
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-50 text-sky-800 border border-sky-200 hover:bg-sky-100 transition-colors cursor-pointer"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            <span>Data Transaksi Harian (DTH)</span>
           </button>
           <button
             type="button"
@@ -2045,7 +2264,7 @@ function RekalTransaksiContent({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200 hover:bg-indigo-100 transition-colors cursor-pointer"
           >
             <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>Cetak Fungsional</span>
+            <span>Fungsional Belanja</span>
           </button>
           <button
             type="button"
@@ -2056,7 +2275,7 @@ function RekalTransaksiContent({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-colors cursor-pointer"
           >
             <Landmark className="w-3.5 h-3.5" />
-            <span>Cetak Buku Pajak</span>
+            <span>Buku Pajak</span>
           </button>
           <button
             type="button"
@@ -2398,7 +2617,9 @@ function RekalTransaksiContent({
                       ? "SPJ Fungsional"
                       : printDialogType === "PAJAK"
                         ? "Buku Pembantu Pajak"
-                        : "Buku Rincian Objek Belanja"}
+                        : printDialogType === "DTH"
+                          ? "Daftar Transaksi Harian (DTH)"
+                          : "Buku Rincian Objek Belanja"}
                 </h3>
               </div>
               <button
@@ -2419,6 +2640,7 @@ function RekalTransaksiContent({
                 else if (type === "FUNGSIONAL") handleCetakFungsional();
                 else if (type === "PAJAK") handleCetakBukuPajak();
                 else if (type === "RINCIAN_OBJEK") handleCetakRincianObjek();
+                else if (type === "DTH") handleCetakDth();
               }}
               className="p-5 space-y-4 overflow-y-auto"
             >

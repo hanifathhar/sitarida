@@ -520,18 +520,18 @@ export default function AppShell({
       perm: "menu:penatausahaan:bendahara-penyetoran-potongan",
     },
     {
-      label: "Setor Sisa Kas(UP/GU/TU)",
+      label: "Penerbitan STS",
+      href: "/penatausahaan/bendahara-pengeluaran/penerbitan-sts",
+      perm: "menu:penatausahaan:bendahara-pengembalian",
+    },
+    {
+      label: "Setor Sisa Kas (UP/GU/TU)",
       href: "/penatausahaan/bendahara-pengeluaran/setor-sisa-kas",
       perm: "menu:penatausahaan:bendahara-setor-sisa-kas",
     },
     {
       label: "Pengembalian",
       href: "/penatausahaan/bendahara-pengeluaran/pengembalian",
-      perm: "menu:penatausahaan:bendahara-pengembalian",
-    },
-    {
-      label: "Penerbitan STS",
-      href: "/penatausahaan/bendahara-pengeluaran/penerbitan-sts",
       perm: "menu:penatausahaan:bendahara-pengembalian",
     },
     {
