@@ -266,6 +266,40 @@ model MsRek1 {
   @@map("ms_rek1")
 }
 
+model MsBank {
+  id           String   @id @default(uuid())
+  kode         String   @unique
+  nama         String
+  jns_rekening String   @default("BANK") // BANK, BILLER
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([kode])
+  @@index([jns_rekening])
+  @@map("ms_bank")
+}
+
+model MsPenerima {
+  id            String   @id @default(uuid())
+  nm_penerima   String
+  bank_penerima String
+  rek_penerima  String
+  npwp          String?
+  kd_skpd       String
+  nm_skpd       String
+  kd_unit       String?
+  nm_unit       String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([kd_skpd])
+  @@index([kd_unit])
+  @@index([nm_penerima])
+  @@map("ms_penerima")
+}
+
 model MsRek2 {
   id        String   @id @default(uuid())
   rek1Id    String

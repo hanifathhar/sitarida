@@ -60,6 +60,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/master/rekening": "MASTER REKENING",
   "/master/opd": "MASTER PERANGKAT DAERAH / OPD",
   "/master/unit": "MASTER UNIT KERJA / SUB-UNIT",
+  "/master/bank": "MASTER BANK",
   "/master/program": "MASTER PROGRAM",
   "/master/kegiatan": "MASTER KEGIATAN ",
   "/master/subkegiatan": "MASTER SUB KEGIATAN",
@@ -77,6 +78,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/penatausahaan/pengaturan": "PENETAPAN BESARAN UANG PERSEDIAAN (UP & UP-KKPD)",
   "/penatausahaan/pengajuan/kuitansi": "PENGAJUAN KUITANSI",
   "/penatausahaan/pengajuan/register-kuitansi": "REGISTER KUITANSI",
+  "/penatausahaan/pengajuan/penerima": "DATA PENERIMA",
   "/penatausahaan/spp/up": "SURAT PERMINTAAN PEMBAYARAN - UANG PERSEDIAAN (SPP-UP)",
   "/penatausahaan/spp/gu": "SURAT PERMINTAAN PEMBAYARAN - GANTI UANG (SPP-GU)",
   "/penatausahaan/spp/tu": "SURAT PERMINTAAN PEMBAYARAN - TAMBAH UANG (SPP-TU)",
@@ -140,9 +142,12 @@ export default function AppShell({
       perencanaan: path.startsWith("/perencanaan"),
       penatausahaan: path.startsWith("/penatausahaan"),
       pengaturan: path.startsWith("/admin"),
-      masterRekeningOpd: ["/master/rekening", "/master/opd", "/master/unit"].some(
-        (p) => path.startsWith(p)
-      ),
+      masterRekeningOpd: [
+        "/master/rekening",
+        "/master/opd",
+        "/master/unit",
+        "/master/bank",
+      ].some((p) => path.startsWith(p)),
       masterNomenklatur: [
         "/master/program",
         "/master/kegiatan",
@@ -315,6 +320,11 @@ export default function AppShell({
       label: "Register Kuitansi",
       href: "/penatausahaan/pengajuan/register-kuitansi",
       perm: "menu:penatausahaan:pengajuan-register",
+    },
+    {
+      label: "Data Penerima",
+      href: "/penatausahaan/pengajuan/penerima",
+      perm: "menu:penatausahaan:pengajuan-penerima",
     },
   ].filter(
     (m) =>
@@ -622,7 +632,18 @@ export default function AppShell({
       icon: GitBranch,
       perm: "menu:master:unit",
     },
-  ].filter((m) => can(m.perm));
+    {
+      label: "Master Bank",
+      href: "/master/bank",
+      icon: Landmark,
+      perm: "menu:master:bank",
+    },
+  ].filter(
+    (m) =>
+      can(m.perm) ||
+      (m.href === "/master/bank" &&
+        (can("master:read") || can("menu:master:unit") || can("menu:master:opd")))
+  );
 
   const masterNomenklaturMenus = [
     {

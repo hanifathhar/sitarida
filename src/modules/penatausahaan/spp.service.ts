@@ -96,6 +96,9 @@ export async function getSppScopeData(session: SessionPayload) {
       nm_unit: true,
       kepalaNama: true,
       kepalaNip: true,
+      nama_penerima: true,
+      bank_penerima: true,
+      rek_penerima: true,
     },
   });
 

@@ -1671,19 +1671,18 @@ export default function SpmManagementView({
 
                           <td className="px-4 py-3.5 text-center">
                             <span
-                              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold ${
-                                spm.status === "TELAH DIBUAT SP2D" || spm.isUsedBySp2d
-                                  ? "bg-teal-100 text-teal-800 border border-teal-200"
-                                  : spm.status === "DISETUJUI"
-                                    ? "bg-emerald-100 text-emerald-800"
-                                    : spm.status === "DIAJUKAN"
-                                      ? "bg-blue-100 text-blue-800"
-                                      : spm.status === "DIVERIFIKASI"
-                                        ? "bg-purple-100 text-purple-800"
-                                        : spm.status === "DITOLAK"
-                                          ? "bg-rose-100 text-rose-800"
-                                          : "bg-slate-100 text-slate-700"
-                              }`}
+                              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold ${spm.status === "TELAH DIBUAT SP2D" || spm.isUsedBySp2d
+                                ? "bg-teal-100 text-teal-800 border border-teal-200"
+                                : spm.status === "DISETUJUI"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : spm.status === "DIAJUKAN"
+                                    ? "bg-blue-100 text-blue-800"
+                                    : spm.status === "DIVERIFIKASI"
+                                      ? "bg-purple-100 text-purple-800"
+                                      : spm.status === "DITOLAK"
+                                        ? "bg-rose-100 text-rose-800"
+                                        : "bg-slate-100 text-slate-700"
+                                }`}
                             >
                               {(spm.status === "TELAH DIBUAT SP2D" || spm.isUsedBySp2d) && (
                                 <Lock className="h-3 w-3 text-teal-700" />
@@ -1700,16 +1699,14 @@ export default function SpmManagementView({
                             <div className="flex items-center justify-center gap-1.5">
                               <button
                                 onClick={() => handleEditSpm(spm)}
-                                className={`rounded-lg p-1.5 ${
-                                  spm.isUsedBySp2d || spm.status === "TELAH DIBUAT SP2D"
-                                    ? "text-teal-700 hover:bg-teal-50"
-                                    : "text-slate-500 hover:bg-slate-100 hover:text-blue-700"
-                                }`}
+                                className={`rounded-lg p-1.5 ${spm.isUsedBySp2d || spm.status === "TELAH DIBUAT SP2D"
+                                  ? "text-teal-700 hover:bg-teal-50"
+                                  : "text-slate-500 hover:bg-slate-100 hover:text-blue-700"
+                                  }`}
                                 title={
                                   spm.isUsedBySp2d || spm.status === "TELAH DIBUAT SP2D"
-                                    ? `Lihat Dokumen SPM Terkunci (Telah Terbit SP2D ${
-                                        spm.usedSp2dNo ? `[${spm.usedSp2dNo}]` : ""
-                                      })`
+                                    ? `Lihat Dokumen SPM Terkunci (Telah Terbit SP2D ${spm.usedSp2dNo ? `[${spm.usedSp2dNo}]` : ""
+                                    })`
                                     : "Lihat / Edit Dokumen SPM"
                                 }
                               >
@@ -1797,7 +1794,6 @@ export default function SpmManagementView({
                 </span>
               ) : (
                 <span className="text-xs text-slate-500">
-                  {editingSpmId ? "Mode Edit Dokumen" : "Dokumen Baru"}
                 </span>
               )}
             </div>
@@ -2084,9 +2080,9 @@ export default function SpmManagementView({
                   <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     <tr>
                       <th className="px-3 py-2.5">No</th>
+                      <th className="px-3 py-2.5">Sub Kegiatan</th>
                       <th className="px-3 py-2.5">Kode Rekening</th>
                       <th className="px-3 py-2.5">Uraian Rekening</th>
-                      <th className="px-3 py-2.5">Sub Kegiatan</th>
                       <th className="px-3 py-2.5 text-right">Nilai Belanja</th>
                     </tr>
                   </thead>
@@ -2106,20 +2102,26 @@ export default function SpmManagementView({
                           <td className="px-3 py-2.5 text-center text-slate-400">
                             {idx + 1}
                           </td>
+
+                          <td className="py-3 px-3">
+                            {r.kd_sub_kegiatan ? (
+                              <>
+                                <div className="font-bold text-slate-900 font-mono text-[11px]">
+                                  {r.kd_sub_kegiatan}
+                                </div>
+                                <div className="text-slate-600 text-[11px] line-clamp-1">
+                                  {r.nm_sub_kegiatan}
+                                </div>
+                              </>
+                            ) : (
+                              <span className="text-slate-400 font-mono text-xs">-</span>
+                            )}
+                          </td>
                           <td className="px-3 py-2.5 font-mono font-bold text-slate-900">
                             {r.kd_rek6}
                           </td>
                           <td className="px-3 py-2.5 font-medium text-slate-800">
                             {r.nm_rek6}
-                          </td>
-                          <td className="px-3 py-2.5 text-[11px] text-slate-500">
-                            {r.kd_sub_kegiatan ? (
-                              <span>
-                                [{r.kd_sub_kegiatan}] {r.nm_sub_kegiatan}
-                              </span>
-                            ) : (
-                              <span className="italic text-slate-400">-</span>
-                            )}
                           </td>
                           <td className="px-3 py-2.5 text-right font-bold text-slate-900">
                             {formatRupiah(r.nilai)}
@@ -2405,23 +2407,10 @@ export default function SpmManagementView({
                     <option value="">-- Pilih Bendahara --</option>
                     {petugasData.bendaharaList.map((p) => (
                       <option key={p.id} value={p.nama}>
-                        {p.nama} ({p.nip})
+                        {p.nama}
                       </option>
                     ))}
                   </select>
-                  <input
-                    type="text"
-                    disabled={isSpmLocked}
-                    value={formHeader.bendaharaNip || ""}
-                    onChange={(e) =>
-                      setFormHeader((p) => ({
-                        ...p,
-                        bendaharaNip: e.target.value,
-                      }))
-                    }
-                    placeholder="NIP Bendahara"
-                    className="mt-1.5 w-full rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1 font-mono text-[11px] text-slate-600 focus:border-[#5E0E14] focus:bg-white focus:outline-none disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
-                  />
                 </div>
 
                 {/* Kasubag Keuangan / PPK */}
@@ -2448,23 +2437,10 @@ export default function SpmManagementView({
                     <option value="">-- Pilih Kasubag Keuangan --</option>
                     {petugasData.kasubagList.map((p) => (
                       <option key={p.id} value={p.nama}>
-                        {p.nama} ({p.nip})
+                        {p.nama}
                       </option>
                     ))}
                   </select>
-                  <input
-                    type="text"
-                    disabled={isSpmLocked}
-                    value={formHeader.kasubagNip || ""}
-                    onChange={(e) =>
-                      setFormHeader((p) => ({
-                        ...p,
-                        kasubagNip: e.target.value,
-                      }))
-                    }
-                    placeholder="NIP Kasubag Keuangan"
-                    className="mt-1.5 w-full rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1 font-mono text-[11px] text-slate-600 focus:border-[#5E0E14] focus:bg-white focus:outline-none disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
-                  />
                 </div>
 
                 {/* Pengguna Anggaran (PA / KPA) */}
@@ -2490,20 +2466,10 @@ export default function SpmManagementView({
                     <option value="">-- Pilih PA / KPA --</option>
                     {petugasData.paKpaList.map((p) => (
                       <option key={p.id} value={p.nama}>
-                        {p.nama} ({p.nip})
+                        {p.nama}
                       </option>
                     ))}
                   </select>
-                  <input
-                    type="text"
-                    disabled={isSpmLocked}
-                    value={formHeader.paKpaNip || ""}
-                    onChange={(e) =>
-                      setFormHeader((p) => ({ ...p, paKpaNip: e.target.value }))
-                    }
-                    placeholder="NIP PA / KPA"
-                    className="mt-1.5 w-full rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1 font-mono text-[11px] text-slate-600 focus:border-[#5E0E14] focus:bg-white focus:outline-none disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
-                  />
                 </div>
               </div>
             </div>

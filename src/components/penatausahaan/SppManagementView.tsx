@@ -68,6 +68,9 @@ interface UnitItem {
   nm_unit: string;
   kepalaNama?: string | null;
   kepalaNip?: string | null;
+  nama_penerima?: string | null;
+  bank_penerima?: string | null;
+  rek_penerima?: string | null;
 }
 
 interface ScopeResponse {
@@ -614,10 +617,18 @@ export default function SppManagementView({
     }
 
     const paddedNoUrut = String(nextSeq).padStart(5, "0");
-    const kdUnitTarget =
-      selectedUnit?.kd_unit || availableUnits[0]?.kd_unit || selectedOpd.kd_skpd;
+    const targetUnit = selectedUnit || availableUnits[0] || null;
+    const kdUnitTarget = targetUnit?.kd_unit || selectedOpd.kd_skpd;
     const jnsSppCode = jenisSpp.replace(/_/g, "-");
     const autoNo = `900/${paddedNoUrut}/${kdUnitTarget}/SPP/${jnsSppCode}/${tahunAnggaran}`;
+    const isAutoUnitRecipient = [
+      "UP",
+      "UP_KKPD",
+      "GU",
+      "GU_KKPD",
+      "TU",
+      "LS_GAJI",
+    ].includes(jenisSpp);
 
     setEditingSppId(null);
     setSelectedSpdInfo(null);
@@ -629,14 +640,14 @@ export default function SppManagementView({
       no_spd: "",
       tgl_spd: "",
       no_lpj: "",
-      nama_penerima:
-        jenisSpp.startsWith("UP") || jenisSpp.startsWith("GU") || jenisSpp === "TU"
-          ? defaultBendahara?.nama
+      nama_penerima: isAutoUnitRecipient
+        ? targetUnit?.nama_penerima ||
+          (defaultBendahara?.nama
             ? `Bendahara Pengeluaran (${defaultBendahara.nama})`
-            : "Bendahara Pengeluaran " + selectedOpd.nm_skpd
-          : "",
-      bank_penerima: "BANK JATENG",
-      rek_penerima: "",
+            : "Bendahara Pengeluaran " + selectedOpd.nm_skpd)
+        : "",
+      bank_penerima: isAutoUnitRecipient ? targetUnit?.bank_penerima || "" : "",
+      rek_penerima: isAutoUnitRecipient ? targetUnit?.rek_penerima || "" : "",
       npwp_penerima: "",
       bendaharaNama: defaultBendahara?.nama || "",
       bendaharaNip: defaultBendahara?.nip || "",
@@ -743,9 +754,45 @@ export default function SppManagementView({
           no_spd: d.no_spd || "",
           tgl_spd: d.tgl_spd || "",
           no_lpj: d.no_lpj || "",
-          nama_penerima: d.nama_penerima || "",
-          bank_penerima: d.bank_penerima || "",
-          rek_penerima: d.rek_penerima || "",
+          nama_penerima:
+            d.nama_penerima ||
+            (["UP", "UP_KKPD", "GU", "GU_KKPD", "TU", "LS_GAJI"].includes(
+              d.jenis_spp
+            )
+              ? (
+                  availableUnits.find(
+                    (u) =>
+                      (d.unitKerjaId && u.id === d.unitKerjaId) ||
+                      (d.kd_unit && u.kd_unit === d.kd_unit)
+                  ) || availableUnits[0]
+                )?.nama_penerima || ""
+              : ""),
+          bank_penerima:
+            d.bank_penerima ||
+            (["UP", "UP_KKPD", "GU", "GU_KKPD", "TU", "LS_GAJI"].includes(
+              d.jenis_spp
+            )
+              ? (
+                  availableUnits.find(
+                    (u) =>
+                      (d.unitKerjaId && u.id === d.unitKerjaId) ||
+                      (d.kd_unit && u.kd_unit === d.kd_unit)
+                  ) || availableUnits[0]
+                )?.bank_penerima || ""
+              : ""),
+          rek_penerima:
+            d.rek_penerima ||
+            (["UP", "UP_KKPD", "GU", "GU_KKPD", "TU", "LS_GAJI"].includes(
+              d.jenis_spp
+            )
+              ? (
+                  availableUnits.find(
+                    (u) =>
+                      (d.unitKerjaId && u.id === d.unitKerjaId) ||
+                      (d.kd_unit && u.kd_unit === d.kd_unit)
+                  ) || availableUnits[0]
+                )?.rek_penerima || ""
+              : ""),
           npwp_penerima: d.npwp_penerima || "",
           bendaharaNama: d.bendaharaNama || "",
           bendaharaNip: d.bendaharaNip || "",
@@ -882,7 +929,13 @@ export default function SppManagementView({
       );
       const json = await res.json();
       if (json.success && json.data) {
-        setRekeningRefList(json.data);
+        const list =
+          jenisSpp === "LS_GAJI"
+            ? json.data.filter((r: RekeningRef) =>
+                String(r.kd_rek6 || "").trim().startsWith("5.1.01")
+              )
+            : json.data;
+        setRekeningRefList(list);
       }
     } catch (err: any) {
       console.error("Error getRekeningReferensi:", err);
@@ -1144,16 +1197,22 @@ export default function SppManagementView({
 
   // Filter Rekening Modal List
   const filteredRekeningRef = useMemo(() => {
-    if (!searchRekening.trim()) return rekeningRefList;
+    const baseList =
+      jenisSpp === "LS_GAJI"
+        ? rekeningRefList.filter((r) =>
+            String(r.kd_rek6 || "").trim().startsWith("5.1.01")
+          )
+        : rekeningRefList;
+    if (!searchRekening.trim()) return baseList;
     const q = searchRekening.toLowerCase();
-    return rekeningRefList.filter(
+    return baseList.filter(
       (r) =>
         r.kd_sub_kegiatan.toLowerCase().includes(q) ||
         r.nm_sub_kegiatan.toLowerCase().includes(q) ||
         r.kd_rek6.toLowerCase().includes(q) ||
         r.nm_rek6.toLowerCase().includes(q)
     );
-  }, [rekeningRefList, searchRekening]);
+  }, [rekeningRefList, searchRekening, jenisSpp]);
 
   // Filter SPD Terbit Modal List
   const filteredSpdTerbit = useMemo(() => {
@@ -1983,67 +2042,7 @@ export default function SppManagementView({
                 />
               </div>
 
-              {isSppGu && (
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Nomor LPJ ({jenisSpp === "GU_KKPD" ? "KKPD" : "GU"}){" "}
-                    <span className="text-red-500">*</span>
-                  </label>
-                  <SearchableSelect
-                    options={lpjOptions.map((l) => ({
-                      value: l.no_lpj,
-                      label: l.keterangan || l.no_lpj,
-                      badge: l.no_lpj,
-                      subLabel: `${new Date(l.tgl_awal).toLocaleDateString(
-                        "id-ID"
-                      )} s/d ${new Date(l.tgl_akhir).toLocaleDateString(
-                        "id-ID"
-                      )} • ${formatRupiah(Number(l.total_nilai) || 0)}`,
-                    }))}
-                    value={formHeader.no_lpj}
-                    disabled={formHeader.isLocked || loadingLpjOptions}
-                    onChange={(val) => {
-                      const chosen = lpjOptions.find((l) => l.no_lpj === val);
-                      if (chosen) {
-                        setFormHeader({
-                          ...formHeader,
-                          no_lpj: chosen.no_lpj,
-                          keperluan:
-                            chosen.keterangan ||
-                            `Penggantian Uang Persediaan (SPP-GU) atas LPJ ${chosen.no_lpj}`,
-                        });
-                        setFormRincian(
-                          (chosen.rincian || []).map((r: any) => ({
-                            kd_program: r.kd_program || "-",
-                            nm_program: r.nm_program || "-",
-                            kd_kegiatan: r.kd_kegiatan || "-",
-                            nm_kegiatan: r.nm_kegiatan || "-",
-                            kd_sub_kegiatan: r.kd_sub_kegiatan,
-                            nm_sub_kegiatan: r.nm_sub_kegiatan,
-                            kd_rek6: r.kd_rek6,
-                            nm_rek6: r.nm_rek6,
-                            nilai: Number(r.nilai) || 0,
-                          }))
-                        );
-                      } else {
-                        setFormHeader({ ...formHeader, no_lpj: "" });
-                        setFormRincian([]);
-                      }
-                    }}
-                    placeholder={
-                      loadingLpjOptions
-                        ? "Memuat daftar LPJ..."
-                        : "-- Pilih Nomor LPJ --"
-                    }
-                    searchPlaceholder="Cari nomor LPJ atau keterangan..."
-                    clearLabel="-- Pilih Nomor LPJ --"
-                    allowClear={!formHeader.isLocked}
-                  />
-                  <p className="mt-1 text-[11px] text-slate-500">
-                    Hanya LPJ yang belum pernah diajukan menjadi SPP yang ditampilkan. Rincian rekening belanja otomatis diringkas dari LPJ terpilih.
-                  </p>
-                </div>
-              )}
+
 
               {/* Box Informasi Akumulasi Pagu dan Sisa SPD Terpilih */}
               {formHeader.no_spd && selectedSpdInfo && (
@@ -2187,13 +2186,68 @@ export default function SppManagementView({
                 />
               </div>
 
+              {isSppGu && (
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Nomor LPJ ({jenisSpp === "GU_KKPD" ? "KKPD" : "GU"}){" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <SearchableSelect
+                    options={lpjOptions.map((l) => ({
+                      value: l.no_lpj,
+                      label: l.keterangan || l.no_lpj,
+                      badge: l.no_lpj,
+                      subLabel: ``,
+                    }))}
+                    value={formHeader.no_lpj}
+                    disabled={formHeader.isLocked || loadingLpjOptions}
+                    onChange={(val) => {
+                      const chosen = lpjOptions.find((l) => l.no_lpj === val);
+                      if (chosen) {
+                        setFormHeader({
+                          ...formHeader,
+                          no_lpj: chosen.no_lpj,
+                          keperluan:
+                            chosen.keterangan ||
+                            `Penggantian Uang Persediaan (SPP-GU) atas LPJ ${chosen.no_lpj}`,
+                        });
+                        setFormRincian(
+                          (chosen.rincian || []).map((r: any) => ({
+                            kd_program: r.kd_program || "-",
+                            nm_program: r.nm_program || "-",
+                            kd_kegiatan: r.kd_kegiatan || "-",
+                            nm_kegiatan: r.nm_kegiatan || "-",
+                            kd_sub_kegiatan: r.kd_sub_kegiatan,
+                            nm_sub_kegiatan: r.nm_sub_kegiatan,
+                            kd_rek6: r.kd_rek6,
+                            nm_rek6: r.nm_rek6,
+                            nilai: Number(r.nilai) || 0,
+                          }))
+                        );
+                      } else {
+                        setFormHeader({ ...formHeader, no_lpj: "" });
+                        setFormRincian([]);
+                      }
+                    }}
+                    placeholder={
+                      loadingLpjOptions
+                        ? "Memuat daftar LPJ..."
+                        : "-- Pilih Nomor LPJ --"
+                    }
+                    searchPlaceholder="Cari nomor LPJ atau keterangan..."
+                    clearLabel="-- Pilih Nomor LPJ --"
+                    allowClear={!formHeader.isLocked}
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Hanya LPJ yang belum pernah diajukan menjadi SPP yang ditampilkan. Rincian rekening belanja otomatis diringkas dari LPJ terpilih.
+                  </p>
+                </div>
+              )}
+
               {/* Pejabat Penandatangan */}
               <div className="pt-2 md:col-span-3 border-t border-slate-100">
                 <div className="text-xs font-extrabold text-slate-900 mb-2 flex items-center justify-between">
                   <span>Pejabat Penandatangan</span>
-                  <span className="text-[11px] font-normal text-slate-500">
-                    Pilih pejabat dari daftar petugas OPD sesuai rolenya
-                  </span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {/* Bendahara Pengeluaran */}
@@ -2222,7 +2276,7 @@ export default function SppManagementView({
                         <option value="">-- Pilih Bendahara Pengeluaran --</option>
                         {petugasData.bendaharaList.map((b) => (
                           <option key={b.id} value={b.nama}>
-                            {b.nama} {b.nip ? `(NIP. ${b.nip})` : ""}
+                            {b.nama}
                           </option>
                         ))}
                       </select>
@@ -2241,18 +2295,7 @@ export default function SppManagementView({
                       />
                     )}
 
-                    <input
-                      type="text"
-                      placeholder="NIP Bendahara"
-                      value={formHeader.bendaharaNip}
-                      onChange={(e) =>
-                        setFormHeader({
-                          ...formHeader,
-                          bendaharaNip: e.target.value,
-                        })
-                      }
-                      className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-200 bg-white"
-                    />
+
                   </div>
 
                   {/* Kasubag Keuangan (Peneliti Kelengkapan Dokumen SPP) */}
@@ -2284,7 +2327,7 @@ export default function SppManagementView({
                         <option value="">-- Pilih Kasubag Keuangan --</option>
                         {petugasData.kasubagList.map((x) => (
                           <option key={x.id} value={x.nama}>
-                            {x.nama} {x.nip ? `(NIP. ${x.nip})` : ""}
+                            {x.nama}
                           </option>
                         ))}
                       </select>
@@ -2308,7 +2351,7 @@ export default function SppManagementView({
                         <option value="">-- Pilih Petugas Verifikator / PPTK --</option>
                         {petugasData.pptkList.map((x) => (
                           <option key={x.id} value={x.nama}>
-                            {x.nama} {x.nip ? `(NIP. ${x.nip})` : ""}
+                            {x.nama}
                           </option>
                         ))}
                       </select>
@@ -2329,31 +2372,7 @@ export default function SppManagementView({
                     )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      <input
-                        type="text"
-                        placeholder="NIP Kasubag Keuangan"
-                        value={formHeader.kasubagNip}
-                        onChange={(e) =>
-                          setFormHeader({
-                            ...formHeader,
-                            kasubagNip: e.target.value,
-                            pptkNip: e.target.value,
-                          })
-                        }
-                        className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-200 bg-white"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Jabatan"
-                        value={formHeader.kasubagJabatan}
-                        onChange={(e) =>
-                          setFormHeader({
-                            ...formHeader,
-                            kasubagJabatan: e.target.value,
-                          })
-                        }
-                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white"
-                      />
+
                     </div>
                   </div>
 
@@ -2383,7 +2402,7 @@ export default function SppManagementView({
                         <option value="">-- Pilih PA / KPA --</option>
                         {petugasData.paKpaList.map((x) => (
                           <option key={x.id} value={x.nama}>
-                            {x.nama} {x.nip ? `(NIP. ${x.nip})` : ""}
+                            {x.nama}
                           </option>
                         ))}
                       </select>
@@ -2402,18 +2421,7 @@ export default function SppManagementView({
                       />
                     )}
 
-                    <input
-                      type="text"
-                      placeholder="NIP PA/KPA"
-                      value={formHeader.paKpaNip}
-                      onChange={(e) =>
-                        setFormHeader({
-                          ...formHeader,
-                          paKpaNip: e.target.value,
-                        })
-                      }
-                      className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-200 bg-white"
-                    />
+
                   </div>
                 </div>
               </div>
@@ -2435,10 +2443,10 @@ export default function SppManagementView({
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {jenisSpp === "UP" || jenisSpp === "UP_KKPD"
-                    ? "Nilai Uang Persediaan ditarik otomatis dari Penetapan UP SKPD"
+                    ? ""
                     : jenisSpp === "TU"
-                      ? "Rincian otomatis diset ke rekening 1.1.01.03.01.0001 (Kas di Bendahara Pengeluaran), masukkan nilai nominal secara manual"
-                      : "Pilih rekening belanja dari DPA yang telah tersedia alokasi dana pada SPD"}
+                      ? ""
+                      : ""}
                 </p>
               </div>
 
