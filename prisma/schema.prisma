@@ -130,6 +130,7 @@ model UnitKerja {
   kd_unit       String   @unique
   nm_unit       String
   skpdbank      String?
+  skpdmap       String?
   bank_penerima String?
   rek_penerima  String?
   nama_penerima String?
