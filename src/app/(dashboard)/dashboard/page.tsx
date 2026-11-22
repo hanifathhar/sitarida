@@ -21,74 +21,39 @@ export default async function DashboardPage() {
   const tahunLogin = activeTa.tahun;
   const isCrossOpd = Boolean(session.isCrossOpd);
 
-  // Scope OPD untuk query realisasi
-  const opdHeaderScope = !isCrossOpd
-    ? session.opdId
-      ? { opdId: session.opdId }
-      : session.opdKode
-        ? { kd_skpd: session.opdKode }
-        : {}
-    : {};
-
-  // Ambil seluruh daftar OPD aktif, rincian Rekening RKA (trdrka), serta realisasi rencana dari trdkasin & trdtransout
-  const [opdList, rkaRekeningList, realisasiPendapatanAgg, realisasiBelanjaAgg] =
-    await Promise.all([
-      prisma.opd.findMany({
-        where: isCrossOpd
-          ? { isActive: true }
-          : session.opdId
-            ? { id: session.opdId }
-            : { isActive: true },
-        orderBy: { kd_skpd: "asc" },
-        select: {
-          id: true,
-          kd_skpd: true,
-          nm_skpd: true,
-        },
-      }),
-      prisma.trdrka.findMany({
-        where: {
-          tahunAnggaran: tahunLogin,
-          ...(!isCrossOpd && session.opdKode
-            ? { kd_skpd: session.opdKode }
-            : !isCrossOpd && session.opdId
-              ? { trskpd: { opdId: session.opdId } }
-              : {}),
-        },
-        select: {
-          kd_skpd: true,
-          nm_skpd: true,
-          kd_rek6: true,
-          nilai: true,
-          nilai_ubah: true,
-        },
-      }),
-      prisma.trdkasin.aggregate({
-        _sum: { nilai: true },
-        where: {
-          kd_rek6: { startsWith: "4" },
-          header: {
-            tahunAnggaran: tahunLogin,
-            status: { not: "BATAL" },
-            ...opdHeaderScope,
-          },
-        },
-      }),
-      prisma.trdtransout.aggregate({
-        _sum: { nilai: true },
-        where: {
-          kd_rek6: { startsWith: "5" },
-          header: {
-            tahunAnggaran: tahunLogin,
-            status: { not: "BATAL" },
-            ...opdHeaderScope,
-          },
-        },
-      }),
-    ]);
-
-  const realisasiRencanaPendapatan = Number(realisasiPendapatanAgg._sum.nilai) || 0;
-  const realisasiRencanaBelanja = Number(realisasiBelanjaAgg._sum.nilai) || 0;
+  // Ambil seluruh daftar OPD aktif dan rincian Rekening RKA (trdrka)
+  const [opdList, rkaRekeningList] = await Promise.all([
+    prisma.opd.findMany({
+      where: isCrossOpd
+        ? { isActive: true }
+        : session.opdId
+          ? { id: session.opdId }
+          : { isActive: true },
+      orderBy: { kd_skpd: "asc" },
+      select: {
+        id: true,
+        kd_skpd: true,
+        nm_skpd: true,
+      },
+    }),
+    prisma.trdrka.findMany({
+      where: {
+        tahunAnggaran: tahunLogin,
+        ...(!isCrossOpd && session.opdKode
+          ? { kd_skpd: session.opdKode }
+          : !isCrossOpd && session.opdId
+            ? { trskpd: { opdId: session.opdId } }
+            : {}),
+      },
+      select: {
+        kd_skpd: true,
+        nm_skpd: true,
+        kd_rek6: true,
+        nilai: true,
+        nilai_ubah: true,
+      },
+    }),
+  ]);
 
   let totalPendapatan = 0;
   let totalBelanja = 0;
@@ -140,7 +105,7 @@ export default async function DashboardPage() {
       fullLabel: "Pendapatan Daerah",
       anggaran: totalPendapatan,
       realisasiRiil: 0,
-      realisasiRencana: realisasiRencanaPendapatan,
+      realisasiRencana: totalPendapatan,
     },
     {
       key: "BELANJA",
@@ -148,7 +113,7 @@ export default async function DashboardPage() {
       fullLabel: "Belanja Daerah",
       anggaran: totalBelanja,
       realisasiRiil: 0,
-      realisasiRencana: realisasiRencanaBelanja,
+      realisasiRencana: totalBelanja,
     },
     {
       key: "PENERIMAAN",
@@ -156,7 +121,7 @@ export default async function DashboardPage() {
       fullLabel: "Penerimaan Pembiayaan",
       anggaran: totalPenerimaanPembiayaan,
       realisasiRiil: 0,
-      realisasiRencana: 0,
+      realisasiRencana: totalPenerimaanPembiayaan,
     },
     {
       key: "PENGELUARAN",
@@ -164,7 +129,7 @@ export default async function DashboardPage() {
       fullLabel: "Pengeluaran Pembiayaan",
       anggaran: totalPengeluaranPembiayaan,
       realisasiRiil: 0,
-      realisasiRencana: 0,
+      realisasiRencana: totalPengeluaranPembiayaan,
     },
   ];
 
