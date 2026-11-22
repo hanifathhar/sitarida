@@ -976,14 +976,14 @@ export default function KwitansiView() {
       return;
     }
 
-    // Validasi sisa penyediaan dana
-    if (sisaDanaInfo && sisaDanaInfo.totalSpd > 0 && bruto > sisaDanaInfo.sisaPenyediaanDana) {
-      const confirmExceed = confirm(
-        `Perhatian: Nilai kuitansi (${formatRupiah(bruto)}) melebihi Sisa Penyediaan Dana (${formatRupiah(
-          sisaDanaInfo.sisaPenyediaanDana
-        )}).\n\nApakah Anda yakin ingin tetap menyimpan dokumen pengajuan ini?`
-      );
-      if (!confirmExceed) return;
+    // Validasi ketat: nilai kuitansi tidak boleh melebihi sisa SPD dari rincian belanja yang dipilih
+    if (sisaDanaInfo && bruto > sisaDanaInfo.sisaPenyediaanDana) {
+      const errText = `Nilai bruto kuitansi (${formatRupiah(bruto)}) melebihi Sisa SPD rincian belanja yang tersedia (${formatRupiah(
+        sisaDanaInfo.sisaPenyediaanDana
+      )}). Pembuatan/perubahan kuitansi tidak dapat dilanjutkan.`;
+      setMessage({ type: "error", text: errText });
+      alert(errText);
+      return;
     }
 
     if (formPenerimaList.length === 0) {
@@ -2410,7 +2410,13 @@ export default function KwitansiView() {
               {/* Ringkasan Finansial Card */}
               <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100/70 border border-slate-200 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
+                  <div
+                    className={`bg-white p-3.5 rounded-xl border shadow-xs ${
+                      sisaDanaInfo && Number(formNilaiBruto || 0) > sisaDanaInfo.sisaPenyediaanDana
+                        ? "border-rose-500 bg-rose-50/40"
+                        : "border-slate-200"
+                    }`}
+                  >
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
                       Nilai Bruto Kuitansi (Rp) <span className="text-rose-500">*</span>
                     </label>
@@ -2418,14 +2424,31 @@ export default function KwitansiView() {
                       type="number"
                       required
                       min="1"
+                      max={
+                        sisaDanaInfo && sisaDanaInfo.sisaPenyediaanDana >= 0
+                          ? sisaDanaInfo.sisaPenyediaanDana
+                          : undefined
+                      }
                       placeholder="0"
                       value={formNilaiBruto}
                       onChange={(e) => setFormNilaiBruto(e.target.value)}
-                      className="w-full text-base font-black text-slate-900 border-0 focus:ring-0 p-0"
+                      className={`w-full text-base font-black border-0 bg-transparent focus:ring-0 p-0 ${
+                        sisaDanaInfo && Number(formNilaiBruto || 0) > sisaDanaInfo.sisaPenyediaanDana
+                          ? "text-rose-700"
+                          : "text-slate-900"
+                      }`}
                     />
-                    <span className="text-[10px] text-slate-400 mt-1 block">
-                      Jumlah kotor sebelum potongan
-                    </span>
+                    {sisaDanaInfo && Number(formNilaiBruto || 0) > sisaDanaInfo.sisaPenyediaanDana ? (
+                      <span className="text-[10px] font-bold text-rose-600 mt-1 block">
+                        Melebihi Sisa SPD (Maks: {formatRupiah(sisaDanaInfo.sisaPenyediaanDana)})
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 mt-1 block">
+                        {sisaDanaInfo
+                          ? `Maksimal Sisa SPD: ${formatRupiah(sisaDanaInfo.sisaPenyediaanDana)}`
+                          : "Jumlah kotor sebelum potongan"}
+                      </span>
+                    )}
                   </div>
 
                   <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
@@ -2911,8 +2934,20 @@ export default function KwitansiView() {
 
             <button
               type="submit"
-              disabled={submitting}
-              className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-[#5E0E14] to-[#991B1B] hover:from-[#46090E] hover:to-[#7F1D1D] rounded-xl shadow-md transition-all disabled:opacity-50 cursor-pointer"
+              disabled={
+                submitting ||
+                Boolean(
+                  sisaDanaInfo &&
+                    Number(formNilaiBruto || 0) > sisaDanaInfo.sisaPenyediaanDana
+                )
+              }
+              title={
+                sisaDanaInfo &&
+                Number(formNilaiBruto || 0) > sisaDanaInfo.sisaPenyediaanDana
+                  ? "Nilai kuitansi melebihi Sisa SPD rincian belanja yang dipilih."
+                  : ""
+              }
+              className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-[#5E0E14] to-[#991B1B] hover:from-[#46090E] hover:to-[#7F1D1D] rounded-xl shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {submitting ? (
                 <RefreshCw className="w-4 h-4 animate-spin" />

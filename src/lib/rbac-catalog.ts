@@ -269,6 +269,15 @@ export const RBAC_MODULE_GROUPS: MenuPermissionGroup[] = [
         ],
       },
       {
+        menuKey: "pengajuan-penerima",
+        menuLabel: "Data Penerima",
+        menuHref: "/penatausahaan/pengajuan/penerima",
+        menuPermKode: "menu:penatausahaan:pengajuan-penerima",
+        menuPermNama: "Tampilkan Menu Data Penerima",
+        modul: "penatausahaan",
+        actions: [],
+      },
+      {
         menuKey: "spp-up",
         menuLabel: "SPP-UP",
         menuHref: "/penatausahaan/spp/up",
@@ -620,6 +629,15 @@ export const RBAC_MODULE_GROUPS: MenuPermissionGroup[] = [
         actions: [],
       },
       {
+        menuKey: "bendahara-penerbitan-sts",
+        menuLabel: "Penerbitan STS",
+        menuHref: "/penatausahaan/bendahara-pengeluaran/penerbitan-sts",
+        menuPermKode: "menu:penatausahaan:bendahara-penerbitan-sts",
+        menuPermNama: "Tampilkan Menu Penerbitan STS",
+        modul: "penatausahaan",
+        actions: [],
+      },
+      {
         menuKey: "bendahara-setor-sisa-kas",
         menuLabel: "Setor Sisa Kas (UP/GU/TU)",
         menuHref: "/penatausahaan/bendahara-pengeluaran/setor-sisa-kas",
@@ -675,7 +693,7 @@ export const RBAC_MODULE_GROUPS: MenuPermissionGroup[] = [
   {
     groupKey: "masterRekeningOpd",
     groupTitle: "6. Modul Master Data — Rekening & Organisasi",
-    groupSubtitle: "Master Rekening 6 Level, Master Perangkat Daerah (OPD), dan Master Unit Kerja",
+    groupSubtitle: "Master Rekening 6 Level, Master Perangkat Daerah (OPD), Master Unit Kerja, dan Master Bank",
     items: [
       {
         menuKey: "master-rekening",
@@ -713,6 +731,15 @@ export const RBAC_MODULE_GROUPS: MenuPermissionGroup[] = [
         menuHref: "/master/unit",
         menuPermKode: "menu:master:unit",
         menuPermNama: "Tampilkan Menu Master Unit Kerja",
+        modul: "master-data",
+        actions: [],
+      },
+      {
+        menuKey: "master-bank",
+        menuLabel: "Master Bank",
+        menuHref: "/master/bank",
+        menuPermKode: "menu:master:bank",
+        menuPermNama: "Tampilkan Menu Master Bank",
         modul: "master-data",
         actions: [],
       },

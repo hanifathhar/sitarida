@@ -326,12 +326,13 @@ export default function AppShell({
       href: "/penatausahaan/pengajuan/penerima",
       perm: "menu:penatausahaan:pengajuan-penerima",
     },
-  ].filter(
-    (m) =>
-      isPengajuanRoleAuthorized ||
-      can(m.perm) ||
-      can("kuitansi:read") ||
-      can("kuitansi:write")
+  ].filter((m) =>
+    m.perm === "menu:penatausahaan:pengajuan-penerima"
+      ? can(m.perm)
+      : isPengajuanRoleAuthorized ||
+        can(m.perm) ||
+        can("kuitansi:read") ||
+        can("kuitansi:write")
   );
 
   const sppSubMenus = [
@@ -532,7 +533,7 @@ export default function AppShell({
     {
       label: "Penerbitan STS",
       href: "/penatausahaan/bendahara-pengeluaran/penerbitan-sts",
-      perm: "menu:penatausahaan:bendahara-pengembalian",
+      perm: "menu:penatausahaan:bendahara-penerbitan-sts",
     },
     {
       label: "Setor Sisa Kas (UP/GU/TU)",
@@ -638,12 +639,7 @@ export default function AppShell({
       icon: Landmark,
       perm: "menu:master:bank",
     },
-  ].filter(
-    (m) =>
-      can(m.perm) ||
-      (m.href === "/master/bank" &&
-        (can("master:read") || can("menu:master:unit") || can("menu:master:opd")))
-  );
+  ].filter((m) => can(m.perm));
 
   const masterNomenklaturMenus = [
     {
