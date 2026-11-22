@@ -139,6 +139,7 @@ interface SppRincianItem {
   kd_rek6: string;
   nm_rek6: string;
   nilai: number;
+  sisaSpd?: number;
   sumberDana?: string | null;
 }
 
@@ -222,6 +223,80 @@ export default function SppManagementView({
   const [loadingLpjOptions, setLoadingLpjOptions] = useState(false);
 
   const isSppGu = jenisSpp === "GU" || jenisSpp === "GU_KKPD";
+  const isSppLsBarjas = jenisSpp === "LS_BARANG_JASA";
+
+  // Modal Pilih Penerima dari ms_penerima (khusus SPP-LS BARJAS)
+  const [showModalPenerimaSpp, setShowModalPenerimaSpp] = useState(false);
+  const [msPenerimaList, setMsPenerimaList] = useState<
+    {
+      id: string;
+      nm_penerima: string;
+      bank_penerima: string;
+      rek_penerima: string;
+      npwp?: string | null;
+      kd_skpd: string;
+      nm_skpd: string;
+      kd_unit?: string | null;
+      nm_unit?: string | null;
+    }[]
+  >([]);
+  const [loadingMsPenerima, setLoadingMsPenerima] = useState(false);
+  const [msPenerimaSearch, setMsPenerimaSearch] = useState("");
+
+  useEffect(() => {
+    if (!showModalPenerimaSpp || !selectedOpd?.kd_skpd) return;
+    let active = true;
+    async function loadMsPenerima() {
+      setLoadingMsPenerima(true);
+      try {
+        const params = new URLSearchParams({
+          kd_skpd: selectedOpd!.kd_skpd,
+        });
+        if (selectedUnit?.kd_unit) {
+          params.set("kd_unit", selectedUnit.kd_unit);
+        }
+        const res = await fetch(
+          `/api/penatausahaan/pengajuan/penerima?${params.toString()}`
+        );
+        const json = await res.json();
+        if (active && json.success) {
+          setMsPenerimaList(json.data || []);
+        }
+      } catch (err) {
+        console.error("Gagal memuat daftar penerima:", err);
+      } finally {
+        if (active) setLoadingMsPenerima(false);
+      }
+    }
+    loadMsPenerima();
+    return () => {
+      active = false;
+    };
+  }, [showModalPenerimaSpp, selectedOpd, selectedUnit]);
+
+  const filteredMsPenerima = useMemo(() => {
+    const q = msPenerimaSearch.trim().toLowerCase();
+    if (!q) return msPenerimaList;
+    return msPenerimaList.filter(
+      (p) =>
+        p.nm_penerima.toLowerCase().includes(q) ||
+        p.bank_penerima.toLowerCase().includes(q) ||
+        p.rek_penerima.toLowerCase().includes(q) ||
+        (p.npwp && p.npwp.toLowerCase().includes(q)) ||
+        (p.nm_unit && p.nm_unit.toLowerCase().includes(q))
+    );
+  }, [msPenerimaList, msPenerimaSearch]);
+
+  const handleSelectMsPenerima = (item: (typeof msPenerimaList)[number]) => {
+    setFormHeader((prev) => ({
+      ...prev,
+      nama_penerima: item.nm_penerima,
+      bank_penerima: item.bank_penerima,
+      rek_penerima: item.rek_penerima,
+      npwp_penerima: item.npwp || "",
+    }));
+    setShowModalPenerimaSpp(false);
+  };
 
   async function loadAvailableLpjForSpp(
     opdId: string,
@@ -890,6 +965,33 @@ export default function SppManagementView({
           setSelectedSpdInfo(null);
         }
 
+        // Muat referensi sisa SPD per rekening saat edit SPP
+        if (
+          selectedOpd &&
+          !isSppGu &&
+          jenisSpp !== "UP" &&
+          jenisSpp !== "UP_KKPD" &&
+          jenisSpp !== "TU"
+        ) {
+          try {
+            const refParams = new URLSearchParams({
+              tahun: tahunAnggaran.toString(),
+              kd_skpd: selectedOpd.kd_skpd,
+              excludeSppId: d.id,
+            });
+            if (selectedUnit) refParams.append("kd_unit", selectedUnit.kd_unit);
+            const refRes = await fetch(
+              `/api/penatausahaan/spp/rekening-referensi?${refParams.toString()}`
+            );
+            const refJson = await refRes.json();
+            if (refJson.success && Array.isArray(refJson.data)) {
+              setRekeningRefList(refJson.data);
+            }
+          } catch (e) {
+            console.error("Gagal load referensi rekening:", e);
+          }
+        }
+
         setCurrentStep(4);
       } else {
         setBanner({
@@ -972,9 +1074,19 @@ export default function SppManagementView({
         kd_rek6: ref.kd_rek6,
         nm_rek6: ref.nm_rek6,
         nilai: ref.sisaSpd > 0 ? ref.sisaSpd : 0,
+        sisaSpd: ref.sisaSpd,
       },
     ]);
     setShowRekeningModal(false);
+  }
+
+  function getRowSisaSpd(item: SppRincianItem): number | undefined {
+    if (typeof item.sisaSpd === "number") return item.sisaSpd;
+    const match = rekeningRefList.find(
+      (r) =>
+        r.kd_sub_kegiatan === item.kd_sub_kegiatan && r.kd_rek6 === item.kd_rek6
+    );
+    return match ? match.sisaSpd : undefined;
   }
 
   // Ubah nilai rincian rekening
@@ -1004,6 +1116,26 @@ export default function SppManagementView({
     if (!formHeader.no_spd?.trim() || !selectedSpdInfo) return false;
     return totalFormNilai > selectedSpdInfo.sisaSpd;
   }, [formHeader.no_spd, selectedSpdInfo, totalFormNilai]);
+
+  // Validasi per rincian rekening belanja agar tidak melebihi sisa SPD masing-masing rekening
+  const overSpdRincianItem = useMemo(() => {
+    if (
+      isSppGu ||
+      jenisSpp === "UP" ||
+      jenisSpp === "UP_KKPD" ||
+      jenisSpp === "TU"
+    ) {
+      return null;
+    }
+    return (
+      formRincian.find((item) => {
+        const sisa = getRowSisaSpd(item);
+        return typeof sisa === "number" && Number(item.nilai || 0) > sisa;
+      }) || null
+    );
+  }, [formRincian, rekeningRefList, isSppGu, jenisSpp]);
+
+  const isAnyRincianOverSpd = Boolean(overSpdRincianItem);
 
   // Simpan Dokumen SPP (Draft / Ajukan)
   async function handleSaveSpp(statusTarget: "DRAFT" | "DIAJUKAN") {
@@ -1051,6 +1183,21 @@ export default function SppManagementView({
       setBanner({
         type: "error",
         message: "Setiap rekening belanja harus memiliki nilai lebih dari 0.",
+      });
+      return;
+    }
+
+    // Validasi per rincian rekening belanja agar tidak melebihi sisa SPD rekening tersebut
+    if (overSpdRincianItem) {
+      const sisaRek = getRowSisaSpd(overSpdRincianItem) ?? 0;
+      setBanner({
+        type: "error",
+        title: "Nilai Rincian Melebihi Sisa SPD",
+        message: `Nilai rekening [${overSpdRincianItem.kd_rek6}] ${overSpdRincianItem.nm_rek6} (${formatRupiah(
+          Number(overSpdRincianItem.nilai || 0)
+        )}) melebihi sisa SPD rekening yang tersedia (${formatRupiah(
+          sisaRek
+        )}). Silakan sesuaikan nilai rincian.`,
       });
       return;
     }
@@ -1996,194 +2143,244 @@ export default function SppManagementView({
                 />
               </div>
 
-              {/* Dasar SPD */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-700">
-                    Nomor SPD
-                  </label>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    value={formHeader.no_spd}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setFormHeader({ ...formHeader, no_spd: val });
-                      if (!val.trim()) {
-                        setSelectedSpdInfo(null);
-                      }
-                    }}
-                    placeholder="Pilih nomor SPD dari daftar terbit..."
-                    className="w-full px-3 py-2 text-xs font-mono font-bold rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A]"
-                  />
+              {/* Card Data SPD */}
+              <div className="md:col-span-3 rounded-2xl border border-blue-200/80 bg-gradient-to-br from-blue-50/60 to-white p-5 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between gap-3 pb-3 border-b border-blue-100">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                      <FileText className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-extrabold text-slate-900">
+                        Data Surat Penyediaan Dana (SPD)
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        Pilih nomor SPD terbit sebagai dasar pengajuan dan kontrol pagu dana
+                      </p>
+                    </div>
+                  </div>
                   <button
                     type="button"
                     onClick={handleOpenSpdModal}
-                    className="px-3 py-2 bg-[#5E0E14] hover:bg-[#46090E] text-white rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#5E0E14] hover:bg-[#46090E] text-white rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer shadow-xs"
                     title="Buka dialog pilih SPD terbit"
                   >
-                    <Search className="w-3 h-3" />
+                    <Search className="w-3.5 h-3.5" />
+                    <span>Pilih SPD</span>
                   </button>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Tanggal SPD
-                </label>
-                <input
-                  type="date"
-                  value={formHeader.tgl_spd}
-                  onChange={(e) =>
-                    setFormHeader({ ...formHeader, tgl_spd: e.target.value })
-                  }
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A]"
-                />
-              </div>
-
-
-
-              {/* Box Informasi Akumulasi Pagu dan Sisa SPD Terpilih */}
-              {formHeader.no_spd && selectedSpdInfo && (
-                <div className="md:col-span-3 p-4 rounded-xl border border-blue-200 bg-blue-50/70 space-y-2.5">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs">
-                    <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                      <FileText className="w-4 h-4 text-[#88131A]" />
-                      <span>
-                        Penyediaan Dana (SPD):{" "}
-                        <strong className="font-mono text-[#88131A]">
-                          {selectedSpdInfo.no_spd}
-                        </strong>
-                      </span>
-                    </span>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="text-slate-600">
-                        Nilai SPD Ini:{" "}
-                        <strong className="font-mono text-slate-900">
-                          {formatRupiah(selectedSpdInfo.totalNilai)}
-                        </strong>
-                      </span>
-                      <span className="text-slate-600">
-                        Akumulasi SPD (Awal s.d. Ini):{" "}
-                        <strong className="font-mono text-blue-900 font-bold">
-                          {formatRupiah(selectedSpdInfo.akumulasiSpd)}
-                        </strong>
-                      </span>
-                      <span className="text-slate-600">
-                        Seluruh SPP Keluar:{" "}
-                        <strong className="font-mono text-slate-900">
-                          {formatRupiah(selectedSpdInfo.totalSppKeluar)}
-                        </strong>
-                      </span>
-                      <span
-                        className={`px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 ${selectedSpdInfo.sisaSpd <= 0
-                          ? "bg-red-100 text-red-800 border border-red-200"
-                          : "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                          }`}
-                      >
-                        <span>Sisa Nilai SPD:</span>
-                        <strong className="font-mono">
-                          {formatRupiah(selectedSpdInfo.sisaSpd)}
-                        </strong>
-                      </span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Nomor SPD
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={formHeader.no_spd}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormHeader({ ...formHeader, no_spd: val });
+                          if (!val.trim()) {
+                            setSelectedSpdInfo(null);
+                          }
+                        }}
+                        placeholder="Pilih nomor SPD dari daftar terbit..."
+                        className="w-full px-3 py-2 text-xs font-mono font-bold bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A]"
+                      />
                     </div>
                   </div>
 
-                  {totalFormNilai > selectedSpdInfo.sisaSpd && (
-                    <div className="p-3 rounded-lg bg-red-100 border border-red-300 text-red-900 text-xs flex items-center gap-2.5 animate-in fade-in">
-                      <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
-                      <div>
-                        <div className="font-black text-red-950">
-                          Peringatan: Nilai SPP Melebihi Sisa SPD!
-                        </div>
-                        <div className="mt-0.5 text-red-800 leading-relaxed">
-                          Total nilai SPP saat ini (
-                          <strong>{formatRupiah(totalFormNilai)}</strong>) melebihi
-                          sisa nilai SPD yang tersedia (
-                          <strong>{formatRupiah(selectedSpdInfo.sisaSpd)}</strong>
-                          ). Perhitungan sisa SPD: Akumulasi seluruh SPD dari nomor awal s.d. nomor terpilih (
-                          <strong>{formatRupiah(selectedSpdInfo.akumulasiSpd)}</strong>) dikurangi nilai seluruh SPP yang telah keluar (
-                          <strong>{formatRupiah(selectedSpdInfo.totalSppKeluar)}</strong>). Pembuatan SPP <u>tidak dapat dilanjutkan</u>. Silakan
-                          sesuaikan rincian belanja atau pilih SPD lainnya.
-                        </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Tanggal SPD
+                    </label>
+                    <input
+                      type="date"
+                      value={formHeader.tgl_spd}
+                      onChange={(e) =>
+                        setFormHeader({ ...formHeader, tgl_spd: e.target.value })
+                      }
+                      className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A]"
+                    />
+                  </div>
+                </div>
+
+                {/* Box Informasi Akumulasi Pagu dan Sisa SPD Terpilih */}
+                {formHeader.no_spd && selectedSpdInfo && (
+                  <div className="p-4 rounded-xl border border-blue-200 bg-white/90 space-y-2.5">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs">
+                      <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                        <FileText className="w-4 h-4 text-[#88131A]" />
+                        <span>
+                          Penyediaan Dana (SPD):{" "}
+                          <strong className="font-mono text-[#88131A]">
+                            {selectedSpdInfo.no_spd}
+                          </strong>
+                        </span>
+                      </span>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="text-slate-600">
+                          Nilai SPD Ini:{" "}
+                          <strong className="font-mono text-slate-900">
+                            {formatRupiah(selectedSpdInfo.totalNilai)}
+                          </strong>
+                        </span>
+                        <span className="text-slate-600">
+                          Akumulasi SPD (Awal s.d. Ini):{" "}
+                          <strong className="font-mono text-blue-900 font-bold">
+                            {formatRupiah(selectedSpdInfo.akumulasiSpd)}
+                          </strong>
+                        </span>
+                        <span className="text-slate-600">
+                          Seluruh SPP Keluar:{" "}
+                          <strong className="font-mono text-slate-900">
+                            {formatRupiah(selectedSpdInfo.totalSppKeluar)}
+                          </strong>
+                        </span>
+                        <span
+                          className={`px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 ${selectedSpdInfo.sisaSpd <= 0
+                            ? "bg-red-100 text-red-800 border border-red-200"
+                            : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                            }`}
+                        >
+                          <span>Sisa Nilai SPD:</span>
+                          <strong className="font-mono">
+                            {formatRupiah(selectedSpdInfo.sisaSpd)}
+                          </strong>
+                        </span>
                       </div>
                     </div>
+
+                    {totalFormNilai > selectedSpdInfo.sisaSpd && (
+                      <div className="p-3 rounded-lg bg-red-100 border border-red-300 text-red-900 text-xs flex items-center gap-2.5 animate-in fade-in">
+                        <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+                        <div>
+                          <div className="font-black text-red-950">
+                            Peringatan: Nilai SPP Melebihi Sisa SPD!
+                          </div>
+                          <div className="mt-0.5 text-red-800 leading-relaxed">
+                            Total nilai SPP saat ini (
+                            <strong>{formatRupiah(totalFormNilai)}</strong>) melebihi
+                            sisa nilai SPD yang tersedia (
+                            <strong>{formatRupiah(selectedSpdInfo.sisaSpd)}</strong>
+                            ). Perhitungan sisa SPD: Akumulasi seluruh SPD dari nomor awal s.d. nomor terpilih (
+                            <strong>{formatRupiah(selectedSpdInfo.akumulasiSpd)}</strong>) dikurangi nilai seluruh SPP yang telah keluar (
+                            <strong>{formatRupiah(selectedSpdInfo.totalSppKeluar)}</strong>). Pembuatan SPP <u>tidak dapat dilanjutkan</u>. Silakan
+                            sesuaikan rincian belanja atau pilih SPD lainnya.
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Card Data Penerima */}
+              <div className="md:col-span-3 rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50/50 to-white p-5 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between gap-3 pb-3 border-b border-amber-100">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                      <CreditCard className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-extrabold text-slate-900">
+                        Data Penerima / Pihak Ketiga
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        Informasi nama penerima, bank penyalur, nomor rekening, dan NPWP
+                      </p>
+                    </div>
+                  </div>
+                  {isSppLsBarjas && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMsPenerimaSearch("");
+                        setShowModalPenerimaSpp(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#5E0E14] text-white text-xs font-bold hover:bg-[#46090E] transition-colors shrink-0 cursor-pointer shadow-xs"
+                    >
+                      <Search className="w-3.5 h-3.5" />
+                      <span>Pilih Penerima</span>
+                    </button>
                   )}
                 </div>
-              )}
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Nama Penerima / Pihak Ketiga
-                </label>
-                <input
-                  type="text"
-                  value={formHeader.nama_penerima}
-                  onChange={(e) =>
-                    setFormHeader({
-                      ...formHeader,
-                      nama_penerima: e.target.value,
-                    })
-                  }
-                  placeholder="Nama Bendahara atau Rekanan"
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A]"
-                />
-              </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Nama Penerima / Pihak Ketiga
+                    </label>
+                    <input
+                      type="text"
+                      value={formHeader.nama_penerima}
+                      onChange={(e) =>
+                        setFormHeader({
+                          ...formHeader,
+                          nama_penerima: e.target.value,
+                        })
+                      }
+                      placeholder="Nama Bendahara atau Rekanan"
+                      className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A]"
+                    />
+                  </div>
 
-              {/* Data Rekening Penerima */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Bank Penerima
-                </label>
-                <input
-                  type="text"
-                  value={formHeader.bank_penerima}
-                  onChange={(e) =>
-                    setFormHeader({
-                      ...formHeader,
-                      bank_penerima: e.target.value,
-                    })
-                  }
-                  placeholder="Contoh: BANK JATENG"
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A]"
-                />
-              </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Bank Penerima
+                    </label>
+                    <input
+                      type="text"
+                      value={formHeader.bank_penerima}
+                      onChange={(e) =>
+                        setFormHeader({
+                          ...formHeader,
+                          bank_penerima: e.target.value,
+                        })
+                      }
+                      placeholder="Contoh: 117 BANK SUMUT"
+                      className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A]"
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Nomor Rekening Penerima
-                </label>
-                <input
-                  type="text"
-                  value={formHeader.rek_penerima}
-                  onChange={(e) =>
-                    setFormHeader({
-                      ...formHeader,
-                      rek_penerima: e.target.value,
-                    })
-                  }
-                  placeholder="Nomor Rekening Bank"
-                  className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A]"
-                />
-              </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Nomor Rekening Penerima
+                    </label>
+                    <input
+                      type="text"
+                      value={formHeader.rek_penerima}
+                      onChange={(e) =>
+                        setFormHeader({
+                          ...formHeader,
+                          rek_penerima: e.target.value,
+                        })
+                      }
+                      placeholder="Nomor Rekening Bank"
+                      className="w-full px-3 py-2 text-xs font-mono bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A]"
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  NPWP Penerima
-                </label>
-                <input
-                  type="text"
-                  value={formHeader.npwp_penerima}
-                  onChange={(e) =>
-                    setFormHeader({
-                      ...formHeader,
-                      npwp_penerima: e.target.value,
-                    })
-                  }
-                  placeholder="NPWP"
-                  className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A]"
-                />
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      NPWP Penerima
+                    </label>
+                    <input
+                      type="text"
+                      value={formHeader.npwp_penerima}
+                      onChange={(e) =>
+                        setFormHeader({
+                          ...formHeader,
+                          npwp_penerima: e.target.value,
+                        })
+                      }
+                      placeholder="NPWP"
+                      className="w-full px-3 py-2 text-xs font-mono bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A]"
+                    />
+                  </div>
+                </div>
               </div>
 
               {isSppGu && (
@@ -2623,22 +2820,60 @@ export default function SppManagementView({
                           </div>
                         </td>
                         <td className="py-3 px-3 text-right">
-                          <input
-                            type="number"
-                            min="0"
-                            disabled={formHeader.isLocked || isSppGu}
-                            value={item.nilai || ""}
-                            onChange={(e) =>
-                              handleChangeRincianNilai(
-                                idx,
-                                Number(e.target.value) || 0
-                              )
-                            }
-                            className={`w-full px-3 py-1.5 text-xs text-right font-black font-mono rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A] ${formHeader.isLocked || isSppGu
-                              ? "bg-slate-100 text-slate-600 cursor-not-allowed"
-                              : ""
-                              }`}
-                          />
+                          {(() => {
+                            const rowSisaSpd =
+                              !isSppGu &&
+                              jenisSpp !== "UP" &&
+                              jenisSpp !== "UP_KKPD" &&
+                              jenisSpp !== "TU"
+                                ? getRowSisaSpd(item)
+                                : undefined;
+                            const isRowOver =
+                              typeof rowSisaSpd === "number" &&
+                              Number(item.nilai || 0) > rowSisaSpd;
+                            return (
+                              <div className="space-y-1">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={
+                                    typeof rowSisaSpd === "number" &&
+                                    rowSisaSpd >= 0
+                                      ? rowSisaSpd
+                                      : undefined
+                                  }
+                                  disabled={formHeader.isLocked || isSppGu}
+                                  value={item.nilai || ""}
+                                  onChange={(e) =>
+                                    handleChangeRincianNilai(
+                                      idx,
+                                      Number(e.target.value) || 0
+                                    )
+                                  }
+                                  className={`w-full px-3 py-1.5 text-xs text-right font-black font-mono rounded-lg border focus:outline-none focus:ring-2 ${
+                                    formHeader.isLocked || isSppGu
+                                      ? "bg-slate-100 text-slate-600 border-slate-200 cursor-not-allowed"
+                                      : isRowOver
+                                        ? "border-rose-500 bg-rose-50 text-rose-700 focus:ring-rose-500/20 focus:border-rose-500"
+                                        : "border-slate-200 focus:ring-[#88131A]/20 focus:border-[#88131A]"
+                                  }`}
+                                />
+                                {typeof rowSisaSpd === "number" && (
+                                  <div
+                                    className={`text-[10px] font-semibold ${
+                                      isRowOver
+                                        ? "text-rose-600"
+                                        : "text-slate-500"
+                                    }`}
+                                  >
+                                    {isRowOver
+                                      ? `Melebihi Sisa SPD (Maks: ${formatRupiah(rowSisaSpd)})`
+                                      : `Sisa SPD: ${formatRupiah(rowSisaSpd)}`}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="py-3 px-3 text-center">
                           {formHeader.isLocked ? (
@@ -2713,12 +2948,12 @@ export default function SppManagementView({
                 <>
                   <button
                     type="button"
-                    disabled={savingSpp || isOverSpdLimit}
+                    disabled={savingSpp || isOverSpdLimit || isAnyRincianOverSpd}
                     onClick={() => handleSaveSpp("DRAFT")}
                     className="px-4 py-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                     title={
-                      isOverSpdLimit
-                        ? "Nilai SPP melebihi sisa SPD yang tersedia. Pembuatan SPP tidak dapat dilanjutkan."
+                      isOverSpdLimit || isAnyRincianOverSpd
+                        ? "Nilai SPP / rincian rekening melebihi sisa SPD yang tersedia. Pembuatan SPP tidak dapat dilanjutkan."
                         : ""
                     }
                   >
@@ -2727,12 +2962,12 @@ export default function SppManagementView({
 
                   <button
                     type="button"
-                    disabled={savingSpp || isOverSpdLimit}
+                    disabled={savingSpp || isOverSpdLimit || isAnyRincianOverSpd}
                     onClick={() => handleSaveSpp("DIAJUKAN")}
                     className="px-5 py-2.5 text-xs font-bold text-white bg-[#5E0E14] hover:bg-[#46090E] rounded-xl transition-colors cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
                     title={
-                      isOverSpdLimit
-                        ? "Nilai SPP melebihi sisa SPD yang tersedia. Pembuatan SPP tidak dapat dilanjutkan."
+                      isOverSpdLimit || isAnyRincianOverSpd
+                        ? "Nilai SPP / rincian rekening melebihi sisa SPD yang tersedia. Pembuatan SPP tidak dapat dilanjutkan."
                         : ""
                     }
                   >
@@ -2991,6 +3226,101 @@ export default function SppManagementView({
                   );
                 })
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL PILIH PENERIMA DARI ms_penerima (SPP-LS BARJAS)          */}
+      {/* ============================================================== */}
+      {showModalPenerimaSpp && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in">
+            <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-[#88131A]" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Pilih Penerima / Pihak Ketiga ({filteredMsPenerima.length} data)
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    {selectedOpd
+                      ? `${selectedOpd.kd_skpd} — ${selectedOpd.nm_skpd}`
+                      : "Semua OPD"}
+                    {selectedUnit
+                      ? ` • Unit: ${selectedUnit.kd_unit} — ${selectedUnit.nm_unit}`
+                      : " • Semua Unit / Induk"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowModalPenerimaSpp(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs overflow-y-auto">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={msPenerimaSearch}
+                  onChange={(e) => setMsPenerimaSearch(e.target.value)}
+                  placeholder="Cari nama penerima, bank, nomor rekening, atau NPWP..."
+                  className="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-[#88131A]/20 focus:border-[#88131A]"
+                />
+              </div>
+
+              <div className="max-h-80 overflow-y-auto bg-white rounded-xl border border-slate-200 divide-y divide-slate-100">
+                {loadingMsPenerima ? (
+                  <div className="py-10 text-center text-slate-400 text-xs">
+                    Memuat daftar penerima...
+                  </div>
+                ) : filteredMsPenerima.length === 0 ? (
+                  <div className="py-10 text-center text-slate-400 text-xs px-4">
+                    Tidak ada data penerima yang cocok di master penerima. Tutup dialog ini untuk mengisi penerima secara manual.
+                  </div>
+                ) : (
+                  filteredMsPenerima.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => handleSelectMsPenerima(item)}
+                      className="w-full text-left px-4 py-3 flex items-center justify-between gap-3 hover:bg-amber-50/60 transition-colors cursor-pointer"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-800 truncate">
+                          {item.nm_penerima}
+                        </p>
+                        <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                          {item.bank_penerima} •{" "}
+                          <span className="font-mono font-semibold text-slate-700">
+                            {item.rek_penerima}
+                          </span>
+                          {item.npwp ? ` • NPWP: ${item.npwp}` : ""}
+                        </p>
+                      </div>
+                      <span className="px-3 py-1.5 rounded-lg bg-[#5E0E14] text-white text-[11px] font-semibold shrink-0">
+                        Pilih
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowModalPenerimaSpp(false)}
+                  className="px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Tutup / Input Manual
+                </button>
+              </div>
             </div>
           </div>
         </div>
