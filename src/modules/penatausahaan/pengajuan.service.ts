@@ -228,11 +228,12 @@ export const pengajuanService = {
       }),
     ]);
 
-    try {
-      await bendaharaPengeluaranService.pullCmsWebStatusToLocal(data);
-    } catch (err) {
-      console.warn("Gagal sinkronisasi real-time CMS_WEB pada daftar kuitansi:", err);
-    }
+    // Jalankan sinkronisasi CMS_WEB secara non-blocking agar daftar kuitansi tampil instan
+    void bendaharaPengeluaranService
+      .pullCmsWebStatusToLocal(data)
+      .catch((err) => {
+        console.warn("Gagal sinkronisasi real-time CMS_WEB pada daftar kuitansi:", err);
+      });
 
     return {
       data,

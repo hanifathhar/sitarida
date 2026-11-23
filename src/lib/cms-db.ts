@@ -6,7 +6,7 @@ const CMS_DB_CONFIG = {
   user: process.env.CMS_DB_USER || "prg#s3rv3r#pro",
   password: process.env.CMS_DB_PASSWORD || "s3rv3r#2025%route.&",
   database: process.env.CMS_DB_NAME || "CMS_WEB",
-  connectTimeout: 15000,
+  connectTimeout: 3000,
   waitForConnections: true,
   connectionLimit: 5,
   queueLimit: 0,

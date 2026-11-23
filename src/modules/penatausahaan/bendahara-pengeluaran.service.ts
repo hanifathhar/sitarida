@@ -956,8 +956,10 @@ export const bendaharaPengeluaranService = {
 
     const noBuktiSet = new Set<string>();
     for (const doc of kwitansiList) {
+      if (doc.status === "DRAFT" || Number(doc.cair) === 1) continue;
       if (!Array.isArray(doc.penerimaList)) continue;
       doc.penerimaList.forEach((p: any, idx: number) => {
+        if (Number(p.cair ?? 0) === 1) return;
         const noBukti = (p.no_bukti || `${doc.nomor}-${idx + 1}`).trim();
         if (noBukti) noBuktiSet.add(noBukti);
       });
