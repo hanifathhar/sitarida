@@ -1,13 +1,15 @@
 import mysql from "mysql2/promise";
 import { prisma } from "@/lib/prisma";
+import { getExternalDbConfig } from "@/lib/external-db-config";
 
-export function getSimpatdaConnection() {
+export async function getSimpatdaConnection() {
+  const cfg = await getExternalDbConfig("SIMPATDA");
   return mysql.createConnection({
-    host: process.env.SIMPATDA_DB_HOST || "103.167.12.55",
-    port: Number(process.env.SIMPATDA_DB_PORT || 3306),
-    user: process.env.SIMPATDA_DB_USER || "prg#s3rv3r#pro",
-    password: process.env.SIMPATDA_DB_PASSWORD || "s3rv3r#2025%route.&",
-    database: process.env.SIMPATDA_DB_NAME || "dbsimpatda",
+    host: cfg.host,
+    port: cfg.port,
+    user: cfg.username,
+    password: cfg.password,
+    database: cfg.database,
     connectTimeout: 5000,
   });
 }

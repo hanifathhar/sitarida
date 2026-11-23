@@ -37,6 +37,7 @@ import {
   Coins,
   Landmark,
   Receipt,
+  Database,
 } from "lucide-react";
 import { SessionPayload } from "@/lib/session";
 
@@ -125,6 +126,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/penatausahaan/bendahara-pengeluaran/lpj-kkpd": "LPJ-KKPD",
   "/admin/users": "DATA PEGAWAI / PENGGUNA & PENUGASAN OPD",
   "/admin/roles": "MANAJEMEN ROLE & HAK AKSES",
+  "/admin/koneksi": "SETTING KONEKSI SERVER EKSTERNAL",
   "/admin/audit-log": "LAPORAN JEJAK AUDIT (AUDIT LOG)",
 };
 
@@ -623,6 +625,12 @@ export default function AppShell({
       href: "/admin/audit-log",
       icon: History,
       perm: "menu:admin:audit",
+    },
+    {
+      label: "Setting Koneksi",
+      href: "/admin/koneksi",
+      icon: Database,
+      perm: "menu:admin:koneksi",
     },
   ].filter((m) => can(m.perm));
 

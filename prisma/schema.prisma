@@ -1543,3 +1543,20 @@ model TblPengembalian {
   @@index([no_sts])
   @@map("tbl_pengembalian")
 }
+
+model MsKoneksiEksternal {
+  id        String   @id @default(uuid())
+  kode      String   @unique // "CMS_WEB" | "SIMPATDA"
+  nama      String
+  deskripsi String?
+  host      String
+  port      Int      @default(3306)
+  username  String
+  password  String
+  database  String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("ms_koneksi_eksternal")
+}

@@ -895,6 +895,15 @@ export const RBAC_MODULE_GROUPS: MenuPermissionGroup[] = [
           },
         ],
       },
+      {
+        menuKey: "admin-koneksi",
+        menuLabel: "Setting Koneksi",
+        menuHref: "/admin/koneksi",
+        menuPermKode: "menu:admin:koneksi",
+        menuPermNama: "Tampilkan Menu Setting Koneksi Server Eksternal",
+        modul: "users",
+        actions: [],
+      },
     ],
   },
 ];

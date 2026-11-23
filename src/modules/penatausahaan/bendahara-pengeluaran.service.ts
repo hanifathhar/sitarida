@@ -968,7 +968,7 @@ export const bendaharaPengeluaranService = {
     const noBuktiList = Array.from(noBuktiSet);
     if (noBuktiList.length === 0) return;
 
-    const cmsPool = getCmsDbPool();
+    const cmsPool = await getCmsDbPool();
     const placeholders = noBuktiList.map(() => "?").join(", ");
     const [rows] = await cmsPool.query<any[]>(
       `SELECT No_Bukti, Tahun, Cair, Uraian FROM trxspj WHERE No_Bukti IN (${placeholders})`,
@@ -1175,7 +1175,7 @@ export const bendaharaPengeluaranService = {
     `;
 
     // Query 2 (Insert ke database tujuan CMS_WEB tabel trxspj & trxspj_potongan)
-    const cmsPool = getCmsDbPool();
+    const cmsPool = await getCmsDbPool();
     const conn = await cmsPool.getConnection();
     const effectiveDate = validationDate || new Date();
     const nowStr = formatSqlDateTime(effectiveDate);
@@ -1332,7 +1332,7 @@ export const bendaharaPengeluaranService = {
       return { deletedRows: 0 };
     }
 
-    const cmsPool = getCmsDbPool();
+    const cmsPool = await getCmsDbPool();
     const conn = await cmsPool.getConnection();
     try {
       await conn.beginTransaction();
