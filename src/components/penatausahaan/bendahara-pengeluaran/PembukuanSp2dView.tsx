@@ -240,9 +240,17 @@ function PembukuanSp2dContent({
     setShowSp2dModal(false);
     setBukuPayType("BANK");
 
-    const isUpTuGu = ["UP", "GU", "TU", "UP_KKPD", "GU_KKPD"].includes(
-      (sp2d.jenis_sp2d || "").toUpperCase()
-    );
+    const isUpTuGu = [
+      "UP",
+      "GU",
+      "GU_NIHIL",
+      "GU-NIHIL",
+      "TU",
+      "TU_NIHIL",
+      "TU-NIHIL",
+      "UP_KKPD",
+      "GU_KKPD",
+    ].includes((sp2d.jenis_sp2d || "").toUpperCase());
 
     const unitPart = (
       sp2d.kd_unit ||
@@ -378,9 +386,17 @@ function PembukuanSp2dContent({
   // =========================================================================
   if (currentStep === 4) {
     const isUpTuGu = selectedSp2d
-      ? ["UP", "GU", "TU", "UP_KKPD", "GU_KKPD"].includes(
-        (selectedSp2d.jenis_sp2d || "").toUpperCase()
-      )
+      ? [
+          "UP",
+          "GU",
+          "GU_NIHIL",
+          "GU-NIHIL",
+          "TU",
+          "TU_NIHIL",
+          "TU-NIHIL",
+          "UP_KKPD",
+          "GU_KKPD",
+        ].includes((selectedSp2d.jenis_sp2d || "").toUpperCase())
       : false;
 
     return (

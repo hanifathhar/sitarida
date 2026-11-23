@@ -81,7 +81,9 @@ const PAGE_TITLES: Record<string, string> = {
   "/penatausahaan/pengajuan/penerima": "DATA PENERIMA",
   "/penatausahaan/spp/up": "SURAT PERMINTAAN PEMBAYARAN - UANG PERSEDIAAN (SPP-UP)",
   "/penatausahaan/spp/gu": "SURAT PERMINTAAN PEMBAYARAN - GANTI UANG (SPP-GU)",
+  "/penatausahaan/spp/gu-nihil": "SURAT PERMINTAAN PEMBAYARAN - GU NIHIL (SPP-GU NIHIL)",
   "/penatausahaan/spp/tu": "SURAT PERMINTAAN PEMBAYARAN - TAMBAH UANG (SPP-TU)",
+  "/penatausahaan/spp/tu-nihil": "SURAT PERMINTAAN PEMBAYARAN - TU NIHIL (SPP-TU NIHIL)",
   "/penatausahaan/spp/ls-gaji": "SURAT PERMINTAAN PEMBAYARAN - LS GAJI & TUNJANGAN (SPP-LS GAJI)",
   "/penatausahaan/spp/ls-barang-jasa": "SURAT PERMINTAAN PEMBAYARAN - LS BARANG & JASA (SPP-LS BARJAS)",
   "/penatausahaan/spp/up-kkpd": "SURAT PERMINTAAN PEMBAYARAN - UP KKPD (SPP-UP KKPD)",
@@ -347,9 +349,19 @@ export default function AppShell({
       perm: "menu:penatausahaan:spp-gu",
     },
     {
+      label: "SPP-GU Nihil",
+      href: "/penatausahaan/spp/gu-nihil",
+      perm: "menu:penatausahaan:spp-gu-nihil",
+    },
+    {
       label: "SPP-TU",
       href: "/penatausahaan/spp/tu",
       perm: "menu:penatausahaan:spp-tu",
+    },
+    {
+      label: "SPP-TU Nihil",
+      href: "/penatausahaan/spp/tu-nihil",
+      perm: "menu:penatausahaan:spp-tu-nihil",
     },
     {
       label: "SPP-LS Gaji",

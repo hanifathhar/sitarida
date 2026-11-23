@@ -107,6 +107,9 @@ export default function Sp2dPrintModal({ data, onClose }: Sp2dPrintModalProps) {
   const tahunAnggaran = data.tahunAnggaran || 2026;
   const tglIndo = formatTglIndo(data.tgl_sp2d);
   const tglSpmAngka = formatTglAngka(data.tgl_spm);
+  const isNihilSp2d = ["TU_NIHIL", "TU-NIHIL", "GU_NIHIL", "GU-NIHIL"].includes(
+    String(data.jenis_sp2d || "").toUpperCase()
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 sm:p-4 backdrop-blur-xs">
@@ -495,7 +498,9 @@ export default function Sp2dPrintModal({ data, onClose }: Sp2dPrintModalProps) {
                         Jumlah Yang di Bayarkan
                       </td>
                       <td className="w-48 py-1 px-2 font-mono font-bold border-r border-black">
-                        Rp. {formatNilaiSp2d(data.nilai_bersih)}
+                        {isNihilSp2d
+                          ? "Nihil"
+                          : `Rp. ${formatNilaiSp2d(data.nilai_bersih)}`}
                       </td>
                       <td className="py-1 px-2"></td>
                     </tr>
@@ -506,7 +511,9 @@ export default function Sp2dPrintModal({ data, onClose }: Sp2dPrintModalProps) {
                 <div className="p-2 border-t border-black text-[10px]">
                   <span>Terbilang : </span>
                   <span className="italic">
-                    ({terbilang(data.nilai_bersih)} Rupiah)
+                    {isNihilSp2d
+                      ? "(Nihil)"
+                      : `(${terbilang(data.nilai_bersih)} Rupiah)`}
                   </span>
                 </div>
               </div>

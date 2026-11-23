@@ -37,7 +37,9 @@ import SppPrintModal from "@/components/penatausahaan/SppPrintModal";
 export type JenisSppType =
   | "UP"
   | "GU"
+  | "GU_NIHIL"
   | "TU"
+  | "TU_NIHIL"
   | "LS_GAJI"
   | "LS_BARANG_JASA"
   | "UP_KKPD"
@@ -222,7 +224,11 @@ export default function SppManagementView({
   const [lpjOptions, setLpjOptions] = useState<any[]>([]);
   const [loadingLpjOptions, setLoadingLpjOptions] = useState(false);
 
-  const isSppGu = jenisSpp === "GU" || jenisSpp === "GU_KKPD";
+  const isSppGu =
+    jenisSpp === "GU" ||
+    jenisSpp === "GU_KKPD" ||
+    jenisSpp === "GU_NIHIL" ||
+    jenisSpp === "TU_NIHIL";
   const isSppLsBarjas = jenisSpp === "LS_BARANG_JASA";
 
   // Modal Pilih Penerima dari ms_penerima (khusus SPP-LS BARJAS)
@@ -701,7 +707,9 @@ export default function SppManagementView({
       "UP_KKPD",
       "GU",
       "GU_KKPD",
+      "GU_NIHIL",
       "TU",
+      "TU_NIHIL",
       "LS_GAJI",
     ].includes(jenisSpp);
 
@@ -794,7 +802,7 @@ export default function SppManagementView({
           nilai: 0,
         },
       ]);
-    } else if (jenisSpp === "GU" || jenisSpp === "GU_KKPD") {
+    } else if (isSppGu) {
       setFormRincian([]);
       await loadAvailableLpjForSpp(selectedOpd.id);
     } else {
@@ -899,7 +907,12 @@ export default function SppManagementView({
           }))
         );
 
-        if (d.jenis_spp === "GU" || d.jenis_spp === "GU_KKPD") {
+        if (
+          d.jenis_spp === "GU" ||
+          d.jenis_spp === "GU_KKPD" ||
+          d.jenis_spp === "GU_NIHIL" ||
+          d.jenis_spp === "TU_NIHIL"
+        ) {
           const targetOpdId = d.opdId || selectedOpd?.id;
           if (targetOpdId) {
             await loadAvailableLpjForSpp(targetOpdId, d.no_lpj || undefined);
@@ -2386,8 +2399,13 @@ export default function SppManagementView({
               {isSppGu && (
                 <div className="md:col-span-2">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Nomor LPJ ({jenisSpp === "GU_KKPD" ? "KKPD" : "GU"}){" "}
-                    <span className="text-red-500">*</span>
+                    Nomor LPJ (
+                    {jenisSpp === "GU_KKPD"
+                      ? "KKPD"
+                      : jenisSpp === "TU_NIHIL"
+                        ? "TU"
+                        : "GU"}
+                    ) <span className="text-red-500">*</span>
                   </label>
                   <SearchableSelect
                     options={lpjOptions.map((l) => ({

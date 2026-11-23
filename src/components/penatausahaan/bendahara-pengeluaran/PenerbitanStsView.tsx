@@ -26,6 +26,8 @@ import {
   ShieldCheck,
   Lock,
   RotateCcw,
+  Send,
+  Undo2,
 } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
 
@@ -119,6 +121,8 @@ function PenerbitanStsContent({
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [simpatdaError, setSimpatdaError] = useState<string | null>(null);
+  const [sendingSimpatdaId, setSendingSimpatdaId] = useState<string | null>(null);
 
   // Delete Dialog & Print Modal
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
@@ -176,6 +180,76 @@ function PenerbitanStsContent({
       setCancelPaymentError("Terjadi kesalahan jaringan saat membatalkan pembayaran.");
     } finally {
       setCancelingPayment(false);
+    }
+  };
+
+  const handleKirimSimpatda = async (item: any) => {
+    setSendingSimpatdaId(item.id);
+    setSuccessMsg(null);
+    setSimpatdaError(null);
+    try {
+      const res = await fetch(
+        "/api/penatausahaan/bendahara-pengeluaran/penerbitan-sts/kirim-simpatda",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: item.id }),
+        }
+      );
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setSuccessMsg(
+          json.message ||
+          `Data STS ${item.no_sts || item.no_tetap} berhasil dikirim ke pembayaran.`
+        );
+        await fetchData();
+      } else {
+        setSimpatdaError(
+          json.error || "Gagal mengirim data STS ke pembayaran."
+        );
+        if (res.status === 409) {
+          await fetchData();
+        }
+      }
+    } catch {
+      setSimpatdaError(
+        "Terjadi kesalahan jaringan saat mengirim data ke pembayaran."
+      );
+    } finally {
+      setSendingSimpatdaId(null);
+    }
+  };
+
+  const handleBatalKirimSimpatda = async (item: any) => {
+    setSendingSimpatdaId(item.id);
+    setSuccessMsg(null);
+    setSimpatdaError(null);
+    try {
+      const res = await fetch(
+        `/api/penatausahaan/bendahara-pengeluaran/penerbitan-sts/kirim-simpatda?id=${encodeURIComponent(item.id)}`,
+        {
+          method: "DELETE",
+        }
+      );
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setSuccessMsg(
+          json.message ||
+          `Pengiriman data STS ${item.no_sts || item.no_tetap} berhasil dibatalkan.`
+        );
+        await fetchData();
+      } else {
+        setSimpatdaError(
+          json.error ||
+          "Gagal membatalkan pengiriman data STS ke database dbsimpatda."
+        );
+      }
+    } catch {
+      setSimpatdaError(
+        "Terjadi kesalahan jaringan saat membatalkan pengiriman data ke dbsimpatda."
+      );
+    } finally {
+      setSendingSimpatdaId(null);
     }
   };
 
@@ -282,6 +356,15 @@ function PenerbitanStsContent({
     fetchData();
     fetchOptions();
   }, [fetchData, fetchOptions]);
+
+  // Polling otomatis setiap 30 detik agar update status bayar/verifikasi dari dbsimpatda langsung tersinkron
+  useEffect(() => {
+    if (!selectedOpd) return;
+    const timer = setInterval(() => {
+      fetchData();
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [selectedOpd, fetchData]);
 
   useEffect(() => {
     if (!showModal || editingId) return;
@@ -552,6 +635,22 @@ function PenerbitanStsContent({
         </div>
       )}
 
+      {simpatdaError && (
+        <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-center justify-between gap-2 font-medium">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{simpatdaError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSimpatdaError(null)}
+            className="p-1 hover:bg-black/5 rounded-lg"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Action Bar */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -657,7 +756,7 @@ function PenerbitanStsContent({
                 <th className="px-3 py-3 font-semibold text-right w-36">
                   Nilai Setoran (Rp)
                 </th>
-                <th className="px-3 py-3 font-semibold text-center w-24">Aksi</th>
+                <th className="px-3 py-3 font-semibold text-center w-32">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -768,7 +867,7 @@ function PenerbitanStsContent({
                           <>
                             <span
                               className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 text-slate-500 text-[11px] font-semibold cursor-not-allowed"
-                              title="Terkunci — STS sudah terbayar. Edit dan Hapus dikunci."
+                              title="Terkunci — STS sudah terbayar. Kirim, Edit, dan Hapus dikunci."
                             >
                               <Lock className="w-3.5 h-3.5" />
                               <span>Terkunci</span>
@@ -789,6 +888,35 @@ function PenerbitanStsContent({
                           </>
                         ) : (
                           <>
+                            {item.sent_simpatda ? (
+                              <button
+                                type="button"
+                                disabled={sendingSimpatdaId === item.id}
+                                onClick={() => handleBatalKirimSimpatda(item)}
+                                className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg cursor-pointer disabled:opacity-50"
+                                title="Batal Kirim Data dari dbsimpatda"
+                              >
+                                {sendingSimpatdaId === item.id ? (
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Undo2 className="w-4 h-4" />
+                                )}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={sendingSimpatdaId === item.id}
+                                onClick={() => handleKirimSimpatda(item)}
+                                className="p-1.5 text-sky-700 hover:bg-sky-50 rounded-lg cursor-pointer disabled:opacity-50"
+                                title="Kirim Data ke dbsimpatda"
+                              >
+                                {sendingSimpatdaId === item.id ? (
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Send className="w-4 h-4" />
+                                )}
+                              </button>
+                            )}
                             {isSuperadmin && (
                               <button
                                 type="button"

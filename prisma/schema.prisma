@@ -1528,6 +1528,7 @@ model TblPengembalian {
   nilai               Decimal   @default(0) @db.Decimal(18, 2)
   status              String    @default("TERBIT")
   verif               Int       @default(0)
+  sent_simpatda       Boolean   @default(false)
   kd_cabang           String?
   kd_pengesahan       String?
   tgl_bayar           DateTime?

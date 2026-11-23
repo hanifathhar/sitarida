@@ -4,6 +4,7 @@ import {
   bendaharaPengeluaranService,
   isBendaharaAuthorized,
 } from "@/modules/penatausahaan/bendahara-pengeluaran.service";
+import { syncStsFromSimpatda } from "@/lib/simpatda-sts";
 
 export async function GET(req: NextRequest) {
   try {
@@ -39,6 +40,14 @@ export async function GET(req: NextRequest) {
       });
       return NextResponse.json({ success: true, data: options });
     }
+
+    // Sinkronisasi otomatis perubahan data STS dari dbsimpatda.tr_tetap ke tbl_pengembalian
+    await syncStsFromSimpatda({ opdId, tahunAnggaran }).catch((syncErr) => {
+      console.warn(
+        "Sinkronisasi otomatis dbsimpatda dilewati:",
+        syncErr?.message || syncErr
+      );
+    });
 
     const data = await bendaharaPengeluaranService.getPenerbitanStsList({
       tahunAnggaran,

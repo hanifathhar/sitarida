@@ -723,6 +723,14 @@ function RekalTransaksiContent({
           .map((d: any) => {
             const terima = Number(d.terima) || 0;
             const keluar = Number(d.keluar) || 0;
+            const isTuNihilRow = [
+              "TU_NIHIL",
+              "TU-NIHIL",
+              "GU_NIHIL",
+              "GU-NIHIL",
+            ].includes(
+              String(d.jenis_beban || h.jenis_beban || "").toUpperCase()
+            );
             runningSaldo += terima - keluar;
             totTerima += terima;
             totKeluar += keluar;
@@ -742,7 +750,7 @@ function RekalTransaksiContent({
                 <td></td>
                 ${kodeCells}
                 <td>${d.nm_rek6 || d.keterangan || "-"}</td>
-                <td class="text-right">${terima > 0 ? formatNum(terima) : ""}</td>
+                <td class="text-right">${terima > 0 ? formatNum(terima) : isTuNihilRow ? "Nihil" : ""}</td>
                 <td class="text-right">${keluar > 0 ? formatNum(keluar) : ""}</td>
                 <td class="text-right">${formatNum(runningSaldo)}</td>
               </tr>

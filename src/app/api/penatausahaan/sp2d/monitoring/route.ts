@@ -40,7 +40,22 @@ export async function GET(req: NextRequest) {
       q,
     });
 
-    return NextResponse.json({ success: true, data: result });
+    // SP2D TU-Nihil & GU-Nihil tidak melalui proses pencairan sehingga tidak ditampilkan di Monitoring Pencairan
+    const filteredItems = (result.items || []).filter(
+      (item) =>
+        !["TU_NIHIL", "TU-NIHIL", "GU_NIHIL", "GU-NIHIL"].includes(
+          String(item.jenis_sp2d || "").toUpperCase()
+        )
+    );
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...result,
+        items: filteredItems,
+        total: filteredItems.length,
+      },
+    });
   } catch (error: any) {
     console.error("GET /api/penatausahaan/sp2d/monitoring error:", error);
     return NextResponse.json(

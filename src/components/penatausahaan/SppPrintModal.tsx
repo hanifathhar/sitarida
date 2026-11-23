@@ -87,8 +87,12 @@ function getFullDocTitle(jenisSpp: string) {
       return "SURAT PERMINTAAN PEMBAYARAN UANG PERSEDIAAN (SPP-UP)";
     case "GU":
       return "SURAT PERMINTAAN PEMBAYARAN GANTI UANG (SPP-GU)";
+    case "GU_NIHIL":
+      return "SURAT PERMINTAAN PEMBAYARAN GANTI UANG NIHIL (SPP-GU NIHIL)";
     case "TU":
       return "SURAT PERMINTAAN PEMBAYARAN TAMBAHAN UANG (SPP-TU)";
+    case "TU_NIHIL":
+      return "SURAT PERMINTAAN PEMBAYARAN TAMBAHAN UANG NIHIL (SPP-TU NIHIL)";
     case "LS_GAJI":
       return "SURAT PERMINTAAN PEMBAYARAN LANGSUNG GAJI (SPP-LS GAJI)";
     case "LS_BARANG_JASA":
@@ -108,8 +112,12 @@ function getBadgeCode(jenisSpp: string) {
       return "SPP-UP";
     case "GU":
       return "SPP-GU";
+    case "GU_NIHIL":
+      return "SPP-GU NIHIL";
     case "TU":
       return "SPP-TU";
+    case "TU_NIHIL":
+      return "SPP-TU NIHIL";
     case "LS_GAJI":
       return "SPP-LS GAJI";
     case "LS_BARANG_JASA":

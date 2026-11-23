@@ -188,7 +188,15 @@ export const bendaharaPengeluaranService = {
   }) {
     const andConditions: Prisma.Trhsp2dWhereInput[] = [
       { tahunAnggaran: params.tahunAnggaran },
-      { status: "CAIR" },
+      {
+        OR: [
+          { status: "CAIR" },
+          {
+            jenis_sp2d: { in: ["TU_NIHIL", "TU-NIHIL", "GU_NIHIL", "GU-NIHIL"] },
+            status: { in: ["DISETUJUI", "TERBIT", "CAIR"] },
+          },
+        ],
+      },
     ];
 
     if (params.opdId && params.opdId !== "ALL") {
@@ -307,9 +315,24 @@ export const bendaharaPengeluaranService = {
     const result = sp2dList.map((s) => {
       const transin = transinMap.get(s.no_sp2d);
       const booked = bookedMap.get(s.no_sp2d);
-      const isUpTuGu = ["UP", "GU", "TU", "UP_KKPD", "GU_KKPD"].includes(
-        (s.jenis_sp2d || "").toUpperCase()
-      );
+      const jenisUpper = (s.jenis_sp2d || "").toUpperCase();
+      const isTuNihil = [
+        "TU_NIHIL",
+        "TU-NIHIL",
+        "GU_NIHIL",
+        "GU-NIHIL",
+      ].includes(jenisUpper);
+      const isUpTuGu = [
+        "UP",
+        "GU",
+        "GU_NIHIL",
+        "GU-NIHIL",
+        "TU",
+        "TU_NIHIL",
+        "TU-NIHIL",
+        "UP_KKPD",
+        "GU_KKPD",
+      ].includes(jenisUpper);
 
       const isDibukukan = Boolean(
         transin || booked || s.status_pembukuan === "SUDAH_DIBUKUKAN" || s.no_terima
@@ -328,8 +351,11 @@ export const bendaharaPengeluaranService = {
               s.tgl_sp2d,
             pay_type: transin?.pay_type || booked?.pay_type || "BANK",
             uraian: transin?.uraian || booked?.uraian || s.keperluan,
-            total:
-              Number(transin?.total ?? booked?.total ?? s.nilai) || 0,
+            total: transin
+              ? Number(transin.total) || 0
+              : isTuNihil
+                ? 0
+                : Number(booked?.total ?? s.nilai) || 0,
           }
         : null;
 
@@ -454,9 +480,33 @@ export const bendaharaPengeluaranService = {
       throw new Error("Dokumen SP2D tidak ditemukan.");
     }
 
-    const isUpTuGu = ["UP", "GU", "TU", "UP_KKPD", "GU_KKPD"].includes(
-      (sp2d.jenis_sp2d || "").toUpperCase()
-    );
+    const jenisUpper = (sp2d.jenis_sp2d || "").toUpperCase();
+    const isTuNihil = [
+      "TU_NIHIL",
+      "TU-NIHIL",
+      "GU_NIHIL",
+      "GU-NIHIL",
+    ].includes(jenisUpper);
+    const isUpTuGu = [
+      "UP",
+      "GU",
+      "GU_NIHIL",
+      "GU-NIHIL",
+      "TU",
+      "TU_NIHIL",
+      "TU-NIHIL",
+      "UP_KKPD",
+      "GU_KKPD",
+    ].includes(jenisUpper);
+
+    if (
+      isTuNihil &&
+      !["DISETUJUI", "TERBIT", "CAIR"].includes((sp2d.status || "").toUpperCase())
+    ) {
+      throw new Error(
+        `SP2D ${sp2d.no_sp2d} (${sp2d.jenis_sp2d}) harus berstatus DISETUJUI/TERBIT untuk dapat dibukukan.`
+      );
+    }
 
     // Cek apakah sudah pernah dibukukan
     if (sp2d.status_pembukuan === "SUDAH_DIBUKUKAN" || sp2d.no_terima) {
@@ -500,9 +550,9 @@ export const bendaharaPengeluaranService = {
       (sum, r) => sum + (Number(r.nilai) || 0),
       0
     );
-    const totalDecimal = new Prisma.Decimal(
-      totalNilai > 0 ? totalNilai : Number(sp2d.nilai)
-    );
+    const totalDecimal = isTuNihil
+      ? new Prisma.Decimal(0)
+      : new Prisma.Decimal(totalNilai > 0 ? totalNilai : Number(sp2d.nilai));
 
     const buildRincian = (noBuktiRow: string) =>
       rincianList.length > 0
@@ -512,7 +562,9 @@ export const bendaharaPengeluaranService = {
             nm_sub_kegiatan: r.nm_sub_kegiatan,
             kd_rek6: r.kd_rek6,
             nm_rek6: r.nm_rek6,
-            nilai: new Prisma.Decimal(Number(r.nilai) || 0),
+            nilai: isTuNihil
+              ? new Prisma.Decimal(0)
+              : new Prisma.Decimal(Number(r.nilai) || 0),
             sumber_dana: sp2d.jenis_sp2d,
             keterangan: r.nm_rek6,
           }))
@@ -523,7 +575,7 @@ export const bendaharaPengeluaranService = {
               nm_sub_kegiatan: null,
               kd_rek6: "5.1.02.99.99.9999",
               nm_rek6: sp2d.keperluan,
-              nilai: sp2d.nilai,
+              nilai: isTuNihil ? new Prisma.Decimal(0) : sp2d.nilai,
               sumber_dana: sp2d.jenis_sp2d,
               keterangan: sp2d.keperluan,
             },
@@ -646,9 +698,33 @@ export const bendaharaPengeluaranService = {
       throw new Error("Dokumen SP2D tidak ditemukan.");
     }
 
-    const isUpTuGu = ["UP", "GU", "TU", "UP_KKPD", "GU_KKPD"].includes(
-      (sp2d.jenis_sp2d || "").toUpperCase()
-    );
+    const jenisUpper = (sp2d.jenis_sp2d || "").toUpperCase();
+    const isTuNihil = [
+      "TU_NIHIL",
+      "TU-NIHIL",
+      "GU_NIHIL",
+      "GU-NIHIL",
+    ].includes(jenisUpper);
+    const isUpTuGu = [
+      "UP",
+      "GU",
+      "GU_NIHIL",
+      "GU-NIHIL",
+      "TU",
+      "TU_NIHIL",
+      "TU-NIHIL",
+      "UP_KKPD",
+      "GU_KKPD",
+    ].includes(jenisUpper);
+
+    if (
+      isTuNihil &&
+      !["DISETUJUI", "TERBIT", "CAIR"].includes((sp2d.status || "").toUpperCase())
+    ) {
+      throw new Error(
+        `SP2D ${sp2d.no_sp2d} (${sp2d.jenis_sp2d}) harus berstatus DISETUJUI/TERBIT untuk dapat dibukukan.`
+      );
+    }
     const noBukti = payload.no_bukti?.trim() || sp2d.no_terima || undefined;
     const tglBukti = payload.tgl_bukti
       ? new Date(payload.tgl_bukti)

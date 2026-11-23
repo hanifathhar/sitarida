@@ -90,6 +90,9 @@ export default function SpmPrintModal({
   const totalPotongan = Number(spmData.nilai_potongan) || 0;
   const totalBersih =
     Number(spmData.nilai_bersih) || Math.max(0, totalBruto - totalPotongan);
+  const isNihilSpm = ["TU_NIHIL", "TU-NIHIL", "GU_NIHIL", "GU-NIHIL"].includes(
+    String(spmData.jenis_spm || "").toUpperCase()
+  );
 
   const kdSkpdUnit =
     spmData.kd_unit || spmData.kd_skpd || spmData.opd?.kd_skpd || "-";
@@ -368,11 +371,11 @@ export default function SpmPrintModal({
                       <tr>
                         <td colspan="2" class="font-bold">Jumlah Yang Dibayarkan</td>
                         <td></td>
-                        <td class="text-right font-bold font-mono" style="font-size: 8.5pt;">${formatRupiahKoma(totalBersih)}</td>
+                        <td class="text-right font-bold font-mono" style="font-size: 8.5pt;">${isNihilSpm ? "Nihil" : formatRupiahKoma(totalBersih)}</td>
                       </tr>
                       <tr>
                         <td colspan="4" class="terbilang-bayar">
-                          <strong>Uang Sejumlah :</strong> (${terbilang(totalBersih)} Rupiah)
+                          <strong>Uang Sejumlah :</strong> ${isNihilSpm ? "(Nihil)" : `(${terbilang(totalBersih)} Rupiah)`}
                         </td>
                       </tr>
                     </tbody>
@@ -747,7 +750,7 @@ export default function SpmPrintModal({
             </span>
             <span className="text-slate-300">|</span>
             <span className="text-slate-500">
-              Dibayarkan: <strong className="text-emerald-700">{formatRupiah(totalBersih)}</strong>
+              Dibayarkan: <strong className="text-emerald-700">{isNihilSpm ? "Nihil" : formatRupiah(totalBersih)}</strong>
             </span>
           </div>
 

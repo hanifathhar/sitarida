@@ -506,11 +506,17 @@ export async function saveSpp(data: SaveSppPayload, userNama?: string) {
     throw new Error(`Nomor SPP "${no_spp}" sudah digunakan pada Tahun Anggaran ${tahunAnggaran}`);
   }
 
-  // Validasi khusus SPP GU / GU_KKPD: wajib memilih LPJ dan LPJ belum pernah dibuatkan SPP
-  const isSppGu = jenis_spp === "GU" || jenis_spp === "GU_KKPD";
+  // Validasi khusus SPP GU / GU_KKPD / GU_NIHIL / TU_NIHIL: wajib memilih LPJ dan LPJ belum pernah dibuatkan SPP
+  const isSppGu =
+    jenis_spp === "GU" ||
+    jenis_spp === "GU_KKPD" ||
+    jenis_spp === "GU_NIHIL" ||
+    jenis_spp === "TU_NIHIL";
   if (isSppGu) {
     if (!no_lpj || !no_lpj.trim()) {
-      throw new Error("Untuk SPP GU, Nomor LPJ wajib dipilih terlebih dahulu.");
+      throw new Error(
+        `Untuk SPP ${jenis_spp.replace(/_/g, " ")}, Nomor LPJ wajib dipilih terlebih dahulu.`
+      );
     }
     const existingLpjSpp = await prisma.trhspp.findFirst({
       where: {
@@ -1041,7 +1047,11 @@ export async function getAvailableLpjForSpp(params: {
   include_no_lpj?: string;
 }) {
   const targetJenisList =
-    params.jenis_spp === "GU_KKPD" ? ["KKPD", "UP_KKPD", "GU_KKPD"] : ["UP", "GU"];
+    params.jenis_spp === "GU_KKPD"
+      ? ["KKPD", "UP_KKPD", "GU_KKPD"]
+      : params.jenis_spp === "TU_NIHIL"
+        ? ["TU"]
+        : ["UP", "GU"];
 
   // Ambil no_lpj yang sudah pernah dibuatkan SPP aktif
   const usedSpps = await prisma.trhspp.findMany({
