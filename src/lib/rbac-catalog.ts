@@ -551,6 +551,15 @@ export const RBAC_MODULE_GROUPS: MenuPermissionGroup[] = [
         ],
       },
       {
+        menuKey: "bud-saldo-kasda",
+        menuLabel: "Saldo Kasda",
+        menuHref: "/penatausahaan/bud/saldo-kasda",
+        menuPermKode: "menu:penatausahaan:bud-saldo-kasda",
+        menuPermNama: "Tampilkan Menu Saldo Kasda",
+        modul: "penatausahaan",
+        actions: [],
+      },
+      {
         menuKey: "bud-dth-rth",
         menuLabel: "DTH dan RTH",
         menuHref: "/penatausahaan/bud/dth-rth",
@@ -703,6 +712,42 @@ export const RBAC_MODULE_GROUPS: MenuPermissionGroup[] = [
         menuHref: "/penatausahaan/bendahara-pengeluaran/lpj-kkpd",
         menuPermKode: "menu:penatausahaan:bendahara-lpj-kkpd",
         menuPermNama: "Tampilkan Menu LPJ-KKPD",
+        modul: "penatausahaan",
+        actions: [],
+      },
+    ],
+  },
+  {
+    groupKey: "penatausahaanBendaharaPenerimaan",
+    groupTitle: "5B. Modul Bendahara Penerimaan",
+    groupSubtitle: "Pengelolaan Penetapan Pajak/Retribusi Daerah dan Penerimaan Kas oleh Bendahara Penerimaan",
+    items: [
+      {
+        menuKey: "bendahara-penerimaan-penetapan",
+        menuLabel: "Penetapan",
+        menuHref: "/penatausahaan/bendahara-penerimaan/penetapan",
+        menuPermKode: "menu:penatausahaan:bendahara-penerimaan-penetapan",
+        menuPermNama: "Tampilkan Menu Penetapan (Bendahara Penerimaan)",
+        modul: "penatausahaan",
+        actions: [
+          {
+            kode: "bendahara-penerimaan:read",
+            nama: "Lihat Data Bendahara Penerimaan",
+            deskripsi: "Melihat data penetapan dan penerimaan pada Bendahara Penerimaan",
+          },
+          {
+            kode: "bendahara-penerimaan:write",
+            nama: "Kelola & Verifikasi Bendahara Penerimaan",
+            deskripsi: "Menambah, mengubah, menghapus, dan memverifikasi data penetapan serta penerimaan",
+          },
+        ],
+      },
+      {
+        menuKey: "bendahara-penerimaan-penerimaan",
+        menuLabel: "Penerimaan",
+        menuHref: "/penatausahaan/bendahara-penerimaan/penerimaan",
+        menuPermKode: "menu:penatausahaan:bendahara-penerimaan-penerimaan",
+        menuPermNama: "Tampilkan Menu Penerimaan (Bendahara Penerimaan)",
         modul: "penatausahaan",
         actions: [],
       },

@@ -1037,10 +1037,46 @@ export const pengajuanService = {
     let totalNilaiBersih = 0;
 
     for (const item of items) {
-      totalNilaiBruto += Number(item.nilai || 0);
-      totalNilaiPotongan += Number(item.nilai_potongan || 0);
-      totalNilaiBersih += Number(item.nilai_bersih || 0);
+      if (item.status !== "DITOLAK") {
+        totalNilaiBruto += Number(item.nilai || 0);
+        totalNilaiPotongan += Number(item.nilai_potongan || 0);
+        totalNilaiBersih += Number(item.nilai_bersih || 0);
+      }
     }
+
+    // Hitung SPD Terbit (AKTIF) berdasarkan tahunAnggaran & OPD
+    const targetOpdId =
+      session.roleKode !== "0" && session.roleKode !== "SUPERADMIN"
+        ? session.opdId || undefined
+        : params.opdId || undefined;
+
+    let targetKdSkpd: string | undefined;
+    if (targetOpdId) {
+      const opdRow = await prisma.opd.findUnique({
+        where: { id: targetOpdId },
+        select: { kd_skpd: true },
+      });
+      targetKdSkpd = opdRow?.kd_skpd;
+    }
+
+    const spdGrouped = await prisma.spd.groupBy({
+      by: ["kd_sub_kegiatan", "kd_rek6"],
+      where: {
+        ...(params.tahunAnggaran ? { tahunAnggaran: params.tahunAnggaran } : {}),
+        ...(targetKdSkpd ? { kd_skpd: targetKdSkpd } : {}),
+        status: "AKTIF",
+      },
+      _sum: { nilai: true },
+    });
+
+    const spdRows = spdGrouped.map((g) => ({
+      kd_sub_kegiatan: g.kd_sub_kegiatan,
+      kd_rek6: g.kd_rek6,
+      nilai: Number(g._sum.nilai || 0),
+    }));
+
+    const totalSpdTerbit = spdRows.reduce((acc, r) => acc + r.nilai, 0);
+    const sisaSpd = totalSpdTerbit - totalNilaiBruto;
 
     return {
       summary: {
@@ -1048,7 +1084,10 @@ export const pengajuanService = {
         totalNilaiBruto,
         totalNilaiPotongan,
         totalNilaiBersih,
+        totalSpdTerbit,
+        sisaSpd,
       },
+      spdRows,
       items,
     };
   },

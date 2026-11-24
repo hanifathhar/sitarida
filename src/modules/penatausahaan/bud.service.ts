@@ -424,9 +424,16 @@ export const budService = {
     endDate?: string;
     opdId?: string;
   }) {
-    // 1. Saldo Awal (Transaksi sebelum startDate)
+    // 1. Saldo Awal (Saldo Awal Kasda + Transaksi sebelum startDate)
     let saldoAwalPenerimaan = 0;
     let saldoAwalPengeluaran = 0;
+    const isAllOpd = !filter.opdId || filter.opdId === "ALL";
+
+    const saldoKasdaRecord = await prisma.saldoKasda.findUnique({
+      where: { tahunAnggaran: filter.tahunAnggaran },
+    });
+    const saldoAwalKasda =
+      isAllOpd && saldoKasdaRecord ? Number(saldoKasdaRecord.nilai) || 0 : 0;
 
     if (filter.startDate) {
       const prevDate = new Date(`${filter.startDate}T00:00:00.000Z`);
@@ -448,6 +455,9 @@ export const budService = {
             tahunAnggaran: filter.tahunAnggaran,
             status: "CAIR",
             tgl_cair: { lt: prevDate },
+            jenis_sp2d: {
+              notIn: ["TU_NIHIL", "GU_NIHIL", "TU-NIHIL", "GU-NIHIL"],
+            },
             ...(filter.opdId && filter.opdId !== "ALL"
               ? { opdId: filter.opdId }
               : {}),
@@ -462,7 +472,10 @@ export const budService = {
         : 0;
     }
 
-    const saldoAwal = saldoAwalPenerimaan - saldoAwalPengeluaran;
+    const saldoAwal =
+      Math.round(
+        (saldoAwalKasda + saldoAwalPenerimaan - saldoAwalPengeluaran) * 100
+      ) / 100;
 
     // 2. Transaksi Penerimaan dalam periode
     const whereIn: Prisma.TrhkasinWhereInput = {
@@ -523,11 +536,20 @@ export const budService = {
       id: string;
       tanggal: Date;
       no_bukti: string;
+      no_bukti_penerimaan: string;
+      no_bukti_pengeluaran: string;
+      ref: string;
       jenis: "PENERIMAAN" | "PENGELUARAN";
       uraian: string;
       skpd: string;
       debit: number; // Masuk
       kredit: number; // Keluar
+      pengeluaran_up: number;
+      pengeluaran_tu: number;
+      pengeluaran_gu: number;
+      pengeluaran_ls_barjas: number;
+      pengeluaran_ls_gaji: number;
+      pengeluaran_ls_ppkd: number;
       saldo: number;
       sumber_dana?: string | null;
       no_rek?: string | null;
@@ -536,30 +558,74 @@ export const budService = {
     const combined: Array<Omit<BkuItem, "saldo">> = [];
 
     listIn.forEach((item) => {
+      const noSts = item.no_sts || item.no_bukti;
       combined.push({
         id: `IN-${item.id}`,
         tanggal: item.tgl_bukti,
-        no_bukti: item.no_bukti,
+        no_bukti: noSts,
+        no_bukti_penerimaan: noSts,
+        no_bukti_pengeluaran: "",
+        ref: item.no_bukti,
         jenis: "PENERIMAAN",
         uraian: item.uraian,
         skpd: item.nm_skpd,
         debit: Number(item.nilai) || 0,
         kredit: 0,
+        pengeluaran_up: 0,
+        pengeluaran_tu: 0,
+        pengeluaran_gu: 0,
+        pengeluaran_ls_barjas: 0,
+        pengeluaran_ls_gaji: 0,
+        pengeluaran_ls_ppkd: 0,
         sumber_dana: item.sumber_dana,
         no_rek: "-",
       });
     });
 
     listOut.forEach((item) => {
+      const jns = (item.jenis_sp2d || "").toUpperCase().replace(/-/g, "_");
+      const isNihil = jns === "TU_NIHIL" || jns === "GU_NIHIL";
+      const val = isNihil ? 0 : Number(item.nilai_bersih) || 0;
+
+      let pengeluaran_up = 0;
+      let pengeluaran_tu = 0;
+      let pengeluaran_gu = 0;
+      let pengeluaran_ls_barjas = 0;
+      let pengeluaran_ls_gaji = 0;
+      let pengeluaran_ls_ppkd = 0;
+
+      if (jns === "UP" || jns === "UP_KKPD") {
+        pengeluaran_up = val;
+      } else if (jns === "TU" || jns === "TU_NIHIL") {
+        pengeluaran_tu = val;
+      } else if (jns === "GU" || jns === "GU_KKPD" || jns === "GU_NIHIL") {
+        pengeluaran_gu = val;
+      } else if (jns === "LS_BARANG_JASA" || jns === "LS_BARJAS") {
+        pengeluaran_ls_barjas = val;
+      } else if (jns === "LS_GAJI") {
+        pengeluaran_ls_gaji = val;
+      } else {
+        pengeluaran_ls_ppkd = val;
+      }
+
       combined.push({
         id: `OUT-${item.id}`,
         tanggal: item.tgl_cair || item.tgl_sp2d,
         no_bukti: item.no_sp2d,
+        no_bukti_penerimaan: "",
+        no_bukti_pengeluaran: item.no_sp2d,
+        ref: item.no_sp2d,
         jenis: "PENGELUARAN",
         uraian: item.keperluan,
         skpd: item.nm_skpd,
         debit: 0,
-        kredit: Number(item.nilai_bersih) || 0,
+        kredit: val,
+        pengeluaran_up,
+        pengeluaran_tu,
+        pengeluaran_gu,
+        pengeluaran_ls_barjas,
+        pengeluaran_ls_gaji,
+        pengeluaran_ls_ppkd,
         sumber_dana: item.jenis_sp2d,
         no_rek: item.rek_bank_pembayar,
       });
@@ -570,28 +636,106 @@ export const budService = {
       (a, b) => new Date(a.tanggal).getTime() - new Date(b.tanggal).getTime()
     );
 
-    // Hitung running balance
+    // Hitung running balance & total per kolom pengeluaran
     let runningSaldo = saldoAwal;
     let totalPenerimaan = 0;
     let totalPengeluaran = 0;
+    let totalUp = 0;
+    let totalTu = 0;
+    let totalGu = 0;
+    let totalLsBarjas = 0;
+    let totalLsGaji = 0;
+    let totalLsPpkd = 0;
 
     const bkuItems: BkuItem[] = combined.map((item) => {
       totalPenerimaan += item.debit;
       totalPengeluaran += item.kredit;
-      runningSaldo = runningSaldo + item.debit - item.kredit;
+      totalUp += item.pengeluaran_up;
+      totalTu += item.pengeluaran_tu;
+      totalGu += item.pengeluaran_gu;
+      totalLsBarjas += item.pengeluaran_ls_barjas;
+      totalLsGaji += item.pengeluaran_ls_gaji;
+      totalLsPpkd += item.pengeluaran_ls_ppkd;
+      runningSaldo =
+        Math.round((runningSaldo + item.debit - item.kredit) * 100) / 100;
       return {
         ...item,
         saldo: runningSaldo,
       };
     });
 
+    const saldoAkhir =
+      Math.round((saldoAwal + totalPenerimaan - totalPengeluaran) * 100) / 100;
+
     return {
       saldoAwal,
+      saldoAwalKasda: saldoKasdaRecord ? Number(saldoKasdaRecord.nilai) || 0 : 0,
       totalPenerimaan,
       totalPengeluaran,
-      saldoAkhir: runningSaldo,
+      totalUp,
+      totalTu,
+      totalGu,
+      totalLsBarjas,
+      totalLsGaji,
+      totalLsPpkd,
+      saldoAkhir,
       items: bkuItems,
     };
+  },
+
+  // ---------------------------------------------------------------------------
+  // 3B. SALDO KASDA (Saldo Awal Kas Daerah per Tahun Anggaran)
+  // ---------------------------------------------------------------------------
+  async getSaldoKasdaList() {
+    const rows = await prisma.saldoKasda.findMany({
+      orderBy: { tahunAnggaran: "desc" },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      tahunAnggaran: r.tahunAnggaran,
+      nilai: Number(r.nilai) || 0,
+      keterangan: r.keterangan || "",
+      updatedBy: r.updatedBy || "",
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    }));
+  },
+
+  async upsertSaldoKasda(data: {
+    tahunAnggaran: number;
+    nilai: number;
+    keterangan?: string;
+    updatedBy?: string;
+  }) {
+    const row = await prisma.saldoKasda.upsert({
+      where: { tahunAnggaran: data.tahunAnggaran },
+      create: {
+        tahunAnggaran: data.tahunAnggaran,
+        nilai: data.nilai,
+        keterangan: data.keterangan || null,
+        updatedBy: data.updatedBy || null,
+      },
+      update: {
+        nilai: data.nilai,
+        keterangan: data.keterangan || null,
+        updatedBy: data.updatedBy || null,
+      },
+    });
+    return {
+      id: row.id,
+      tahunAnggaran: row.tahunAnggaran,
+      nilai: Number(row.nilai) || 0,
+      keterangan: row.keterangan || "",
+      updatedBy: row.updatedBy || "",
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  },
+
+  async deleteSaldoKasda(id: string) {
+    return prisma.saldoKasda.delete({
+      where: { id },
+    });
   },
 
   // ---------------------------------------------------------------------------

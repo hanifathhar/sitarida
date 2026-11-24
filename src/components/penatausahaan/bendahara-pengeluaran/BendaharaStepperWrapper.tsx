@@ -44,6 +44,7 @@ interface BendaharaStepperWrapperProps {
   subtitle: string;
   step3Label?: string;
   step4Label?: string;
+  scopeUrl?: string;
   children: (props: {
     selectedOpd: OpdItem | null;
     selectedUnit: UnitItem | null;
@@ -58,6 +59,7 @@ export default function BendaharaStepperWrapper({
   subtitle,
   step3Label = "Daftar Dokumen",
   step4Label = "Formulir Transaksi",
+  scopeUrl = "/api/penatausahaan/bendahara-pengeluaran/scope",
   children,
 }: BendaharaStepperWrapperProps) {
   const [scopeData, setScopeData] = useState<ScopeData | null>(null);
@@ -75,7 +77,7 @@ export default function BendaharaStepperWrapper({
   useEffect(() => {
     async function loadScope() {
       try {
-        const res = await fetch("/api/penatausahaan/bendahara-pengeluaran/scope");
+        const res = await fetch(scopeUrl);
         const json = await res.json();
         if (json.success && json.data) {
           const data: ScopeData = json.data;

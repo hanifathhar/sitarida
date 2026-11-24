@@ -194,11 +194,6 @@ export default function SettingKoneksiPage() {
             <h1 className="text-xl font-bold text-slate-900 mt-1">
               Setting Koneksi Server Eksternal
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Kelola konfigurasi koneksi database MySQL eksternal (
-              <strong>CMS_WEB</strong> dan <strong>dbsimpatda</strong>) secara
-              terpusat tanpa perlu mengubah kode sumber.
-            </p>
           </div>
         </div>
 
@@ -269,11 +264,10 @@ export default function SettingKoneksiPage() {
                       className="rounded border-slate-300 text-[#5E0E14] focus:ring-[#5E0E14]"
                     />
                     <span
-                      className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                        item.isActive
+                      className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${item.isActive
                           ? "bg-emerald-100 text-emerald-800"
                           : "bg-slate-200 text-slate-600"
-                      }`}
+                        }`}
                     >
                       {item.isActive ? "Aktif" : "Nonaktif"}
                     </span>
@@ -284,11 +278,10 @@ export default function SettingKoneksiPage() {
                 <div className="p-6 space-y-4 text-xs flex-1">
                   {fb && (
                     <div
-                      className={`p-3 rounded-xl border flex items-start gap-2 font-medium ${
-                        fb.type === "success"
+                      className={`p-3 rounded-xl border flex items-start gap-2 font-medium ${fb.type === "success"
                           ? "bg-emerald-50 border-emerald-200 text-emerald-800"
                           : "bg-rose-50 border-rose-200 text-rose-800"
-                      }`}
+                        }`}
                     >
                       {fb.type === "success" ? (
                         <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />

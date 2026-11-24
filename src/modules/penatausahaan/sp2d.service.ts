@@ -883,9 +883,13 @@ export async function getRegisterSp2dData(params: {
 
   const items = sp2dRows.map((row, index) => {
     const jns = (row.jenis_sp2d || "").toUpperCase().replace(/-/g, "_");
-    const val = Number(row.nilai) || 0;
+    const isTuNihil = jns === "TU_NIHIL";
+    const isGuNihil = jns === "GU_NIHIL";
+    const isNihil = isTuNihil || isGuNihil;
+    const rawVal = Number(row.nilai) || 0;
+    const val = isNihil ? 0 : rawVal;
     const pot = Number(row.nilai_potongan) || 0;
-    const net = Number(row.nilai_bersih) || 0;
+    const net = isNihil ? 0 : Number(row.nilai_bersih) || 0;
 
     let no_up: string | null = null;
     let no_gu: string | null = null;
@@ -905,14 +909,14 @@ export async function getRegisterSp2dData(params: {
       no_up = row.no_sp2d;
       nilai_up = val;
       totalUp += val;
-    } else if (jns === "GU" || jns === "GU_KKPD") {
+    } else if (jns === "GU" || jns === "GU_KKPD" || isGuNihil) {
       no_gu = row.no_sp2d;
-      nilai_gu = val;
-      totalGu += val;
-    } else if (jns === "TU") {
+      nilai_gu = isGuNihil ? 0 : val;
+      if (!isGuNihil) totalGu += val;
+    } else if (jns === "TU" || isTuNihil) {
       no_tu = row.no_sp2d;
-      nilai_tu = val;
-      totalTu += val;
+      nilai_tu = isTuNihil ? 0 : val;
+      if (!isTuNihil) totalTu += val;
     } else if (jns === "LS_GAJI") {
       no_ls_gaji = row.no_sp2d;
       nilai_ls_gaji = val;
@@ -927,9 +931,11 @@ export async function getRegisterSp2dData(params: {
       totalPpkd += val;
     }
 
-    grandTotal += val;
+    if (!isNihil) {
+      grandTotal += val;
+      totalNettoAll += net;
+    }
     totalPotonganAll += pot;
-    totalNettoAll += net;
 
     return {
       no_urut: index + 1,
@@ -944,6 +950,9 @@ export async function getRegisterSp2dData(params: {
       nama_penerima: row.nama_penerima,
       status: row.status,
       tgl_cair: row.tgl_cair ? row.tgl_cair.toISOString().split("T")[0] : null,
+      isNihil,
+      isTuNihil,
+      isGuNihil,
       // Nomor SP2D per kolom
       no_sp2d_up: no_up,
       no_sp2d_gu: no_gu,

@@ -109,9 +109,13 @@ const PAGE_TITLES: Record<string, string> = {
   "/penatausahaan/bud/penerimaan": "PENERIMAAN KAS DAERAH (BUD)",
   "/penatausahaan/bud/pengeluaran": "PENGELUARAN DAERAH (DAFTAR SP2D CAIR)",
   "/penatausahaan/bud/bku": "BUKU KAS UMUM DAERAH (BKU KASDA)",
+  "/penatausahaan/bud/saldo-kasda": "SALDO KASDA (BENDAHARA UMUM DAERAH)",
   "/penatausahaan/bud/dth-rth": "DAFTAR & REKAPITULASI TRANSAKSI HARIAN (DTH & RTH)",
   "/penatausahaan/bud/rekap-penerimaan": "REKAPITULASI PENERIMAAN DAERAH",
   "/penatausahaan/bud/rekap-pengeluaran": "REKAPITULASI PENGELUARAN DAERAH",
+  "/penatausahaan/bendahara-penerimaan": "BENDAHARA PENERIMAAN",
+  "/penatausahaan/bendahara-penerimaan/penetapan": "PENETAPAN (BENDAHARA PENERIMAAN)",
+  "/penatausahaan/bendahara-penerimaan/penerimaan": "PENERIMAAN (BENDAHARA PENERIMAAN)",
   "/penatausahaan/bendahara-pengeluaran": "BENDAHARA PENGELUARAN",
   "/penatausahaan/bendahara-pengeluaran/pembukuan-sp2d": "PEMBUKUAN SP2D",
   "/penatausahaan/bendahara-pengeluaran/validasi-spj": "VALIDASI SPJ",
@@ -187,6 +191,9 @@ export default function AppShell({
   const [bendaharaDropdownOpen, setBendaharaDropdownOpen] = useState(() =>
     pathname.startsWith("/penatausahaan/bendahara-pengeluaran")
   );
+  const [bendaharaPenerimaanDropdownOpen, setBendaharaPenerimaanDropdownOpen] = useState(() =>
+    pathname.startsWith("/penatausahaan/bendahara-penerimaan")
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -211,6 +218,9 @@ export default function AppShell({
     }
     if (pathname.startsWith("/penatausahaan/bendahara-pengeluaran")) {
       setBendaharaDropdownOpen(true);
+    }
+    if (pathname.startsWith("/penatausahaan/bendahara-penerimaan")) {
+      setBendaharaPenerimaanDropdownOpen(true);
     }
   }, [pathname]);
 
@@ -488,6 +498,11 @@ export default function AppShell({
       perm: "menu:penatausahaan:bud-bku",
     },
     {
+      label: "Saldo Kasda",
+      href: "/penatausahaan/bud/saldo-kasda",
+      perm: "menu:penatausahaan:bud-saldo-kasda",
+    },
+    {
       label: "DTH dan RTH",
       href: "/penatausahaan/bud/dth-rth",
       perm: "menu:penatausahaan:bud-dth-rth",
@@ -508,6 +523,34 @@ export default function AppShell({
       can(m.perm) ||
       can("bud:read") ||
       can("bud:write")
+  );
+
+  const isBendaharaPenerimaanAuthorized =
+    session.roleKode === "0" ||
+    session.roleKode === "1" ||
+    session.roleKode === "2" ||
+    session.roleKode === "SUPERADMIN" ||
+    (session.roleNama || "").toUpperCase().includes("PENERIMAAN") ||
+    (session.roleNama || "").toUpperCase().includes("OPD") ||
+    isSuperadmin;
+
+  const bendaharaPenerimaanSubMenus = [
+    {
+      label: "Penetapan",
+      href: "/penatausahaan/bendahara-penerimaan/penetapan",
+      perm: "menu:penatausahaan:bendahara-penerimaan-penetapan",
+    },
+    {
+      label: "Penerimaan",
+      href: "/penatausahaan/bendahara-penerimaan/penerimaan",
+      perm: "menu:penatausahaan:bendahara-penerimaan-penerimaan",
+    },
+  ].filter(
+    (m) =>
+      isBendaharaPenerimaanAuthorized ||
+      can(m.perm) ||
+      can("bendahara-penerimaan:read") ||
+      can("bendahara-penerimaan:write")
   );
 
   // Modul Bendahara Pengeluaran: Khusus peran BUD (kode 1), Bendahara Pengeluaran (kode 10), dan Superadmin (kode 0)
@@ -1081,6 +1124,54 @@ export default function AppShell({
                         {budDropdownOpen && (
                           <div className="pl-3.5 space-y-1 border-l-2 border-red-300/20 ml-2 py-0.5">
                             {budSubMenus.map((sub) => {
+                              const active = pathname === sub.href;
+                              return (
+                                <Link
+                                  key={sub.href}
+                                  href={sub.href}
+                                  onClick={() => setSidebarOpen(false)}
+                                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] transition-all ${active
+                                    ? "bg-white text-[#88131A] font-bold shadow-sm"
+                                    : "text-red-100 hover:text-white hover:bg-[#7A121A] font-medium"
+                                    }`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? "bg-[#88131A]" : "bg-red-300/60"
+                                      }`}
+                                  />
+                                  <span className="truncate">{sub.label}</span>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* SUB-MENU DROPDOWN BENDAHARA PENERIMAAN */}
+                    {bendaharaPenerimaanSubMenus.length > 0 && (
+                      <div className="space-y-1 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setBendaharaPenerimaanDropdownOpen((prev) => !prev)}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${pathname.startsWith("/penatausahaan/bendahara-penerimaan")
+                            ? "bg-[#7A121A] text-white font-bold"
+                            : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                            }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <WalletCards className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                            <span>Bendahara Penerimaan</span>
+                          </div>
+                          <ChevronDown
+                            className={`w-3 h-3 transition-transform ${bendaharaPenerimaanDropdownOpen ? "rotate-180" : ""
+                              }`}
+                          />
+                        </button>
+
+                        {bendaharaPenerimaanDropdownOpen && (
+                          <div className="pl-3.5 space-y-1 border-l-2 border-red-300/20 ml-2 py-0.5">
+                            {bendaharaPenerimaanSubMenus.map((sub) => {
                               const active = pathname === sub.href;
                               return (
                                 <Link

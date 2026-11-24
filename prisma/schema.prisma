@@ -1560,3 +1560,78 @@ model MsKoneksiEksternal {
 
   @@map("ms_koneksi_eksternal")
 }
+
+model SaldoKasda {
+  id            String   @id @default(uuid())
+  tahunAnggaran Int      @unique
+  nilai         Decimal  @default(0) @db.Decimal(18, 2)
+  keterangan    String?  @db.Text
+  updatedBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("tbl_saldo_kasda")
+}
+
+// ==========================================
+// 13. MODUL BENDAHARA PENERIMAAN (PENETAPAN & PENERIMAAN)
+// ==========================================
+
+model TblPenetapan {
+  id              String   @id @default(uuid())
+  tahunAnggaran   Int      @default(2026)
+  no_tetap        String   @unique
+  tgl_tetap       DateTime
+  kd_skpd         String
+  nm_skpd         String?
+  kd_unit         String?
+  nm_unit         String?
+  kd_sub_kegiatan String?
+  nm_sub_kegiatan String?
+  kd_rek6         String
+  nm_rek6         String
+  nilai           Decimal  @default(0) @db.Decimal(18, 2)
+  keterangan      String?  @db.Text
+  company         String?
+  alamat          String?  @db.Text
+  verif           Int      @default(0)
+  jns_pajak       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([tahunAnggaran, kd_skpd])
+  @@index([tgl_tetap])
+  @@index([verif])
+  @@map("tbl_penetapan")
+}
+
+model TblPenerimaan {
+  id              String    @id @default(uuid())
+  tahunAnggaran   Int       @default(2026)
+  no_terima       String    @unique
+  tgl_terima      DateTime
+  no_tetap        String?
+  tgl_tetap       DateTime?
+  kd_skpd         String
+  nm_skpd         String?
+  kd_unit         String?
+  nm_unit         String?
+  kd_sub_kegiatan String?
+  nm_sub_kegiatan String?
+  kd_rek6         String
+  nm_rek6         String
+  nilai           Decimal   @default(0) @db.Decimal(18, 2)
+  keterangan      String?   @db.Text
+  company         String?
+  alamat          String?   @db.Text
+  verif           Int       @default(0)
+  jns_pajak       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([tahunAnggaran, kd_skpd])
+  @@index([tgl_terima])
+  @@index([no_tetap])
+  @@index([verif])
+  @@map("tbl_penerimaan")
+}

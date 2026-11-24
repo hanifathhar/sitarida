@@ -1114,11 +1114,20 @@ export async function getRegisterSpmData(params: {
   let totalLsGaji = 0;
   let totalLsBarjas = 0;
   let totalPpkd = 0;
+  let totalPotongan = 0;
+  let totalBersih = 0;
   let grandTotal = 0;
 
   const items = rows.map((r, idx) => {
     const val = Number(r.nilai) || 0;
+    const potVal = Number(r.nilai_potongan) || 0;
     const jns = (r.jenis_spm || "").toUpperCase().replace(/-/g, "_");
+    const isTuNihil = jns === "TU_NIHIL";
+    const isGuNihil = jns === "GU_NIHIL";
+    const isNihil = isTuNihil || isGuNihil;
+    const nettoVal = isNihil
+      ? 0
+      : Number(r.nilai_bersih) || Math.max(0, val - potVal);
 
     let isUp = false;
     let isGu = false;
@@ -1130,12 +1139,12 @@ export async function getRegisterSpmData(params: {
     if (jns === "UP" || jns === "UP_KKPD") {
       isUp = true;
       totalUp += val;
-    } else if (jns === "GU" || jns === "GU_KKPD") {
+    } else if (jns === "GU" || jns === "GU_KKPD" || isGuNihil) {
       isGu = true;
-      totalGu += val;
-    } else if (jns === "TU") {
+      if (!isGuNihil) totalGu += val;
+    } else if (jns === "TU" || isTuNihil) {
       isTu = true;
-      totalTu += val;
+      if (!isTuNihil) totalTu += val;
     } else if (jns === "LS_GAJI" || jns.includes("GAJI")) {
       isLsGaji = true;
       totalLsGaji += val;
@@ -1148,7 +1157,9 @@ export async function getRegisterSpmData(params: {
       totalLsBarjas += val;
     }
 
-    grandTotal += val;
+    totalPotongan += potVal;
+    totalBersih += nettoVal;
+    grandTotal += isNihil ? 0 : val;
 
     const d = new Date(r.tgl_spm);
     const day = String(d.getDate()).padStart(2, "0");
@@ -1165,10 +1176,11 @@ export async function getRegisterSpmData(params: {
       no_spp: r.no_spp,
       tgl_spp: r.tgl_spp ? r.tgl_spp.toISOString().split("T")[0] : null,
       jenis_spm: r.jenis_spm,
+      isNihil,
       keperluan: r.keperluan,
-      nilai: val,
-      nilai_potongan: Number(r.nilai_potongan) || 0,
-      nilai_bersih: Number(r.nilai_bersih) || val,
+      nilai: isNihil ? 0 : val,
+      nilai_potongan: potVal,
+      nilai_bersih: nettoVal,
       // Kolom Nomor SPM
       no_spm_up: isUp ? r.no_spm : "",
       no_spm_gu: isGu ? r.no_spm : "",
@@ -1178,8 +1190,8 @@ export async function getRegisterSpmData(params: {
       no_spm_ppkd: isPpkd ? r.no_spm : "",
       // Kolom Nilai Rupiah
       nilai_up: isUp ? val : 0,
-      nilai_gu: isGu ? val : 0,
-      nilai_tu: isTu ? val : 0,
+      nilai_gu: isGu && !isGuNihil ? val : 0,
+      nilai_tu: isTu && !isTuNihil ? val : 0,
       nilai_ls_gaji: isLsGaji ? val : 0,
       nilai_ls_barjas: isLsBarjas ? val : 0,
       nilai_ppkd: isPpkd ? val : 0,
@@ -1209,6 +1221,8 @@ export async function getRegisterSpmData(params: {
       totalLsGaji,
       totalLsBarjas,
       totalPpkd,
+      totalPotongan,
+      totalBersih,
       grandTotal,
     },
     items,

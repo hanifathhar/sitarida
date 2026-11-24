@@ -39,6 +39,7 @@ interface RegisterSpmItem {
   no_spp: string;
   tgl_spp?: string | null;
   jenis_spm: string;
+  isNihil?: boolean;
   keperluan: string;
   nilai: number;
   nilai_potongan: number;
@@ -133,6 +134,8 @@ export default function RegisterSpmPage() {
     totalLsGaji: 0,
     totalLsBarjas: 0,
     totalPpkd: 0,
+    totalPotongan: 0,
+    totalBersih: 0,
     grandTotal: 0,
   });
 
@@ -281,14 +284,14 @@ export default function RegisterSpmPage() {
           <style>
             @page {
               size: A4 landscape;
-              margin: 8mm 10mm 8mm 10mm;
+              margin: 10mm 8mm;
             }
             * {
               box-sizing: border-box;
             }
             body {
               font-family: Arial, Helvetica, sans-serif;
-              font-size: 8pt;
+              font-size: 7.5pt;
               line-height: 1.25;
               color: #000;
               background: #fff;
@@ -320,42 +323,73 @@ export default function RegisterSpmPage() {
             table.reg-table {
               width: 100%;
               border-collapse: collapse;
+              table-layout: fixed;
               border: 1px solid #000;
-              font-size: 7.5pt;
+              font-size: 7pt;
+            }
+            table.reg-table thead {
+              display: table-header-group;
+            }
+            table.reg-table tr {
+              page-break-inside: avoid;
+              break-inside: avoid;
             }
             table.reg-table th, table.reg-table td {
               border: 1px solid #000;
               padding: 2.5px 3px;
               vertical-align: middle;
+              word-wrap: break-word;
+              overflow-wrap: anywhere;
             }
             table.reg-table th {
-              background: #fff;
+              background: #f8fafc;
               font-weight: bold;
               text-align: center;
             }
-            .col-number {
-              font-size: 7pt;
+            .col-number th {
+              font-size: 6.5pt;
               font-style: italic;
-              background: #fcfcfc;
+              background: #f1f5f9;
+              padding: 1.5px 2px;
             }
             .font-mono {
               font-family: 'Courier New', Courier, monospace;
+            }
+            .no-spm-cell {
+              font-family: 'Courier New', Courier, monospace;
+              font-size: 6pt;
+              text-align: center;
+              font-weight: bold;
+              line-height: 1.15;
+              word-break: break-all;
+            }
+            .num-cell {
+              font-family: 'Courier New', Courier, monospace;
+              font-size: 6.5pt;
+              text-align: right;
+              white-space: nowrap;
+            }
+            .nihil-text {
+              font-style: italic;
+              font-weight: bold;
             }
             .text-center { text-align: center; }
             .text-right { text-align: right; }
             .font-bold { font-weight: bold; }
             .row-total td {
               font-weight: bold;
-              background: #fcfcfc;
+              background: #f8fafc;
+              border-top: 1.5px solid #000;
             }
             .ttd-area {
               margin-top: 16px;
               display: flex;
               justify-content: flex-end;
               page-break-inside: avoid;
+              break-inside: avoid;
             }
             .ttd-box {
-              width: 320px;
+              width: 300px;
               text-align: center;
               font-size: 8pt;
               line-height: 1.3;
@@ -375,25 +409,27 @@ export default function RegisterSpmPage() {
           <table class="reg-table">
             <thead>
               <tr>
-                <th rowspan="2" style="width: 25px;">No.<br/>Urut</th>
-                <th rowspan="2" style="width: 55px;">Tanggal</th>
-                <th colspan="6">Nomor SPM</th>
-                <th rowspan="2" style="width: 22%;">Uraian</th>
-                <th colspan="6">Jumlah SPM<br/>(Rp)</th>
+                <th rowspan="2" style="width: 2.5%;">No.<br/>Urut</th>
+                <th rowspan="2" style="width: 5.5%;">Tanggal</th>
+                <th colspan="6" style="width: 30%;">Nomor SPM</th>
+                <th rowspan="2" style="width: 17%;">Uraian</th>
+                <th colspan="6" style="width: 32%;">Jumlah SPM<br/>(Rp)</th>
+                <th rowspan="2" style="width: 6.5%;">Potongan<br/>(Rp)</th>
+                <th rowspan="2" style="width: 6.5%;">Netto<br/>(Rp)</th>
               </tr>
               <tr>
-                <th style="width: 7%;">UP</th>
-                <th style="width: 7%;">GU</th>
-                <th style="width: 7%;">TU</th>
-                <th style="width: 8%;">Gaji</th>
-                <th style="width: 8%;">Barang &amp;<br/>Jasa</th>
-                <th style="width: 6%;">PPKD</th>
-                <th style="width: 7%;">UP</th>
-                <th style="width: 7%;">GU</th>
-                <th style="width: 7%;">TU</th>
-                <th style="width: 7%;">Gaji</th>
-                <th style="width: 7%;">Barang &amp;<br/>Jasa</th>
-                <th style="width: 6%;">PPKD</th>
+                <th style="width: 5%;">UP</th>
+                <th style="width: 5%;">GU</th>
+                <th style="width: 5%;">TU</th>
+                <th style="width: 5%;">Gaji</th>
+                <th style="width: 5.5%;">Barang &amp;<br/>Jasa</th>
+                <th style="width: 4.5%;">PPKD</th>
+                <th style="width: 5.2%;">UP</th>
+                <th style="width: 5.2%;">GU</th>
+                <th style="width: 5.2%;">TU</th>
+                <th style="width: 5.5%;">Gaji</th>
+                <th style="width: 5.9%;">Barang &amp;<br/>Jasa</th>
+                <th style="width: 5%;">PPKD</th>
               </tr>
               <tr class="col-number">
                 <th>1</th>
@@ -401,6 +437,8 @@ export default function RegisterSpmPage() {
                 <th colspan="6">3</th>
                 <th>4</th>
                 <th colspan="6">5</th>
+                <th>6</th>
+                <th>7</th>
               </tr>
             </thead>
             <tbody>
@@ -408,7 +446,7 @@ export default function RegisterSpmPage() {
                 items.length === 0
                   ? `
                 <tr>
-                  <td colspan="15" class="text-center" style="padding: 16px; color: #666; font-style: italic;">
+                  <td colspan="17" class="text-center" style="padding: 16px; color: #666; font-style: italic;">
                     Tidak ada data dokumen SPM pada periode / filter yang dipilih.
                   </td>
                 </tr>
@@ -418,20 +456,22 @@ export default function RegisterSpmPage() {
                         (item, idx) => `
                 <tr>
                   <td class="text-center">${idx + 1}</td>
-                  <td class="text-center">${item.tglDisplay}</td>
-                  <td class="font-mono text-center font-bold" style="font-size: 6.5pt;">${item.no_spm_up}</td>
-                  <td class="font-mono text-center font-bold" style="font-size: 6.5pt;">${item.no_spm_gu}</td>
-                  <td class="font-mono text-center font-bold" style="font-size: 6.5pt;">${item.no_spm_tu}</td>
-                  <td class="font-mono text-center font-bold" style="font-size: 6.5pt;">${item.no_spm_ls_gaji}</td>
-                  <td class="font-mono text-center font-bold" style="font-size: 6.5pt;">${item.no_spm_ls_barjas}</td>
-                  <td class="font-mono text-center font-bold" style="font-size: 6.5pt;">${item.no_spm_ppkd}</td>
+                  <td class="text-center" style="white-space: nowrap;">${item.tglDisplay}</td>
+                  <td class="no-spm-cell">${item.no_spm_up}</td>
+                  <td class="no-spm-cell">${item.no_spm_gu}</td>
+                  <td class="no-spm-cell">${item.no_spm_tu}</td>
+                  <td class="no-spm-cell">${item.no_spm_ls_gaji}</td>
+                  <td class="no-spm-cell">${item.no_spm_ls_barjas}</td>
+                  <td class="no-spm-cell">${item.no_spm_ppkd}</td>
                   <td style="font-size: 7pt; line-height: 1.2;">${item.keperluan}</td>
-                  <td class="text-right font-mono" style="font-size: 7pt;">${formatRupiahKoma(item.nilai_up)}</td>
-                  <td class="text-right font-mono" style="font-size: 7pt;">${formatRupiahKoma(item.nilai_gu)}</td>
-                  <td class="text-right font-mono" style="font-size: 7pt;">${formatRupiahKoma(item.nilai_tu)}</td>
-                  <td class="text-right font-mono font-bold" style="font-size: 7pt;">${formatRupiahKoma(item.nilai_ls_gaji)}</td>
-                  <td class="text-right font-mono font-bold" style="font-size: 7pt;">${formatRupiahKoma(item.nilai_ls_barjas)}</td>
-                  <td class="text-right font-mono" style="font-size: 7pt;">${formatRupiahKoma(item.nilai_ppkd)}</td>
+                  <td class="num-cell">${formatRupiahKoma(item.nilai_up)}</td>
+                  <td class="num-cell">${item.isNihil && item.no_spm_gu ? '<span class="nihil-text">Nihil</span>' : formatRupiahKoma(item.nilai_gu)}</td>
+                  <td class="num-cell">${item.isNihil && item.no_spm_tu ? '<span class="nihil-text">Nihil</span>' : formatRupiahKoma(item.nilai_tu)}</td>
+                  <td class="num-cell font-bold">${formatRupiahKoma(item.nilai_ls_gaji)}</td>
+                  <td class="num-cell font-bold">${formatRupiahKoma(item.nilai_ls_barjas)}</td>
+                  <td class="num-cell">${formatRupiahKoma(item.nilai_ppkd)}</td>
+                  <td class="num-cell">${formatRupiahKoma(item.nilai_potongan)}</td>
+                  <td class="num-cell font-bold">${item.isNihil ? '<span class="nihil-text">Nihil</span>' : formatRupiahKoma(item.nilai_bersih)}</td>
                 </tr>
               `
                       )
@@ -439,12 +479,14 @@ export default function RegisterSpmPage() {
               }
               <tr class="row-total">
                 <td colspan="9" class="text-center font-bold">TOTAL KESELURUHAN</td>
-                <td class="text-right font-mono font-bold" style="font-size: 7pt;">${formatRupiahKoma(totals.totalUp)}</td>
-                <td class="text-right font-mono font-bold" style="font-size: 7pt;">${formatRupiahKoma(totals.totalGu)}</td>
-                <td class="text-right font-mono font-bold" style="font-size: 7pt;">${formatRupiahKoma(totals.totalTu)}</td>
-                <td class="text-right font-mono font-bold" style="font-size: 7pt;">${formatRupiahKoma(totals.totalLsGaji)}</td>
-                <td class="text-right font-mono font-bold" style="font-size: 7pt;">${formatRupiahKoma(totals.totalLsBarjas)}</td>
-                <td class="text-right font-mono font-bold" style="font-size: 7pt;">${formatRupiahKoma(totals.totalPpkd)}</td>
+                <td class="num-cell font-bold">${formatRupiahKoma(totals.totalUp)}</td>
+                <td class="num-cell font-bold">${formatRupiahKoma(totals.totalGu)}</td>
+                <td class="num-cell font-bold">${formatRupiahKoma(totals.totalTu)}</td>
+                <td class="num-cell font-bold">${formatRupiahKoma(totals.totalLsGaji)}</td>
+                <td class="num-cell font-bold">${formatRupiahKoma(totals.totalLsBarjas)}</td>
+                <td class="num-cell font-bold">${formatRupiahKoma(totals.totalPpkd)}</td>
+                <td class="num-cell font-bold">${formatRupiahKoma(totals.totalPotongan)}</td>
+                <td class="num-cell font-bold">${formatRupiahKoma(totals.totalBersih)}</td>
               </tr>
             </tbody>
           </table>
@@ -740,9 +782,21 @@ export default function RegisterSpmPage() {
                   </th>
                   <th
                     colSpan={6}
-                    className="py-2 px-3 text-center bg-slate-200/50"
+                    className="py-2 px-3 text-center border-r border-slate-200 bg-slate-200/50"
                   >
                     Jumlah SPM (Rp)
+                  </th>
+                  <th
+                    rowSpan={2}
+                    className="py-3 px-2 text-center w-28 border-r border-slate-200 bg-amber-50/70 text-amber-900"
+                  >
+                    Potongan<br />(Rp)
+                  </th>
+                  <th
+                    rowSpan={2}
+                    className="py-3 px-2 text-center w-28 bg-emerald-50/70 text-emerald-900"
+                  >
+                    Netto<br />(Rp)
                   </th>
                 </tr>
                 {/* HEADER TINGKAT 2 (SUB-KOLOM JENIS SPM) */}
@@ -759,7 +813,7 @@ export default function RegisterSpmPage() {
                   <th className="py-2 px-2 text-center border-r border-slate-200 w-24">TU</th>
                   <th className="py-2 px-2 text-center border-r border-slate-200 w-28">Gaji</th>
                   <th className="py-2 px-2 text-center border-r border-slate-200 w-28">Barang & Jasa</th>
-                  <th className="py-2 px-2 text-center w-20">PPKD</th>
+                  <th className="py-2 px-2 text-center border-r border-slate-200 w-20">PPKD</th>
                 </tr>
                 {/* NOMOR KOLOM RESMI */}
                 <tr className="bg-slate-100 text-slate-400 text-[9px] font-mono text-center border-t border-slate-200">
@@ -767,7 +821,9 @@ export default function RegisterSpmPage() {
                   <th className="py-1 px-1 border-r border-slate-200">2</th>
                   <th colSpan={6} className="py-1 px-1 border-r border-slate-200">3</th>
                   <th className="py-1 px-1 border-r border-slate-200">4</th>
-                  <th colSpan={6} className="py-1 px-1">5</th>
+                  <th colSpan={6} className="py-1 px-1 border-r border-slate-200">5</th>
+                  <th className="py-1 px-1 border-r border-slate-200">6</th>
+                  <th className="py-1 px-1">7</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-[11px]">
@@ -819,10 +875,18 @@ export default function RegisterSpmPage() {
                         {item.nilai_up > 0 ? formatRupiahKoma(item.nilai_up) : "-"}
                       </td>
                       <td className="py-2 px-2 text-right font-mono font-bold text-slate-800 border-r border-slate-100">
-                        {item.nilai_gu > 0 ? formatRupiahKoma(item.nilai_gu) : "-"}
+                        {item.isNihil && item.no_spm_gu
+                          ? "Nihil"
+                          : item.nilai_gu > 0
+                            ? formatRupiahKoma(item.nilai_gu)
+                            : "-"}
                       </td>
                       <td className="py-2 px-2 text-right font-mono font-bold text-slate-800 border-r border-slate-100">
-                        {item.nilai_tu > 0 ? formatRupiahKoma(item.nilai_tu) : "-"}
+                        {item.isNihil && item.no_spm_tu
+                          ? "Nihil"
+                          : item.nilai_tu > 0
+                            ? formatRupiahKoma(item.nilai_tu)
+                            : "-"}
                       </td>
                       <td className="py-2 px-2 text-right font-mono font-bold text-emerald-700 border-r border-slate-100">
                         {item.nilai_ls_gaji > 0 ? formatRupiahKoma(item.nilai_ls_gaji) : "-"}
@@ -830,8 +894,18 @@ export default function RegisterSpmPage() {
                       <td className="py-2 px-2 text-right font-mono font-bold text-blue-700 border-r border-slate-100">
                         {item.nilai_ls_barjas > 0 ? formatRupiahKoma(item.nilai_ls_barjas) : "-"}
                       </td>
-                      <td className="py-2 px-2 text-right font-mono font-bold text-slate-800">
+                      <td className="py-2 px-2 text-right font-mono font-bold text-slate-800 border-r border-slate-100">
                         {item.nilai_ppkd > 0 ? formatRupiahKoma(item.nilai_ppkd) : "-"}
+                      </td>
+                      <td className="py-2 px-2 text-right font-mono font-bold text-amber-700 border-r border-slate-100">
+                        {item.nilai_potongan > 0 ? formatRupiahKoma(item.nilai_potongan) : "-"}
+                      </td>
+                      <td className="py-2 px-2 text-right font-mono font-bold text-emerald-800">
+                        {item.isNihil
+                          ? "Nihil"
+                          : item.nilai_bersih > 0
+                            ? formatRupiahKoma(item.nilai_bersih)
+                            : "-"}
                       </td>
                     </tr>
                   );
@@ -858,8 +932,14 @@ export default function RegisterSpmPage() {
                   <td className="py-3 px-2 text-right font-mono font-bold text-blue-800 border-r border-slate-200">
                     {formatRupiahTotal(totals.totalLsBarjas)}
                   </td>
-                  <td className="py-3 px-2 text-right font-mono font-bold text-slate-800">
+                  <td className="py-3 px-2 text-right font-mono font-bold text-slate-800 border-r border-slate-200">
                     {formatRupiahTotal(totals.totalPpkd)}
+                  </td>
+                  <td className="py-3 px-2 text-right font-mono font-bold text-amber-800 border-r border-slate-200">
+                    {formatRupiahTotal(totals.totalPotongan)}
+                  </td>
+                  <td className="py-3 px-2 text-right font-mono font-bold text-emerald-800">
+                    {formatRupiahTotal(totals.totalBersih)}
                   </td>
                 </tr>
               </tfoot>
@@ -959,7 +1039,7 @@ export default function RegisterSpmPage() {
 
             {/* Canvas Preview Kertas Landscape */}
             <div className="flex-1 p-4 sm:p-6 bg-slate-200/70 overflow-auto flex justify-center items-start">
-              <div className="w-full max-w-[285mm] min-w-[270mm] bg-white shadow-xl p-8 text-black font-sans relative border border-slate-300 rounded-sm">
+              <div className="w-full max-w-[297mm] bg-white shadow-xl p-6 text-black font-sans relative border border-slate-300 rounded-sm">
                 <div className="text-center mb-4">
                   <div className="text-base font-bold tracking-wider">REGISTER SPM</div>
                   <div className="text-sm font-bold uppercase mt-0.5">
@@ -972,37 +1052,41 @@ export default function RegisterSpmPage() {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse border border-black text-[9px] leading-tight">
+                <div>
+                  <table className="w-full table-fixed border-collapse border border-black text-[8px] leading-tight">
                     <thead>
-                      <tr>
-                        <th rowSpan={2} className="border border-black p-1 text-center w-8">No.<br />Urut</th>
-                        <th rowSpan={2} className="border border-black p-1 text-center w-16">Tanggal</th>
-                        <th colSpan={6} className="border border-black p-1 text-center">Nomor SPM</th>
-                        <th rowSpan={2} className="border border-black p-1 text-center">Uraian</th>
-                        <th colSpan={6} className="border border-black p-1 text-center">Jumlah SPM (Rp)</th>
+                      <tr className="bg-slate-50">
+                        <th rowSpan={2} className="border border-black p-1 text-center w-[2.5%]">No.<br />Urut</th>
+                        <th rowSpan={2} className="border border-black p-1 text-center w-[5.5%]">Tanggal</th>
+                        <th colSpan={6} className="border border-black p-1 text-center w-[30%]">Nomor SPM</th>
+                        <th rowSpan={2} className="border border-black p-1 text-center w-[17%]">Uraian</th>
+                        <th colSpan={6} className="border border-black p-1 text-center w-[32%]">Jumlah SPM (Rp)</th>
+                        <th rowSpan={2} className="border border-black p-1 text-center w-[6.5%]">Potongan<br />(Rp)</th>
+                        <th rowSpan={2} className="border border-black p-1 text-center w-[6.5%]">Netto<br />(Rp)</th>
                       </tr>
-                      <tr>
-                        <th className="border border-black p-1 text-center">UP</th>
-                        <th className="border border-black p-1 text-center">GU</th>
-                        <th className="border border-black p-1 text-center">TU</th>
-                        <th className="border border-black p-1 text-center">Gaji</th>
-                        <th className="border border-black p-1 text-center">Barang &amp; Jasa</th>
-                        <th className="border border-black p-1 text-center">PPKD</th>
+                      <tr className="bg-slate-50">
+                        <th className="border border-black p-1 text-center w-[5%]">UP</th>
+                        <th className="border border-black p-1 text-center w-[5%]">GU</th>
+                        <th className="border border-black p-1 text-center w-[5%]">TU</th>
+                        <th className="border border-black p-1 text-center w-[5%]">Gaji</th>
+                        <th className="border border-black p-1 text-center w-[5.5%]">Barang &amp;<br />Jasa</th>
+                        <th className="border border-black p-1 text-center w-[4.5%]">PPKD</th>
 
-                        <th className="border border-black p-1 text-center">UP</th>
-                        <th className="border border-black p-1 text-center">GU</th>
-                        <th className="border border-black p-1 text-center">TU</th>
-                        <th className="border border-black p-1 text-center">Gaji</th>
-                        <th className="border border-black p-1 text-center">Barang &amp; Jasa</th>
-                        <th className="border border-black p-1 text-center">PPKD</th>
+                        <th className="border border-black p-1 text-center w-[5.2%]">UP</th>
+                        <th className="border border-black p-1 text-center w-[5.2%]">GU</th>
+                        <th className="border border-black p-1 text-center w-[5.2%]">TU</th>
+                        <th className="border border-black p-1 text-center w-[5.5%]">Gaji</th>
+                        <th className="border border-black p-1 text-center w-[5.9%]">Barang &amp;<br />Jasa</th>
+                        <th className="border border-black p-1 text-center w-[5%]">PPKD</th>
                       </tr>
-                      <tr className="bg-slate-50 text-[8px] font-mono text-center">
+                      <tr className="bg-slate-100 text-[7px] font-mono italic text-center">
                         <th className="border border-black p-0.5">1</th>
                         <th className="border border-black p-0.5">2</th>
                         <th colSpan={6} className="border border-black p-0.5">3</th>
                         <th className="border border-black p-0.5">4</th>
                         <th colSpan={6} className="border border-black p-0.5">5</th>
+                        <th className="border border-black p-0.5">6</th>
+                        <th className="border border-black p-0.5">7</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1010,29 +1094,39 @@ export default function RegisterSpmPage() {
                         <tr key={item.id}>
                           <td className="border border-black p-1 text-center">{idx + 1}</td>
                           <td className="border border-black p-1 text-center whitespace-nowrap">{item.tglDisplay}</td>
-                          <td className="border border-black p-1 font-mono text-center font-bold text-[8px]">{item.no_spm_up}</td>
-                          <td className="border border-black p-1 font-mono text-center font-bold text-[8px]">{item.no_spm_gu}</td>
-                          <td className="border border-black p-1 font-mono text-center font-bold text-[8px]">{item.no_spm_tu}</td>
-                          <td className="border border-black p-1 font-mono text-center font-bold text-[8px]">{item.no_spm_ls_gaji}</td>
-                          <td className="border border-black p-1 font-mono text-center font-bold text-[8px]">{item.no_spm_ls_barjas}</td>
-                          <td className="border border-black p-1 font-mono text-center font-bold text-[8px]">{item.no_spm_ppkd}</td>
-                          <td className="border border-black p-1 text-[8.5px] leading-tight">{item.keperluan}</td>
-                          <td className="border border-black p-1 text-right font-mono">{formatRupiahKoma(item.nilai_up)}</td>
-                          <td className="border border-black p-1 text-right font-mono">{formatRupiahKoma(item.nilai_gu)}</td>
-                          <td className="border border-black p-1 text-right font-mono">{formatRupiahKoma(item.nilai_tu)}</td>
-                          <td className="border border-black p-1 text-right font-mono font-bold">{formatRupiahKoma(item.nilai_ls_gaji)}</td>
-                          <td className="border border-black p-1 text-right font-mono font-bold">{formatRupiahKoma(item.nilai_ls_barjas)}</td>
-                          <td className="border border-black p-1 text-right font-mono">{formatRupiahKoma(item.nilai_ppkd)}</td>
+                          <td className="border border-black p-1 font-mono text-center font-bold text-[7px] break-all">{item.no_spm_up}</td>
+                          <td className="border border-black p-1 font-mono text-center font-bold text-[7px] break-all">{item.no_spm_gu}</td>
+                          <td className="border border-black p-1 font-mono text-center font-bold text-[7px] break-all">{item.no_spm_tu}</td>
+                          <td className="border border-black p-1 font-mono text-center font-bold text-[7px] break-all">{item.no_spm_ls_gaji}</td>
+                          <td className="border border-black p-1 font-mono text-center font-bold text-[7px] break-all">{item.no_spm_ls_barjas}</td>
+                          <td className="border border-black p-1 font-mono text-center font-bold text-[7px] break-all">{item.no_spm_ppkd}</td>
+                          <td className="border border-black p-1 text-[8px] leading-tight break-words">{item.keperluan}</td>
+                          <td className="border border-black p-1 text-right font-mono whitespace-nowrap">{formatRupiahKoma(item.nilai_up)}</td>
+                          <td className="border border-black p-1 text-right font-mono whitespace-nowrap">
+                            {item.isNihil && item.no_spm_gu ? <span className="italic font-bold">Nihil</span> : formatRupiahKoma(item.nilai_gu)}
+                          </td>
+                          <td className="border border-black p-1 text-right font-mono whitespace-nowrap">
+                            {item.isNihil && item.no_spm_tu ? <span className="italic font-bold">Nihil</span> : formatRupiahKoma(item.nilai_tu)}
+                          </td>
+                          <td className="border border-black p-1 text-right font-mono font-bold whitespace-nowrap">{formatRupiahKoma(item.nilai_ls_gaji)}</td>
+                          <td className="border border-black p-1 text-right font-mono font-bold whitespace-nowrap">{formatRupiahKoma(item.nilai_ls_barjas)}</td>
+                          <td className="border border-black p-1 text-right font-mono whitespace-nowrap">{formatRupiahKoma(item.nilai_ppkd)}</td>
+                          <td className="border border-black p-1 text-right font-mono whitespace-nowrap">{formatRupiahKoma(item.nilai_potongan)}</td>
+                          <td className="border border-black p-1 text-right font-mono font-bold whitespace-nowrap">
+                            {item.isNihil ? <span className="italic font-bold">Nihil</span> : formatRupiahKoma(item.nilai_bersih)}
+                          </td>
                         </tr>
                       ))}
                       <tr className="font-bold bg-slate-50">
                         <td colSpan={9} className="border border-black p-1 text-center font-bold">TOTAL KESELURUHAN</td>
-                        <td className="border border-black p-1 text-right font-mono">{formatRupiahKoma(totals.totalUp)}</td>
-                        <td className="border border-black p-1 text-right font-mono">{formatRupiahKoma(totals.totalGu)}</td>
-                        <td className="border border-black p-1 text-right font-mono">{formatRupiahKoma(totals.totalTu)}</td>
-                        <td className="border border-black p-1 text-right font-mono font-bold">{formatRupiahKoma(totals.totalLsGaji)}</td>
-                        <td className="border border-black p-1 text-right font-mono font-bold">{formatRupiahKoma(totals.totalLsBarjas)}</td>
-                        <td className="border border-black p-1 text-right font-mono">{formatRupiahKoma(totals.totalPpkd)}</td>
+                        <td className="border border-black p-1 text-right font-mono whitespace-nowrap">{formatRupiahKoma(totals.totalUp)}</td>
+                        <td className="border border-black p-1 text-right font-mono whitespace-nowrap">{formatRupiahKoma(totals.totalGu)}</td>
+                        <td className="border border-black p-1 text-right font-mono whitespace-nowrap">{formatRupiahKoma(totals.totalTu)}</td>
+                        <td className="border border-black p-1 text-right font-mono font-bold whitespace-nowrap">{formatRupiahKoma(totals.totalLsGaji)}</td>
+                        <td className="border border-black p-1 text-right font-mono font-bold whitespace-nowrap">{formatRupiahKoma(totals.totalLsBarjas)}</td>
+                        <td className="border border-black p-1 text-right font-mono whitespace-nowrap">{formatRupiahKoma(totals.totalPpkd)}</td>
+                        <td className="border border-black p-1 text-right font-mono whitespace-nowrap">{formatRupiahKoma(totals.totalPotongan)}</td>
+                        <td className="border border-black p-1 text-right font-mono font-bold whitespace-nowrap">{formatRupiahKoma(totals.totalBersih)}</td>
                       </tr>
                     </tbody>
                   </table>
