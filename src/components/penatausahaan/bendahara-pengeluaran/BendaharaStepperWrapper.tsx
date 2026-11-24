@@ -143,14 +143,6 @@ export default function BendaharaStepperWrapper({
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1 text-xs font-bold text-[#88131A] border border-red-200">
-                <WalletCards className="w-3.5 h-3.5" />
-                Bendahara Pengeluaran
-              </span>
-              <span className="text-xs text-slate-400">&bull;</span>
-              <span className="text-xs font-semibold text-slate-500">Tahun Anggaran 2026</span>
-            </div>
             <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
               {title}
             </h1>
@@ -206,22 +198,20 @@ export default function BendaharaStepperWrapper({
                       setCurrentStep(3);
                     }
                   }}
-                  className={`flex items-center gap-2.5 p-3 rounded-xl border transition-all text-left ${
-                    isCurrent
-                      ? "bg-[#5E0E14] text-white border-[#5E0E14] shadow-md"
-                      : isDone
+                  className={`flex items-center gap-2.5 p-3 rounded-xl border transition-all text-left ${isCurrent
+                    ? "bg-[#5E0E14] text-white border-[#5E0E14] shadow-md"
+                    : isDone
                       ? "bg-emerald-50 text-emerald-900 border-emerald-200 hover:bg-emerald-100 cursor-pointer"
                       : "bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
-                  }`}
+                    }`}
                 >
                   <div
-                    className={`p-1.5 rounded-lg ${
-                      isCurrent
-                        ? "bg-white/20 text-white"
-                        : isDone
+                    className={`p-1.5 rounded-lg ${isCurrent
+                      ? "bg-white/20 text-white"
+                      : isDone
                         ? "bg-emerald-600 text-white"
                         : "bg-slate-200 text-slate-500"
-                    }`}
+                      }`}
                   >
                     <IconComp className="w-4 h-4" />
                   </div>
@@ -289,11 +279,10 @@ export default function BendaharaStepperWrapper({
                       <div
                         key={opd.id}
                         onClick={() => setSelectedOpd(opd)}
-                        className={`p-4 rounded-xl border-2 transition-all flex items-center justify-between gap-3 ${
-                          isSelected
-                            ? "bg-amber-50/70 border-[#991B1B] shadow-md ring-2 ring-[#991B1B]/20"
-                            : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                        }`}
+                        className={`p-4 rounded-xl border-2 transition-all flex items-center justify-between gap-3 ${isSelected
+                          ? "bg-amber-50/70 border-[#991B1B] shadow-md ring-2 ring-[#991B1B]/20"
+                          : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                          }`}
                       >
                         <div className="space-y-1 min-w-0">
                           <span className="font-mono text-xs font-bold text-[#88131A] bg-red-100/60 px-2 py-0.5 rounded">
@@ -400,11 +389,10 @@ export default function BendaharaStepperWrapper({
                 {/* Opsi Gunakan Seluruh Unit / Induk SKPD */}
                 <div
                   onClick={() => setSelectedUnit(null)}
-                  className={`p-4 rounded-xl border-2 transition-all flex items-center justify-between gap-3 ${
-                    selectedUnit === null
-                      ? "bg-amber-50/70 border-[#991B1B] shadow-md ring-2 ring-[#991B1B]/20"
-                      : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                  }`}
+                  className={`p-4 rounded-xl border-2 transition-all flex items-center justify-between gap-3 ${selectedUnit === null
+                    ? "bg-amber-50/70 border-[#991B1B] shadow-md ring-2 ring-[#991B1B]/20"
+                    : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                    }`}
                 >
                   <div className="space-y-1 min-w-0">
                     <span className="font-mono text-xs font-bold text-[#88131A] bg-red-100/60 px-2 py-0.5 rounded">
@@ -435,11 +423,10 @@ export default function BendaharaStepperWrapper({
                     <div
                       key={unit.id}
                       onClick={() => setSelectedUnit(unit)}
-                      className={`p-4 rounded-xl border-2 transition-all flex items-center justify-between gap-3 ${
-                        isSelected
-                          ? "bg-amber-50/70 border-[#991B1B] shadow-md ring-2 ring-[#991B1B]/20"
-                          : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                      }`}
+                      className={`p-4 rounded-xl border-2 transition-all flex items-center justify-between gap-3 ${isSelected
+                        ? "bg-amber-50/70 border-[#991B1B] shadow-md ring-2 ring-[#991B1B]/20"
+                        : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                        }`}
                     >
                       <div className="space-y-1 min-w-0">
                         <span className="font-mono text-xs font-bold text-teal-800 bg-teal-100/60 px-2 py-0.5 rounded">

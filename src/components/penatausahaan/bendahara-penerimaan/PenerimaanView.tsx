@@ -7,6 +7,7 @@ import BendaharaStepperWrapper, {
   UnitItem,
 } from "../bendahara-pengeluaran/BendaharaStepperWrapper";
 import SearchableSelect from "@/components/ui/SearchableSelect";
+import PaginationBar from "@/components/ui/PaginationBar";
 import {
   Wallet,
   Plus,
@@ -143,12 +144,14 @@ function PenerimaanContent({
     null
   );
 
-  // Filters
+  // Filters & Pagination
   const [filterSkpd, setFilterSkpd] = useState("ALL");
   const [filterVerif, setFilterVerif] = useState("ALL");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Modal Form
   const [showModal, setShowModal] = useState(false);
@@ -244,6 +247,16 @@ function PenerimaanContent({
         (r.keterangan || "").toLowerCase().includes(q)
     );
   }, [items, searchQuery]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedOpd, selectedUnit, filterVerif, startDate, endDate, searchQuery]);
+
+  const totalPages = Math.ceil(filteredItems.length / pageSize) || 1;
+  const paginatedItems = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredItems.slice(start, start + pageSize);
+  }, [filteredItems, currentPage, pageSize]);
 
   const availableUnits = useMemo(() => {
     const selectedOpd = refData.opds.find((o) => o.kd_skpd === kdSkpd);
@@ -936,16 +949,18 @@ function PenerimaanContent({
                         Memuat data Penerimaan...
                       </td>
                     </tr>
-                  ) : filteredItems.length === 0 ? (
+                  ) : paginatedItems.length === 0 ? (
                     <tr>
                       <td colSpan={10} className="py-10 text-center text-xs italic text-slate-400">
                         Belum ada data Penerimaan pada filter ini.
                       </td>
                     </tr>
                   ) : (
-                    filteredItems.map((item, idx) => (
+                    paginatedItems.map((item, idx) => (
                       <tr key={item.id} className="hover:bg-slate-50/80 even:bg-slate-50/30 transition-colors">
-                        <td className="px-3.5 py-3 text-center text-slate-400 tabular-nums">{idx + 1}</td>
+                        <td className="px-3.5 py-3 text-center text-slate-400 tabular-nums">
+                          {(currentPage - 1) * pageSize + idx + 1}
+                        </td>
                         <td className="px-3.5 py-3">
                           <div className="font-mono font-bold text-slate-900">{item.no_terima}</div>
                           <div className="text-[11px] text-slate-500 mt-0.5">{item.tgl_terima}</div>
@@ -1042,6 +1057,21 @@ function PenerimaanContent({
                 </tbody>
               </table>
             </div>
+            {filteredItems.length > 0 && (
+              <div className="border-t border-slate-200 p-3">
+                <PaginationBar
+                  page={currentPage}
+                  totalPages={totalPages}
+                  total={filteredItems.length}
+                  limit={pageSize}
+                  onPageChange={(p) => setCurrentPage(p)}
+                  onLimitChange={(l) => {
+                    setPageSize(l);
+                    setCurrentPage(1);
+                  }}
+                />
+              </div>
+            )}
           </div>
         </>
       )}
