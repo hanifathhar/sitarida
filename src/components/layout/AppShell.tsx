@@ -116,6 +116,11 @@ const PAGE_TITLES: Record<string, string> = {
   "/penatausahaan/bendahara-penerimaan": "BENDAHARA PENERIMAAN",
   "/penatausahaan/bendahara-penerimaan/penetapan": "PENETAPAN (BENDAHARA PENERIMAAN)",
   "/penatausahaan/bendahara-penerimaan/penerimaan": "PENERIMAAN (BENDAHARA PENERIMAAN)",
+  "/akuntansi/posting-jurnal/penetapan": "POSTING JURNAL PENETAPAN",
+  "/akuntansi/posting-jurnal/penerimaan": "POSTING JURNAL PENERIMAAN",
+  "/akuntansi/posting-jurnal/sp2d": "POSTING JURNAL SP2D",
+  "/akuntansi/posting-jurnal/spj": "POSTING JURNAL SPJ PENGELUARAN",
+  "/akuntansi/posting-jurnal/setor-sisa-kas": "POSTING JURNAL SETOR SISA KAS / PENGEMBALIAN",
   "/penatausahaan/bendahara-pengeluaran": "BENDAHARA PENGELUARAN",
   "/penatausahaan/bendahara-pengeluaran/pembukuan-sp2d": "PEMBUKUAN SP2D",
   "/penatausahaan/bendahara-pengeluaran/validasi-spj": "VALIDASI SPJ",
@@ -149,6 +154,7 @@ export default function AppShell({
     return {
       perencanaan: path.startsWith("/perencanaan"),
       penatausahaan: path.startsWith("/penatausahaan"),
+      akuntansi: path.startsWith("/akuntansi"),
       pengaturan: path.startsWith("/admin"),
       masterRekeningOpd: [
         "/master/rekening",
@@ -194,6 +200,9 @@ export default function AppShell({
   const [bendaharaPenerimaanDropdownOpen, setBendaharaPenerimaanDropdownOpen] = useState(() =>
     pathname.startsWith("/penatausahaan/bendahara-penerimaan")
   );
+  const [postingJurnalDropdownOpen, setPostingJurnalDropdownOpen] = useState(() =>
+    pathname.startsWith("/akuntansi/posting-jurnal")
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -222,12 +231,16 @@ export default function AppShell({
     if (pathname.startsWith("/penatausahaan/bendahara-penerimaan")) {
       setBendaharaPenerimaanDropdownOpen(true);
     }
+    if (pathname.startsWith("/akuntansi/posting-jurnal")) {
+      setPostingJurnalDropdownOpen(true);
+    }
   }, [pathname]);
 
   function toggleGroup(key: string) {
     setOpenGroups((prev) => ({
       perencanaan: false,
       penatausahaan: false,
+      akuntansi: false,
       pengaturan: false,
       masterRekeningOpd: false,
       masterNomenklatur: false,
@@ -551,6 +564,37 @@ export default function AppShell({
       can(m.perm) ||
       can("bendahara-penerimaan:read") ||
       can("bendahara-penerimaan:write")
+  );
+
+  const postingJurnalSubMenus = [
+    {
+      label: "Jurnal Penetapan",
+      href: "/akuntansi/posting-jurnal/penetapan",
+      perm: "menu:akuntansi:jurnal-penetapan",
+    },
+    {
+      label: "Jurnal Penerimaan",
+      href: "/akuntansi/posting-jurnal/penerimaan",
+      perm: "menu:akuntansi:jurnal-penerimaan",
+    },
+    {
+      label: "Jurnal SP2D",
+      href: "/akuntansi/posting-jurnal/sp2d",
+      perm: "menu:akuntansi:jurnal-sp2d",
+    },
+    {
+      label: "Jurnal SPJ Pengeluaran",
+      href: "/akuntansi/posting-jurnal/spj",
+      perm: "menu:akuntansi:jurnal-spj",
+    },
+    {
+      label: "Jurnal Setor Sisa Kas/Pengembalian",
+      href: "/akuntansi/posting-jurnal/setor-sisa-kas",
+      perm: "menu:akuntansi:jurnal-setor-sisa",
+    },
+  ].filter(
+    (m) =>
+      can(m.perm) || can("akuntansi:read") || can("akuntansi:post")
   );
 
   // Modul Bendahara Pengeluaran: Khusus peran BUD (kode 1), Bendahara Pengeluaran (kode 10), dan Superadmin (kode 0)
@@ -1248,7 +1292,78 @@ export default function AppShell({
               </div>
             )}
 
+          {/* GRUP MENU AKUNTANSI / PELAPORAN */}
+          {postingJurnalSubMenus.length > 0 && (
+            <div className="bg-[#8E1B24] rounded-xl p-2 space-y-1.5 shadow-sm border border-red-400/15">
+              <button
+                type="button"
+                suppressHydrationWarning
+                onClick={() => toggleGroup("akuntansi")}
+                className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs font-bold text-white cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-amber-300 shrink-0" />
+                  <span>Akuntansi / Pelaporan</span>
+                </div>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform ${
+                    openGroups.akuntansi ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
 
+              {openGroups.akuntansi && (
+                <div className="space-y-1 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setPostingJurnalDropdownOpen((prev) => !prev)}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${
+                      pathname.startsWith("/akuntansi/posting-jurnal")
+                        ? "bg-[#7A121A] text-white font-bold"
+                        : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Layers className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                      <span>Posting Jurnal</span>
+                    </div>
+                    <ChevronDown
+                      className={`w-3 h-3 transition-transform ${
+                        postingJurnalDropdownOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+
+                  {postingJurnalDropdownOpen && (
+                    <div className="pl-3.5 space-y-1 border-l-2 border-red-300/20 ml-2 py-0.5">
+                      {postingJurnalSubMenus.map((sub) => {
+                        const active = pathname === sub.href;
+                        return (
+                          <Link
+                            key={sub.href}
+                            href={sub.href}
+                            onClick={() => setSidebarOpen(false)}
+                            className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] transition-all ${
+                              active
+                                ? "bg-white text-[#88131A] font-bold shadow-sm"
+                                : "text-red-100 hover:text-white hover:bg-[#7A121A] font-medium"
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                active ? "bg-[#88131A]" : "bg-red-300/60"
+                              }`}
+                            />
+                            <span className="truncate">{sub.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {hasAnyMasterSection && (
             <div className="pt-2 px-1">

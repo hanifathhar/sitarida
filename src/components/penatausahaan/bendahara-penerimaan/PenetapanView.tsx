@@ -250,6 +250,13 @@ function PenetapanContent({
   };
 
   const openEditForm = (item: PenetapanItem) => {
+    if (item.verif === 1) {
+      setFeedback({
+        type: "error",
+        text: "Data yang sudah diposting jurnal tidak dapat diedit.",
+      });
+      return;
+    }
     setEditingId(item.id);
     setNoTetap(item.no_tetap);
     setTglTetap(item.tgl_tetap);
@@ -344,6 +351,13 @@ function PenetapanContent({
   };
 
   const handleDelete = async (item: PenetapanItem) => {
+    if (item.verif === 1) {
+      setFeedback({
+        type: "error",
+        text: "Data yang sudah diposting jurnal tidak dapat dihapus.",
+      });
+      return;
+    }
     if (!confirm(`Hapus data Penetapan ${item.no_tetap}?`)) return;
     try {
       const res = await fetch(
@@ -899,30 +913,32 @@ function PenetapanContent({
                         <td className="px-3.5 py-3 text-center">
                           <div className="inline-flex items-center gap-1">
                             <button
-                              onClick={() => handleToggleVerif(item)}
-                              className={`p-1.5 rounded-lg border cursor-pointer ${item.verif === 1
-                                ? "border-amber-200 text-amber-700 hover:bg-amber-50"
-                                : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                                }`}
-                              title={item.verif === 1 ? "Batal Verifikasi" : "Verifikasi"}
-                            >
-                              {item.verif === 1 ? (
-                                <ShieldX className="w-3.5 h-3.5" />
-                              ) : (
-                                <ShieldCheck className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                            <button
                               onClick={() => openEditForm(item)}
-                              className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer"
-                              title="Edit"
+                              disabled={item.verif === 1}
+                              className={`p-1.5 rounded-lg border ${item.verif === 1
+                                  ? "border-slate-200 text-slate-300 bg-slate-50 cursor-not-allowed opacity-50"
+                                  : "border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer"
+                                }`}
+                              title={
+                                item.verif === 1
+                                  ? "Sudah diposting jurnal — tidak dapat diedit"
+                                  : "Edit"
+                              }
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => handleDelete(item)}
-                              className="p-1.5 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 cursor-pointer"
-                              title="Hapus"
+                              disabled={item.verif === 1}
+                              className={`p-1.5 rounded-lg border ${item.verif === 1
+                                  ? "border-slate-200 text-slate-300 bg-slate-50 cursor-not-allowed opacity-50"
+                                  : "border-rose-200 text-rose-700 hover:bg-rose-50 cursor-pointer"
+                                }`}
+                              title={
+                                item.verif === 1
+                                  ? "Sudah diposting jurnal — tidak dapat dihapus"
+                                  : "Hapus"
+                              }
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>

@@ -48,6 +48,9 @@ interface PenerimaanItem {
   alamat?: string | null;
   verif: number;
   jns_pajak?: string | null;
+  status_validasi?: string | null;
+  tgl_validasi?: string | null;
+  no_bukti_kasin?: string | null;
 }
 
 interface PenetapanOption {
@@ -89,6 +92,7 @@ const JENIS_PAJAK_OPTIONS = [
   "PARKIR",
   "WALET",
   "PBB",
+  "TRANSFER",
 ];
 
 export default function PenerimaanView() {
@@ -146,12 +150,19 @@ function PenerimaanContent({
 
   // Filters & Pagination
   const [filterSkpd, setFilterSkpd] = useState("ALL");
-  const [filterVerif, setFilterVerif] = useState("ALL");
+  const [filterValidasi, setFilterValidasi] = useState("ALL");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [validating, setValidating] = useState(false);
+  const [validasiDialog, setValidasiDialog] = useState<
+    | { mode: "validate" }
+    | { mode: "unvalidate"; item: PenerimaanItem }
+    | null
+  >(null);
 
   // Modal Form
   const [showModal, setShowModal] = useState(false);
@@ -204,7 +215,6 @@ function PenerimaanContent({
       const q = new URLSearchParams();
       q.set("kd_skpd", selectedOpd.kd_skpd);
       if (selectedUnit?.kd_unit) q.set("kd_unit", selectedUnit.kd_unit);
-      if (filterVerif !== "ALL") q.set("verif", filterVerif);
       if (startDate) q.set("startDate", startDate);
       if (endDate) q.set("endDate", endDate);
 
@@ -230,13 +240,19 @@ function PenerimaanContent({
 
   useEffect(() => {
     fetchData();
-  }, [selectedOpd, selectedUnit, filterVerif, startDate, endDate]);
+  }, [selectedOpd, selectedUnit, startDate, endDate]);
 
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
-      (r) =>
+    return items.filter((r) => {
+      if (filterValidasi === "TERVALIDASI" && r.status_validasi !== "TERVALIDASI") {
+        return false;
+      }
+      if (filterValidasi === "BELUM" && r.status_validasi === "TERVALIDASI") {
+        return false;
+      }
+      if (!q) return true;
+      return (
         r.no_terima.toLowerCase().includes(q) ||
         (r.no_tetap || "").toLowerCase().includes(q) ||
         (r.nm_skpd || r.kd_skpd).toLowerCase().includes(q) ||
@@ -245,12 +261,14 @@ function PenerimaanContent({
         (r.company || "").toLowerCase().includes(q) ||
         (r.jns_pajak || "").toLowerCase().includes(q) ||
         (r.keterangan || "").toLowerCase().includes(q)
-    );
-  }, [items, searchQuery]);
+      );
+    });
+  }, [items, searchQuery, filterValidasi]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedOpd, selectedUnit, filterVerif, startDate, endDate, searchQuery]);
+    setSelectedIds([]);
+  }, [selectedOpd, selectedUnit, filterValidasi, startDate, endDate, searchQuery]);
 
   const totalPages = Math.ceil(filteredItems.length / pageSize) || 1;
   const paginatedItems = useMemo(() => {
@@ -381,23 +399,94 @@ function PenerimaanContent({
     }
   };
 
-  const handleToggleVerif = async (item: PenerimaanItem) => {
-    const nextVerif = item.verif === 1 ? 0 : 1;
+  const selectableOnPage = useMemo(
+    () => paginatedItems.filter((r) => r.status_validasi !== "TERVALIDASI").map((r) => r.id),
+    [paginatedItems]
+  );
+
+  const isAllPageSelected =
+    selectableOnPage.length > 0 && selectableOnPage.every((id) => selectedIds.includes(id));
+
+  const toggleSelectId = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllOnPage = () => {
+    if (isAllPageSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !selectableOnPage.includes(id)));
+    } else {
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...selectableOnPage])));
+    }
+  };
+
+  const handleValidasiBatch = () => {
+    if (selectedIds.length === 0) return;
+    setValidasiDialog({ mode: "validate" });
+  };
+
+  const executeValidasiBatch = async () => {
+    if (selectedIds.length === 0) return;
+    setValidating(true);
+    setFeedback(null);
     try {
-      const res = await fetch("/api/penatausahaan/bendahara-penerimaan/penerimaan", {
-        method: "PATCH",
+      const res = await fetch("/api/penatausahaan/bendahara-penerimaan/penerimaan/validasi", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: item.id, verif: nextVerif }),
+        body: JSON.stringify({ ids: selectedIds }),
       });
       const json = await res.json();
       if (json.success) {
         setFeedback({ type: "success", text: json.message });
+        setSelectedIds([]);
+        setValidasiDialog(null);
         await fetchData();
       } else {
-        setFeedback({ type: "error", text: json.error || "Gagal memproses verifikasi." });
+        setFeedback({ type: "error", text: json.error || "Gagal memvalidasi penerimaan." });
+        setValidasiDialog(null);
       }
     } catch {
-      setFeedback({ type: "error", text: "Terjadi kesalahan saat verifikasi." });
+      setFeedback({ type: "error", text: "Terjadi kesalahan saat memvalidasi penerimaan." });
+      setValidasiDialog(null);
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const handleBatalValidasi = (item: PenerimaanItem) => {
+    if (item.verif === 1) {
+      setFeedback({
+        type: "error",
+        text: "Data penerimaan yang sudah diposting jurnal tidak dapat dibatalkan validasinya.",
+      });
+      return;
+    }
+    setValidasiDialog({ mode: "unvalidate", item });
+  };
+
+  const executeBatalValidasi = async (item: PenerimaanItem) => {
+    setValidating(true);
+    setFeedback(null);
+    try {
+      const res = await fetch(
+        `/api/penatausahaan/bendahara-penerimaan/penerimaan/validasi?id=${item.id}`,
+        { method: "DELETE" }
+      );
+      const json = await res.json();
+      if (json.success) {
+        setFeedback({ type: "success", text: json.message });
+        setValidasiDialog(null);
+        await fetchData();
+      } else {
+        setFeedback({ type: "error", text: json.error || "Gagal membatalkan validasi." });
+        setValidasiDialog(null);
+      }
+    } catch {
+      setFeedback({ type: "error", text: "Terjadi kesalahan saat membatalkan validasi." });
+      setValidasiDialog(null);
+    } finally {
+      setValidating(false);
     }
   };
 
@@ -443,7 +532,7 @@ function PenerimaanContent({
         "ALAMAT",
         "NILAI (Rp)",
         "KETERANGAN",
-        "STATUS VERIF",
+        "STATUS VALIDASI",
       ],
       ...filteredItems.map((r, i) => [
         i + 1,
@@ -463,7 +552,7 @@ function PenerimaanContent({
         r.alamat || "-",
         r.nilai,
         r.keterangan || "-",
-        r.verif === 1 ? "TERVERIFIKASI" : "BELUM VERIFIKASI",
+        r.status_validasi === "TERVALIDASI" ? "TERVALIDASI" : "BELUM VALIDASI",
       ]),
     ];
 
@@ -563,6 +652,19 @@ function PenerimaanContent({
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Tambah Penerimaan</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleValidasiBatch}
+                  disabled={selectedIds.length === 0 || validating}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold text-white shadow-xs transition cursor-pointer"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>
+                    {validating
+                      ? "Memvalidasi..."
+                      : `Validasi ke Kasda (${selectedIds.length})`}
+                  </span>
                 </button>
                 <button
                   onClick={handleExportExcel}
@@ -830,22 +932,24 @@ function PenerimaanContent({
                 {summary.totalDokumen} <span className="text-xs font-bold text-slate-500">Dokumen</span>
               </div>
             </div>
-            <div className="relative overflow-hidden bg-white rounded-2xl border border-emerald-200/80 p-5 shadow-xs">
-              <div className="absolute inset-x-0 top-0 h-1 bg-emerald-600" />
-              <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
-                Sudah Diverifikasi
+            <div className="relative overflow-hidden bg-white rounded-2xl border border-blue-200/80 p-5 shadow-xs">
+              <div className="absolute inset-x-0 top-0 h-1 bg-blue-600" />
+              <div className="text-[11px] font-bold uppercase tracking-wider text-blue-700">
+                Tervalidasi Kasda
               </div>
-              <div className="text-2xl font-black text-emerald-700 mt-2 tabular-nums">
-                {summary.totalVerif} <span className="text-xs font-bold text-emerald-600">Dokumen</span>
+              <div className="text-2xl font-black text-blue-700 mt-2 tabular-nums">
+                {items.filter((r) => r.status_validasi === "TERVALIDASI").length}{" "}
+                <span className="text-xs font-bold text-blue-600">Dokumen</span>
               </div>
             </div>
             <div className="relative overflow-hidden bg-white rounded-2xl border border-amber-200/80 p-5 shadow-xs">
               <div className="absolute inset-x-0 top-0 h-1 bg-amber-500" />
               <div className="text-[11px] font-bold uppercase tracking-wider text-amber-700">
-                Menunggu Verifikasi
+                Belum Validasi Kasda
               </div>
               <div className="text-2xl font-black text-amber-700 mt-2 tabular-nums">
-                {summary.totalBelumVerif} <span className="text-xs font-bold text-amber-600">Dokumen</span>
+                {items.filter((r) => r.status_validasi !== "TERVALIDASI").length}{" "}
+                <span className="text-xs font-bold text-amber-600">Dokumen</span>
               </div>
             </div>
             <div className="relative overflow-hidden bg-gradient-to-br from-emerald-50/60 to-white rounded-2xl border border-emerald-200/90 p-5 shadow-xs">
@@ -880,19 +984,19 @@ function PenerimaanContent({
                   className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:outline-none"
                 />
               </div>
-              <div className="md:col-span-3">
-                <label className="block text-[11px] font-bold text-slate-600 mb-1">Status Verif</label>
+              <div className="md:col-span-2">
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Validasi Kasda</label>
                 <select
-                  value={filterVerif}
-                  onChange={(e) => setFilterVerif(e.target.value)}
+                  value={filterValidasi}
+                  onChange={(e) => setFilterValidasi(e.target.value)}
                   className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:outline-none"
                 >
-                  <option value="ALL">Semua Status</option>
-                  <option value="1">Terverifikasi</option>
-                  <option value="0">Belum Verifikasi</option>
+                  <option value="ALL">Semua</option>
+                  <option value="BELUM">Belum Validasi</option>
+                  <option value="TERVALIDASI">Tervalidasi</option>
                 </select>
               </div>
-              <div className="md:col-span-4">
+              <div className="md:col-span-5">
                 <label className="block text-[11px] font-bold text-slate-600 mb-1">Pencarian Cepat</label>
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
@@ -910,7 +1014,7 @@ function PenerimaanContent({
                   type="button"
                   onClick={() => {
                     setFilterSkpd("ALL");
-                    setFilterVerif("ALL");
+                    setFilterValidasi("ALL");
                     setStartDate("");
                     setEndDate("");
                     setSearchQuery("");
@@ -930,6 +1034,16 @@ function PenerimaanContent({
               <table className="w-full text-left text-xs text-slate-600 border-collapse">
                 <thead className="bg-slate-100/90 text-[10px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
                   <tr>
+                    <th className="px-3 py-3 text-center w-10">
+                      <input
+                        type="checkbox"
+                        checked={isAllPageSelected}
+                        onChange={toggleSelectAllOnPage}
+                        disabled={selectableOnPage.length === 0}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-[#5E0E14] focus:ring-[#5E0E14] cursor-pointer"
+                        title="Pilih semua yang belum divalidasi di halaman ini"
+                      />
+                    </th>
                     <th className="px-3.5 py-3 text-center w-12">No</th>
                     <th className="px-3.5 py-3 min-w-[175px]">No. &amp; Tgl Penerimaan</th>
                     <th className="px-3.5 py-3 min-w-[155px]">Ref. Penetapan</th>
@@ -938,121 +1052,158 @@ function PenerimaanContent({
                     <th className="px-3.5 py-3 min-w-[160px]">Wajib Pajak / Jenis</th>
                     <th className="px-3.5 py-3 min-w-[200px]">Uraian / Keterangan</th>
                     <th className="px-3.5 py-3 text-right whitespace-nowrap">Nilai (Rp)</th>
-                    <th className="px-3.5 py-3 text-center w-32">Status Verif</th>
+                    <th className="px-3.5 py-3 text-center w-36">Validasi Kasda</th>
                     <th className="px-3.5 py-3 text-center w-32">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {loading ? (
                     <tr>
-                      <td colSpan={10} className="py-10 text-center text-xs italic text-slate-400">
+                      <td colSpan={11} className="py-10 text-center text-xs italic text-slate-400">
                         Memuat data Penerimaan...
                       </td>
                     </tr>
                   ) : paginatedItems.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="py-10 text-center text-xs italic text-slate-400">
+                      <td colSpan={11} className="py-10 text-center text-xs italic text-slate-400">
                         Belum ada data Penerimaan pada filter ini.
                       </td>
                     </tr>
                   ) : (
-                    paginatedItems.map((item, idx) => (
-                      <tr key={item.id} className="hover:bg-slate-50/80 even:bg-slate-50/30 transition-colors">
-                        <td className="px-3.5 py-3 text-center text-slate-400 tabular-nums">
-                          {(currentPage - 1) * pageSize + idx + 1}
-                        </td>
-                        <td className="px-3.5 py-3">
-                          <div className="font-mono font-bold text-slate-900">{item.no_terima}</div>
-                          <div className="text-[11px] text-slate-500 mt-0.5">{item.tgl_terima}</div>
-                        </td>
-                        <td className="px-3.5 py-3">
-                          {item.no_tetap ? (
-                            <>
-                              <div className="font-mono text-[11px] font-semibold text-blue-700">
-                                {item.no_tetap}
+                    paginatedItems.map((item, idx) => {
+                      const isValidated = item.status_validasi === "TERVALIDASI";
+                      const isSelected = selectedIds.includes(item.id);
+                      return (
+                        <tr key={item.id} className={`hover:bg-slate-50/80 even:bg-slate-50/30 transition-colors ${isSelected ? "bg-blue-50/50" : ""}`}>
+                          <td className="px-3 py-3 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              disabled={isValidated}
+                              onChange={() => toggleSelectId(item.id)}
+                              className="h-3.5 w-3.5 rounded border-slate-300 text-[#5E0E14] focus:ring-[#5E0E14] disabled:opacity-40 cursor-pointer"
+                            />
+                          </td>
+                          <td className="px-3.5 py-3 text-center text-slate-400 tabular-nums">
+                            {(currentPage - 1) * pageSize + idx + 1}
+                          </td>
+                          <td className="px-3.5 py-3">
+                            <div className="font-mono font-bold text-slate-900">{item.no_terima}</div>
+                            <div className="text-[11px] text-slate-500 mt-0.5">{item.tgl_terima}</div>
+                          </td>
+                          <td className="px-3.5 py-3">
+                            {item.no_tetap ? (
+                              <>
+                                <div className="font-mono text-[11px] font-semibold text-blue-700">
+                                  {item.no_tetap}
+                                </div>
+                                {item.tgl_tetap && (
+                                  <div className="text-[10px] text-slate-400 mt-0.5">{item.tgl_tetap}</div>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-[11px] italic text-slate-400">Tanpa Penetapan</span>
+                            )}
+                          </td>
+                          <td className="px-3.5 py-3">
+                            <div className="font-semibold text-slate-800">{item.nm_skpd || item.kd_skpd}</div>
+                            {item.nm_unit && (
+                              <div className="text-[11px] text-slate-500 mt-0.5">Unit: {item.nm_unit}</div>
+                            )}
+                          </td>
+                          <td className="px-3.5 py-3">
+                            {item.nm_sub_kegiatan && (
+                              <div className="text-[10px] text-slate-500 mb-0.5">
+                                {item.kd_sub_kegiatan} - {item.nm_sub_kegiatan}
                               </div>
-                              {item.tgl_tetap && (
-                                <div className="text-[10px] text-slate-400 mt-0.5">{item.tgl_tetap}</div>
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-[11px] italic text-slate-400">Tanpa Penetapan</span>
-                          )}
-                        </td>
-                        <td className="px-3.5 py-3">
-                          <div className="font-semibold text-slate-800">{item.nm_skpd || item.kd_skpd}</div>
-                          {item.nm_unit && (
-                            <div className="text-[11px] text-slate-500 mt-0.5">Unit: {item.nm_unit}</div>
-                          )}
-                        </td>
-                        <td className="px-3.5 py-3">
-                          {item.nm_sub_kegiatan && (
-                            <div className="text-[10px] text-slate-500 mb-0.5">
-                              {item.kd_sub_kegiatan} - {item.nm_sub_kegiatan}
-                            </div>
-                          )}
-                          <div className="font-mono text-[10px] font-bold text-[#5E0E14]">{item.kd_rek6}</div>
-                          <div className="font-semibold text-slate-800">{item.nm_rek6}</div>
-                        </td>
-                        <td className="px-3.5 py-3">
-                          <div className="font-semibold text-slate-800">{item.company || "-"}</div>
-                          {item.jns_pajak && (
-                            <span className="inline-block mt-0.5 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
-                              {item.jns_pajak}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3.5 py-3 max-w-xs leading-snug text-slate-700">
-                          {item.keterangan || <span className="italic text-slate-400">-</span>}
-                        </td>
-                        <td className="px-3.5 py-3 text-right font-mono font-bold text-emerald-700 whitespace-nowrap tabular-nums">
-                          {formatAngka(item.nilai)}
-                        </td>
-                        <td className="px-3.5 py-3 text-center">
-                          {item.verif === 1 ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
-                              <CheckCircle2 className="w-3 h-3" /> Terverifikasi
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[10px] font-bold text-amber-700">
-                              <Clock className="w-3 h-3" /> Draft
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3.5 py-3 text-center">
-                          <div className="inline-flex items-center gap-1">
-                            <button
-                              onClick={() => handleToggleVerif(item)}
-                              className={`p-1.5 rounded-lg border cursor-pointer ${item.verif === 1
-                                ? "border-amber-200 text-amber-700 hover:bg-amber-50"
-                                : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                                }`}
-                              title={item.verif === 1 ? "Batal Verifikasi" : "Verifikasi"}
-                            >
-                              {item.verif === 1 ? (
-                                <ShieldX className="w-3.5 h-3.5" />
+                            )}
+                            <div className="font-mono text-[10px] font-bold text-[#5E0E14]">{item.kd_rek6}</div>
+                            <div className="font-semibold text-slate-800">{item.nm_rek6}</div>
+                          </td>
+                          <td className="px-3.5 py-3">
+                            <div className="font-semibold text-slate-800">{item.company || "-"}</div>
+                            {item.jns_pajak && (
+                              <span className="inline-block mt-0.5 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                                {item.jns_pajak}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3.5 py-3 max-w-xs leading-snug text-slate-700">
+                            {item.keterangan || <span className="italic text-slate-400">-</span>}
+                          </td>
+                          <td className="px-3.5 py-3 text-right font-mono font-bold text-emerald-700 whitespace-nowrap tabular-nums">
+                            {formatAngka(item.nilai)}
+                          </td>
+                          <td className="px-3.5 py-3 text-center">
+                            {isValidated ? (
+                              <div className="space-y-1">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-[10px] font-bold text-blue-700">
+                                  <CheckCircle2 className="w-3 h-3" /> Tervalidasi
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                                Belum Validasi
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3.5 py-3 text-center">
+                            <div className="inline-flex items-center gap-1">
+                              {isValidated ? (
+                                <button
+                                  onClick={() => handleBatalValidasi(item)}
+                                  disabled={item.verif === 1}
+                                  className={`p-1.5 rounded-lg border ${item.verif === 1
+                                    ? "border-slate-200 text-slate-300 bg-slate-50 cursor-not-allowed opacity-50"
+                                    : "border-rose-200 text-rose-700 hover:bg-rose-50 cursor-pointer"
+                                    }`}
+                                  title={
+                                    item.verif === 1
+                                      ? "Sudah diposting jurnal — tidak dapat dibatalkan validasinya"
+                                      : "Batalkan Validasi"
+                                  }
+                                >
+                                  <ShieldX className="w-3.5 h-3.5" />
+                                </button>
                               ) : (
-                                <ShieldCheck className="w-3.5 h-3.5" />
+                                <>
+                                  <button
+                                    onClick={() => openEditForm(item)}
+                                    disabled={item.verif === 1}
+                                    className={`p-1.5 rounded-lg border ${item.verif === 1
+                                      ? "border-slate-200 text-slate-300 bg-slate-50 cursor-not-allowed opacity-50"
+                                      : "border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer"
+                                      }`}
+                                    title={
+                                      item.verif === 1
+                                        ? "Sudah diposting jurnal — tidak dapat diedit"
+                                        : "Edit"
+                                    }
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDelete(item)}
+                                    disabled={item.verif === 1}
+                                    className={`p-1.5 rounded-lg border ${item.verif === 1
+                                      ? "border-slate-200 text-slate-300 bg-slate-50 cursor-not-allowed opacity-50"
+                                      : "border-rose-200 text-rose-700 hover:bg-rose-50 cursor-pointer"
+                                      }`}
+                                    title={
+                                      item.verif === 1
+                                        ? "Sudah diposting jurnal — tidak dapat dihapus"
+                                        : "Hapus"
+                                    }
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
                               )}
-                            </button>
-                            <button
-                              onClick={() => openEditForm(item)}
-                              className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer"
-                              title="Edit"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(item)}
-                              className="p-1.5 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 cursor-pointer"
-                              title="Hapus"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -1074,6 +1225,129 @@ function PenerimaanContent({
             )}
           </div>
         </>
+      )}
+
+      {/* FormDialog Konfirmasi Validasi / Pembatalan Validasi */}
+      {validasiDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
+            <div
+              className={`px-6 py-4 flex items-center justify-between text-white ${validasiDialog.mode === "validate"
+                ? "bg-gradient-to-r from-[#5E0E14] to-[#88131A]"
+                : "bg-gradient-to-r from-rose-700 to-rose-800"
+                }`}
+            >
+              <div className="flex items-center gap-2.5">
+                {validasiDialog.mode === "validate" ? (
+                  <ShieldCheck className="w-5 h-5" />
+                ) : (
+                  <ShieldX className="w-5 h-5" />
+                )}
+                <h3 className="text-sm sm:text-base font-bold">
+                  {validasiDialog.mode === "validate"
+                    ? "Konfirmasi Validasi Penerimaan"
+                    : "Konfirmasi Pembatalan Validasi"}
+                </h3>
+              </div>
+              <button
+                type="button"
+                disabled={validating}
+                onClick={() => setValidasiDialog(null)}
+                className="p-1 rounded-lg hover:bg-white/15 text-white cursor-pointer disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs text-slate-600">
+              {validasiDialog.mode === "validate" ? (
+                <>
+                  <p className="leading-relaxed">
+                    Anda akan memvalidasi{" "}
+                    <span className="font-bold text-slate-900">{selectedIds.length} transaksi</span>{" "}
+                    penerimaan ke Kas Daerah. Data akan otomatis dicatat ke{" "}
+                    <span className="font-mono font-semibold text-slate-800">Buku Kas Umum Daerah</span> &amp;{" "}
+                    (<span className="font-semibold">PENDAPATAN</span>).
+                  </p>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Jumlah Transaksi</span>
+                      <span className="font-bold text-slate-900">{selectedIds.length} Dokumen</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Total Nilai</span>
+                      <span className="font-mono font-bold text-emerald-700">
+                        {formatRupiah(
+                          items
+                            .filter((r) => selectedIds.includes(r.id))
+                            .reduce((sum, r) => sum + (Number(r.nilai) || 0), 0)
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="leading-relaxed">
+                    Anda akan membatalkan validasi penerimaan berikut. Data terkait pada Kas Masuk (
+                    <span className="font-mono font-semibold text-slate-800">Buku Kas Umum Daerah</span> &amp;akan
+                    dihapus dan status kembali menjadi <span className="font-bold">BELUM</span>.
+                  </p>
+                  <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-3.5 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">No. Penerimaan</span>
+                      <span className="font-mono font-bold text-slate-900">
+                        {validasiDialog.item.no_terima}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Tanggal</span>
+                      <span className="font-semibold text-slate-800">
+                        {validasiDialog.item.tgl_terima}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Nilai</span>
+                      <span className="font-mono font-bold text-rose-700">
+                        {formatRupiah(validasiDialog.item.nilai)}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 px-6 py-4 bg-slate-50 border-t border-slate-200">
+              <button
+                type="button"
+                disabled={validating}
+                onClick={() => setValidasiDialog(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={validating}
+                onClick={() =>
+                  validasiDialog.mode === "validate"
+                    ? executeValidasiBatch()
+                    : executeBatalValidasi(validasiDialog.item)
+                }
+                className={`px-4 py-2 rounded-xl text-xs font-bold text-white cursor-pointer disabled:opacity-50 ${validasiDialog.mode === "validate"
+                  ? "bg-[#5E0E14] hover:bg-[#7A141C]"
+                  : "bg-rose-600 hover:bg-rose-700"
+                  }`}
+              >
+                {validating
+                  ? "Memproses..."
+                  : validasiDialog.mode === "validate"
+                    ? "Ya, Validasi Sekarang"
+                    : "Ya, Batalkan Validasi"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

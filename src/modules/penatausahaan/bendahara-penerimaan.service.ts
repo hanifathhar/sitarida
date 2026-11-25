@@ -264,6 +264,23 @@ export const bendaharaPenerimaanService = {
       jns_pajak?: string;
     }
   ) {
+    const existing = await prisma.tblPenetapan.findUnique({
+      where: { id },
+      select: { id: true, no_tetap: true, verif: true },
+    });
+    if (!existing) {
+      throw new Error("Data penetapan tidak ditemukan.");
+    }
+    const postedJournal = await prisma.trhmaping.findFirst({
+      where: { no_voucher: `${existing.no_tetap.trim()}/10` },
+      select: { id: true },
+    });
+    if (existing.verif === 1 || postedJournal) {
+      throw new Error(
+        "Data penetapan yang sudah diposting jurnal tidak dapat diedit. Batalkan posting jurnal terlebih dahulu jika ingin mengubah."
+      );
+    }
+
     const row = await prisma.tblPenetapan.update({
       where: { id },
       data: {
@@ -292,6 +309,24 @@ export const bendaharaPenerimaanService = {
   },
 
   async toggleVerifyPenetapan(id: string, verif: number) {
+    const existing = await prisma.tblPenetapan.findUnique({
+      where: { id },
+      select: { id: true, no_tetap: true, verif: true },
+    });
+    if (!existing) {
+      throw new Error("Data penetapan tidak ditemukan.");
+    }
+    if (verif === 0) {
+      const postedJournal = await prisma.trhmaping.findFirst({
+        where: { no_voucher: `${existing.no_tetap.trim()}/10` },
+        select: { id: true },
+      });
+      if (postedJournal) {
+        throw new Error(
+          "Data penetapan sudah diposting ke jurnal. Gunakan Batal Posting di menu Posting Jurnal Penetapan."
+        );
+      }
+    }
     return prisma.tblPenetapan.update({
       where: { id },
       data: { verif: verif === 1 ? 1 : 0 },
@@ -299,6 +334,22 @@ export const bendaharaPenerimaanService = {
   },
 
   async deletePenetapan(id: string) {
+    const existing = await prisma.tblPenetapan.findUnique({
+      where: { id },
+      select: { id: true, no_tetap: true, verif: true },
+    });
+    if (!existing) {
+      throw new Error("Data penetapan tidak ditemukan.");
+    }
+    const postedJournal = await prisma.trhmaping.findFirst({
+      where: { no_voucher: `${existing.no_tetap.trim()}/10` },
+      select: { id: true },
+    });
+    if (existing.verif === 1 || postedJournal) {
+      throw new Error(
+        "Data penetapan yang sudah diposting jurnal tidak dapat dihapus. Batalkan posting jurnal terlebih dahulu jika ingin menghapus."
+      );
+    }
     return prisma.tblPenetapan.delete({ where: { id } });
   },
 
@@ -460,6 +511,23 @@ export const bendaharaPenerimaanService = {
       jns_pajak?: string;
     }
   ) {
+    const existing = await prisma.tblPenerimaan.findUnique({
+      where: { id },
+      select: { id: true, no_terima: true, verif: true },
+    });
+    if (!existing) {
+      throw new Error("Data penerimaan tidak ditemukan.");
+    }
+    const postedJournal = await prisma.trhmaping.findFirst({
+      where: { no_voucher: `${existing.no_terima.trim()}/4` },
+      select: { id: true },
+    });
+    if (existing.verif === 1 || postedJournal) {
+      throw new Error(
+        "Data penerimaan yang sudah diposting jurnal tidak dapat diedit. Batalkan posting jurnal terlebih dahulu jika ingin mengubah."
+      );
+    }
+
     const row = await prisma.tblPenerimaan.update({
       where: { id },
       data: {
@@ -491,6 +559,24 @@ export const bendaharaPenerimaanService = {
   },
 
   async toggleVerifyPenerimaan(id: string, verif: number) {
+    const existing = await prisma.tblPenerimaan.findUnique({
+      where: { id },
+      select: { id: true, no_terima: true, verif: true },
+    });
+    if (!existing) {
+      throw new Error("Data penerimaan tidak ditemukan.");
+    }
+    if (verif === 0) {
+      const postedJournal = await prisma.trhmaping.findFirst({
+        where: { no_voucher: `${existing.no_terima.trim()}/4` },
+        select: { id: true },
+      });
+      if (postedJournal) {
+        throw new Error(
+          "Data penerimaan sudah diposting ke jurnal. Gunakan Batal Posting di menu Posting Jurnal Penerimaan."
+        );
+      }
+    }
     return prisma.tblPenerimaan.update({
       where: { id },
       data: { verif: verif === 1 ? 1 : 0 },
@@ -498,6 +584,175 @@ export const bendaharaPenerimaanService = {
   },
 
   async deletePenerimaan(id: string) {
+    const existing = await prisma.tblPenerimaan.findUnique({
+      where: { id },
+      select: { id: true, no_terima: true, verif: true },
+    });
+    if (!existing) {
+      throw new Error("Data penerimaan tidak ditemukan.");
+    }
+    const postedJournal = await prisma.trhmaping.findFirst({
+      where: { no_voucher: `${existing.no_terima.trim()}/4` },
+      select: { id: true },
+    });
+    if (existing.verif === 1 || postedJournal) {
+      throw new Error(
+        "Data penerimaan yang sudah diposting jurnal tidak dapat dihapus. Batalkan posting jurnal terlebih dahulu jika ingin menghapus."
+      );
+    }
     return prisma.tblPenerimaan.delete({ where: { id } });
+  },
+
+  async validasiPenerimaanBatch(ids: string[]) {
+    if (!ids || ids.length === 0) {
+      throw new Error("Pilih minimal satu transaksi penerimaan untuk divalidasi.");
+    }
+
+    const rows = await prisma.tblPenerimaan.findMany({
+      where: {
+        id: { in: ids },
+        status_validasi: { not: "TERVALIDASI" },
+      },
+      orderBy: [{ tgl_terima: "asc" }, { no_terima: "asc" }],
+    });
+
+    if (rows.length === 0) {
+      throw new Error("Semua transaksi yang dipilih sudah berstatus TERVALIDASI.");
+    }
+
+    const validatedCount = await prisma.$transaction(async (tx: any) => {
+      let count = 0;
+      const now = new Date();
+
+      for (const item of rows) {
+        const opd = await tx.opd.findUnique({
+          where: { kd_skpd: item.kd_skpd },
+          select: { id: true, nm_skpd: true },
+        });
+        if (!opd) {
+          throw new Error(`OPD dengan kode ${item.kd_skpd} tidak ditemukan.`);
+        }
+
+        let unitKerjaId: string | null = null;
+        if (item.kd_unit) {
+          const unit = await tx.unitKerja.findUnique({
+            where: { kd_unit: item.kd_unit },
+            select: { id: true },
+          });
+          unitKerjaId = unit?.id || null;
+        }
+
+        const existingKasin = await tx.trhkasin.findUnique({
+          where: {
+            tahunAnggaran_no_bukti: {
+              tahunAnggaran: item.tahunAnggaran,
+              no_bukti: item.no_terima,
+            },
+          },
+        });
+
+        if (existingKasin) {
+          throw new Error(
+            `Nomor bukti ${item.no_terima} sudah ada di Kas Masuk (trhkasin) TA ${item.tahunAnggaran}.`
+          );
+        }
+
+        await tx.trhkasin.create({
+          data: {
+            tahunAnggaran: item.tahunAnggaran,
+            no_bukti: item.no_terima,
+            tgl_bukti: item.tgl_terima,
+            no_sts: item.no_terima,
+            tgl_sts: item.tgl_terima,
+            kd_skpd: item.kd_skpd,
+            nm_skpd: item.nm_skpd || opd.nm_skpd,
+            opdId: opd.id,
+            kd_unit: item.kd_unit || null,
+            nm_unit: item.nm_unit || null,
+            unitKerjaId,
+            uraian: item.keterangan || item.nm_rek6,
+            sumber_dana: "PAD",
+            nama_penyetor: item.company || null,
+            alamat_penyetor: item.alamat || null,
+            jns_transaksi: "PENDAPATAN",
+            nilai: item.nilai,
+            status: "TERIMA",
+            keterangan: item.jns_pajak
+              ? `Validasi Penerimaan (${item.jns_pajak})`
+              : "Validasi Penerimaan Pendapatan Daerah",
+            rincianRekening: {
+              create: [
+                {
+                  no_bukti: item.no_terima,
+                  kd_rek6: item.kd_rek6,
+                  nm_rek6: item.nm_rek6,
+                  kd_sub_kegiatan: item.kd_sub_kegiatan || null,
+                  nm_sub_kegiatan: item.nm_sub_kegiatan || null,
+                  nilai: item.nilai,
+                  keterangan: item.keterangan || null,
+                },
+              ],
+            },
+          },
+        });
+
+        await tx.tblPenerimaan.update({
+          where: { id: item.id },
+          data: {
+            status_validasi: "TERVALIDASI",
+            tgl_validasi: now,
+            no_bukti_kasin: item.no_terima,
+          },
+        });
+
+        count += 1;
+      }
+
+      return count;
+    });
+
+    return { validatedCount };
+  },
+
+  async batalValidasiPenerimaan(id: string) {
+    const item = await prisma.tblPenerimaan.findUnique({ where: { id } });
+    if (!item) {
+      throw new Error("Data penerimaan tidak ditemukan.");
+    }
+    if (item.status_validasi !== "TERVALIDASI") {
+      throw new Error("Data penerimaan belum divalidasi.");
+    }
+    const postedJournal = await prisma.trhmaping.findFirst({
+      where: { no_voucher: `${item.no_terima.trim()}/4` },
+      select: { id: true },
+    });
+    if (item.verif === 1 || postedJournal) {
+      throw new Error(
+        "Data penerimaan yang sudah diposting jurnal tidak dapat dibatalkan validasinya. Batalkan posting jurnal terlebih dahulu."
+      );
+    }
+
+    await prisma.$transaction(async (tx: any) => {
+      if (item.no_bukti_kasin) {
+        await tx.trhkasin.deleteMany({
+          where: {
+            tahunAnggaran: item.tahunAnggaran,
+            no_bukti: item.no_bukti_kasin,
+            jns_transaksi: "PENDAPATAN",
+          },
+        });
+      }
+
+      await tx.tblPenerimaan.update({
+        where: { id: item.id },
+        data: {
+          status_validasi: "BELUM",
+          tgl_validasi: null,
+          no_bukti_kasin: null,
+        },
+      });
+    });
+
+    return { success: true };
   },
 };

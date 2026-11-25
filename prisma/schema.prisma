@@ -1626,6 +1626,9 @@ model TblPenerimaan {
   alamat          String?   @db.Text
   verif           Int       @default(0)
   jns_pajak       String?
+  status_validasi String    @default("BELUM") // "BELUM" | "TERVALIDASI"
+  tgl_validasi    DateTime?
+  no_bukti_kasin  String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -1633,5 +1636,69 @@ model TblPenerimaan {
   @@index([tgl_terima])
   @@index([no_tetap])
   @@index([verif])
+  @@index([status_validasi])
   @@map("tbl_penerimaan")
+}
+
+model Trhmaping {
+  id            String   @id @default(uuid())
+  tahunAnggaran Int      @default(2026)
+  no_voucher    String   @unique
+  tgl_voucher   DateTime
+  kd_skpd       String
+  nm_skpd       String?
+  kd_unit       String?
+  nm_unit       String?
+  keterangan    String?  @db.Text
+  total_debet   Decimal  @default(0) @db.Decimal(18, 2)
+  total_kredit  Decimal  @default(0) @db.Decimal(18, 2)
+  jns_transaksi String?
+  tabel         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  details       Trdmaping[]
+
+  @@index([tahunAnggaran, kd_skpd])
+  @@index([tgl_voucher])
+  @@index([jns_transaksi])
+  @@map("trhmaping")
+}
+
+enum RkType {
+  D
+  K
+}
+
+model Trdmaping {
+  id              String   @id @default(uuid())
+  tahunAnggaran   Int      @default(2026)
+  headerId        String?
+  no_voucher      String
+  tgl_voucher     DateTime
+  kd_skpd         String
+  nm_skpd         String?
+  kd_unit         String?
+  nm_unit         String?
+  keterangan      String?  @db.Text
+  kdsub_kegiatan  String?
+  nm_sub_kegiatan String?
+  kd_rek6         String
+  nm_rek6         String
+  rk              RkType?
+  debet           Decimal  @default(0) @db.Decimal(18, 2)
+  kredit          Decimal  @default(0) @db.Decimal(18, 2)
+  jns_transaksi   String?
+  tabel           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  header Trhmaping? @relation(fields: [headerId], references: [id], onDelete: Cascade)
+
+  @@index([headerId])
+  @@index([no_voucher])
+  @@index([tahunAnggaran, kd_skpd])
+  @@index([kdsub_kegiatan])
+  @@index([kd_rek6])
+  @@map("trdmaping")
 }
