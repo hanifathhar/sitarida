@@ -7,8 +7,14 @@ import {
   listSumberJurnal,
   postJurnalPenetapan,
   postJurnalPenerimaan,
+  postJurnalSp2d,
+  postJurnalSpj,
+  postJurnalSetorSisa,
   unpostJurnalPenetapan,
   unpostJurnalPenerimaan,
+  unpostJurnalSp2d,
+  unpostJurnalSpj,
+  unpostJurnalSetorSisa,
 } from "@/modules/akuntansi/posting-jurnal.service";
 
 const VALID_JENIS: JenisJurnal[] = [
@@ -120,20 +126,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (jenis !== "penetapan" && jenis !== "penerimaan") {
-      return NextResponse.json(
-        { success: false, error: "Posting jurnal untuk jenis ini belum diaktifkan." },
-        { status: 400 }
-      );
-    }
-
-    const label = jenis === "penetapan" ? "penetapan" : "penerimaan";
+    const label =
+      jenis === "penetapan"
+        ? "penetapan"
+        : jenis === "penerimaan"
+          ? "penerimaan"
+          : jenis === "sp2d"
+            ? "SP2D"
+            : jenis === "spj"
+              ? "SPJ UP/GU/TU"
+              : "Setor Sisa Kas/Pengembalian";
 
     if (action === "unpost") {
       const result =
         jenis === "penetapan"
           ? await unpostJurnalPenetapan(session, ids)
-          : await unpostJurnalPenerimaan(session, ids);
+          : jenis === "penerimaan"
+            ? await unpostJurnalPenerimaan(session, ids)
+            : jenis === "sp2d"
+              ? await unpostJurnalSp2d(session, ids)
+              : jenis === "spj"
+                ? await unpostJurnalSpj(session, ids)
+                : await unpostJurnalSetorSisa(session, ids);
       return NextResponse.json({
         success: true,
         message: `${result.unpostedCount} dokumen ${label} berhasil dibatalkan postingnya.`,
@@ -144,7 +158,13 @@ export async function POST(req: NextRequest) {
     const result =
       jenis === "penetapan"
         ? await postJurnalPenetapan(session, ids)
-        : await postJurnalPenerimaan(session, ids);
+        : jenis === "penerimaan"
+          ? await postJurnalPenerimaan(session, ids)
+          : jenis === "sp2d"
+            ? await postJurnalSp2d(session, ids)
+            : jenis === "spj"
+              ? await postJurnalSpj(session, ids)
+              : await postJurnalSetorSisa(session, ids);
     return NextResponse.json({
       success: true,
       message: `${result.postedCount} dokumen ${label} berhasil diposting ke jurnal.`,

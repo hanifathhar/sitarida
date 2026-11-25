@@ -143,8 +143,10 @@ export const bendaharaPengeluaranService = {
     let maxSeq = 0;
     const checkCode = (code?: string | null) => {
       if (!code) return;
-      const parts = code.split("/");
-      const num = parseInt(parts[0], 10);
+      const firstPart = code.split("/")[0]?.trim() || "";
+      // Hanya hitung nomor urut BKU normal (1-7 digit), abaikan ID bank/CMS/timestamp panjang
+      if (!/^\d{1,7}$/.test(firstPart)) return;
+      const num = parseInt(firstPart, 10);
       if (!isNaN(num) && num > maxSeq) {
         maxSeq = num;
       }

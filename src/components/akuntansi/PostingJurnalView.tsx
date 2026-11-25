@@ -124,7 +124,12 @@ function PostingJurnalContent({
   const [detailData, setDetailData] = useState<DetailJurnalData | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
 
-  const canPost = jenis === "penetapan" || jenis === "penerimaan";
+  const canPost =
+    jenis === "penetapan" ||
+    jenis === "penerimaan" ||
+    jenis === "sp2d" ||
+    jenis === "spj" ||
+    jenis === "setor-sisa-kas";
 
   const tahunAnggaran = (scopeData?.session as any)?.tahunAnggaran || 2026;
 
@@ -695,7 +700,7 @@ function PostingJurnalContent({
       {/* Modal Detail Jurnal (trhmaping & trdmaping) */}
       {detailModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
-          <div className="w-full max-w-4xl rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
+          <div className="w-full max-w-5xl rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-[#5E0E14] to-[#88131A] text-white">
               <div className="flex items-center gap-2.5">
                 <Eye className="w-5 h-5" />
@@ -759,6 +764,7 @@ function PostingJurnalContent({
                         <thead className="bg-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
                           <tr>
                             <th className="px-3.5 py-2.5 text-center w-10">No</th>
+                            <th className="px-3.5 py-2.5 min-w-[180px]">Sub Kegiatan</th>
                             <th className="px-3.5 py-2.5 w-44">Kode Rekening</th>
                             <th className="px-3.5 py-2.5">Nama Rekening</th>
                             <th className="px-3.5 py-2.5 text-center w-16">RK</th>
@@ -770,6 +776,24 @@ function PostingJurnalContent({
                           {detailData.details.map((d, i) => (
                             <tr key={d.id} className="hover:bg-slate-50/70">
                               <td className="px-3.5 py-2.5 text-center text-slate-400">{i + 1}</td>
+                              <td className="px-3.5 py-2.5 text-slate-700 leading-snug">
+                                {d.nm_sub_kegiatan && d.nm_sub_kegiatan !== "-" ? (
+                                  <div>
+                                    <div className="font-medium text-slate-800">{d.nm_sub_kegiatan}</div>
+                                    {d.kdsub_kegiatan && d.kdsub_kegiatan !== "-" && (
+                                      <div className="text-[10px] font-mono text-slate-400 mt-0.5">
+                                        {d.kdsub_kegiatan}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : d.kdsub_kegiatan && d.kdsub_kegiatan !== "-" ? (
+                                  <span className="font-mono text-[11px] text-slate-600">
+                                    {d.kdsub_kegiatan}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-300">-</span>
+                                )}
+                              </td>
                               <td className="px-3.5 py-2.5 font-mono font-semibold text-slate-900">
                                 {d.kd_rek6}
                               </td>
@@ -797,7 +821,7 @@ function PostingJurnalContent({
                         </tbody>
                         <tfoot className="bg-slate-50 border-t border-slate-200 font-bold text-slate-900">
                           <tr>
-                            <td colSpan={4} className="px-3.5 py-2.5 text-right text-[11px] uppercase tracking-wider text-slate-600">
+                            <td colSpan={5} className="px-3.5 py-2.5 text-right text-[11px] uppercase tracking-wider text-slate-600">
                               Total
                             </td>
                             <td className="px-3.5 py-2.5 text-right font-mono tabular-nums">

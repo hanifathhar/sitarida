@@ -466,14 +466,6 @@ export default function PenerimaanView() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={handleOpenCreate}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#5E0E14] hover:bg-[#46090E] text-xs font-bold text-white shadow-xs transition cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Penerimaan Baru</span>
-            </button>
-            <button
-              type="button"
               onClick={handleExportExcel}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition cursor-pointer"
             >
@@ -670,7 +662,7 @@ export default function PenerimaanView() {
                 <th className="px-3.5 py-3 min-w-[160px]">No. STS / Bukti</th>
                 <th className="px-3.5 py-3 min-w-[180px]">SKPD / Penyetor</th>
                 <th className="px-3.5 py-3 min-w-[220px]">Uraian Penerimaan</th>
-                <th className="px-3.5 py-3 w-28">Sumber Dana</th>
+                <th className="px-3.5 py-3 w-28">Rekening</th>
                 <th className="px-3.5 py-3 text-right whitespace-nowrap">Nilai Penerimaan (Rp)</th>
                 <th className="px-3.5 py-3 text-center w-36">Aksi</th>
               </tr>
@@ -728,9 +720,7 @@ export default function PenerimaanView() {
                       {item.uraian}
                     </td>
                     <td className="px-3.5 py-3">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        {item.sumber_dana || "PAD"}
-                      </span>
+                      {item.rincianRekening?.map((item) => item.kd_rek6 + "-" + item.nm_rek6).join(", ") || "PAD"}
                     </td>
                     <td className="px-3.5 py-3 text-right font-mono font-bold text-emerald-700 whitespace-nowrap tabular-nums">
                       {formatAngka(item.nilai)}
@@ -745,25 +735,11 @@ export default function PenerimaanView() {
                           <Eye className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => handleOpenEdit(item, "EDIT")}
-                          className="p-1.5 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 cursor-pointer"
-                          title="Edit"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
                           onClick={() => setPrintItem(item)}
                           className="p-1.5 rounded-lg border border-rose-200 text-[#88131A] hover:bg-rose-50 cursor-pointer"
                           title="Cetak Bukti Penerimaan"
                         >
                           <Printer className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.id, item.no_bukti)}
-                          className="p-1.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 cursor-pointer"
-                          title="Hapus"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>
@@ -775,7 +751,7 @@ export default function PenerimaanView() {
               <tfoot className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-300">
                 <tr>
                   <td colSpan={6} className="px-4 py-3 text-right uppercase text-[11px] tracking-wider">
-                    Total Nilai Penerimaan Terpilih
+                    Total Nilai Penerimaan
                   </td>
                   <td className="px-3.5 py-3 text-right text-emerald-700 font-mono text-sm whitespace-nowrap tabular-nums">
                     {formatAngka(summary.totalNilai)}
@@ -813,11 +789,11 @@ export default function PenerimaanView() {
                   {modalMode === "CREATE"
                     ? "Input Penerimaan Kas Daerah Baru"
                     : modalMode === "EDIT"
-                    ? "Ubah Data Penerimaan Kas Daerah"
-                    : "Detail Dokumen Penerimaan Kas Daerah"}
+                      ? "Ubah Data Penerimaan Kas Daerah"
+                      : "Detail Dokumen Penerimaan Kas Daerah"}
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Pencatatan kas masuk Bendahara Umum Daerah (Tabel trhkasin & trdkasin)
+                  Pencatatan kas masuk Bendahara Umum Daerah
                 </p>
               </div>
               <button

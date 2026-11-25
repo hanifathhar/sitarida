@@ -519,7 +519,7 @@ function PembukuanSpjContent({
                         <tr>
                           <td colSpan={8} className="py-12 text-center text-slate-400">
                             <Receipt className="w-10 h-10 mx-auto mb-2 text-slate-300" />
-                            Tidak ada kuitansi berstatus Cair = 1 yang menunggu dibukukan.
+                            Tidak ada kuitansi berstatus Cair yang menunggu dibukukan.
                           </td>
                         </tr>
                       ) : (
@@ -1283,16 +1283,12 @@ function PembukuanSpjContent({
                     </td>
                     <td className="px-4 py-3 align-top text-center">
                       <div className="flex flex-col items-center gap-1">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-teal-50 text-teal-800 border border-teal-200 text-[11px] font-bold">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
-                          <span>{item.status}</span>
-                        </span>
                         {(item.status_lpj === "SUDAH_LPJ" || item.no_lpj) && (
                           <span
                             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 text-[10px] font-bold"
-                            title={item.no_lpj ? `No. LPJ: ${item.no_lpj}` : "Telah di-LPJ-kan"}
+                            title={item.no_lpj ? `No. LPJ: ${item.no_lpj}` : "DIAJUKAN"}
                           >
-                            Telah di-LPJ-kan
+                            DIAJUKAN
                           </span>
                         )}
                       </div>
@@ -1303,7 +1299,7 @@ function PembukuanSpjContent({
                           className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 text-slate-500 text-[10px] font-semibold"
                           title={`Terkunci karena sudah masuk LPJ (${item.no_lpj || "-"})`}
                         >
-                          Terkunci (LPJ)
+                          Terkunci
                         </span>
                       ) : (
                         <div className="flex items-center justify-center gap-1">

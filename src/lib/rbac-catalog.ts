@@ -798,10 +798,10 @@ export const RBAC_MODULE_GROUPS: MenuPermissionGroup[] = [
       },
       {
         menuKey: "akuntansi-jurnal-spj",
-        menuLabel: "Jurnal SPJ Pengeluaran",
+        menuLabel: "Jurnal SPJ UP/GU/TU",
         menuHref: "/akuntansi/posting-jurnal/spj",
         menuPermKode: "menu:akuntansi:jurnal-spj",
-        menuPermNama: "Tampilkan Menu Jurnal SPJ Pengeluaran",
+        menuPermNama: "Tampilkan Menu Jurnal SPJ UP/GU/TU",
         modul: "akuntansi",
         actions: [],
       },

@@ -119,7 +119,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/akuntansi/posting-jurnal/penetapan": "POSTING JURNAL PENETAPAN",
   "/akuntansi/posting-jurnal/penerimaan": "POSTING JURNAL PENERIMAAN",
   "/akuntansi/posting-jurnal/sp2d": "POSTING JURNAL SP2D",
-  "/akuntansi/posting-jurnal/spj": "POSTING JURNAL SPJ PENGELUARAN",
+  "/akuntansi/posting-jurnal/spj": "POSTING JURNAL SPJ UP/GU/TU",
   "/akuntansi/posting-jurnal/setor-sisa-kas": "POSTING JURNAL SETOR SISA KAS / PENGEMBALIAN",
   "/penatausahaan/bendahara-pengeluaran": "BENDAHARA PENGELUARAN",
   "/penatausahaan/bendahara-pengeluaran/pembukuan-sp2d": "PEMBUKUAN SP2D",
@@ -583,7 +583,7 @@ export default function AppShell({
       perm: "menu:akuntansi:jurnal-sp2d",
     },
     {
-      label: "Jurnal SPJ Pengeluaran",
+      label: "Jurnal SPJ UP/GU/TU",
       href: "/akuntansi/posting-jurnal/spj",
       perm: "menu:akuntansi:jurnal-spj",
     },

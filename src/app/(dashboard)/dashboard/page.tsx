@@ -21,8 +21,8 @@ export default async function DashboardPage() {
   const tahunLogin = activeTa.tahun;
   const isCrossOpd = Boolean(session.isCrossOpd);
 
-  // Ambil seluruh daftar OPD aktif dan rincian Rekening RKA (trdrka)
-  const [opdList, rkaRekeningList] = await Promise.all([
+  // Ambil seluruh daftar OPD aktif, rincian Rekening RKA (trdrka), dan realisasi jurnal (trdmaping + trhmaping)
+  const [opdList, rkaRekeningList, mapingDetails] = await Promise.all([
     prisma.opd.findMany({
       where: isCrossOpd
         ? { isActive: true }
@@ -51,6 +51,19 @@ export default async function DashboardPage() {
         kd_rek6: true,
         nilai: true,
         nilai_ubah: true,
+      },
+    }),
+    prisma.trdmaping.findMany({
+      where: {
+        tahunAnggaran: tahunLogin,
+        header: { isNot: null },
+        ...(!isCrossOpd && session.opdKode ? { kd_skpd: session.opdKode } : {}),
+      },
+      select: {
+        kd_skpd: true,
+        kd_rek6: true,
+        debet: true,
+        kredit: true,
       },
     }),
   ]);
@@ -98,13 +111,40 @@ export default async function DashboardPage() {
     }
   }
 
+  let realisasiPendapatan = 0;
+  let realisasiBelanja = 0;
+  let realisasiPenerimaanPembiayaan = 0;
+  let realisasiPengeluaranPembiayaan = 0;
+
+  const allowedSkpdSet =
+    !isCrossOpd && opdList.length > 0
+      ? new Set(opdList.map((o) => o.kd_skpd))
+      : null;
+
+  for (const d of mapingDetails) {
+    if (allowedSkpdSet && !allowedSkpdSet.has(d.kd_skpd)) continue;
+    const kode = (d.kd_rek6 || "").trim();
+    const debet = Number(d.debet) || 0;
+    const kredit = Number(d.kredit) || 0;
+
+    if (kode.startsWith("4")) {
+      realisasiPendapatan += kredit - debet;
+    } else if (kode.startsWith("5")) {
+      realisasiBelanja += debet - kredit;
+    } else if (kode.startsWith("6.2")) {
+      realisasiPengeluaranPembiayaan += debet - kredit;
+    } else if (kode.startsWith("6")) {
+      realisasiPenerimaanPembiayaan += kredit - debet;
+    }
+  }
+
   const categories: ApbdCategoryItem[] = [
     {
       key: "PENDAPATAN",
       shortLabel: "Pendapatan",
       fullLabel: "Pendapatan Daerah",
       anggaran: totalPendapatan,
-      realisasiRiil: 0,
+      realisasiRiil: realisasiPendapatan,
       realisasiRencana: totalPendapatan,
     },
     {
@@ -112,7 +152,7 @@ export default async function DashboardPage() {
       shortLabel: "Belanja",
       fullLabel: "Belanja Daerah",
       anggaran: totalBelanja,
-      realisasiRiil: 0,
+      realisasiRiil: realisasiBelanja,
       realisasiRencana: totalBelanja,
     },
     {
@@ -120,7 +160,7 @@ export default async function DashboardPage() {
       shortLabel: "Penerimaan",
       fullLabel: "Penerimaan Pembiayaan",
       anggaran: totalPenerimaanPembiayaan,
-      realisasiRiil: 0,
+      realisasiRiil: realisasiPenerimaanPembiayaan,
       realisasiRencana: totalPenerimaanPembiayaan,
     },
     {
@@ -128,7 +168,7 @@ export default async function DashboardPage() {
       shortLabel: "Pengeluaran",
       fullLabel: "Pengeluaran Pembiayaan",
       anggaran: totalPengeluaranPembiayaan,
-      realisasiRiil: 0,
+      realisasiRiil: realisasiPengeluaranPembiayaan,
       realisasiRencana: totalPengeluaranPembiayaan,
     },
   ];
