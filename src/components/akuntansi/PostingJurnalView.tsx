@@ -706,7 +706,6 @@ function PostingJurnalContent({
                 <Eye className="w-5 h-5" />
                 <div>
                   <h3 className="text-sm sm:text-base font-bold">Detail Jurnal</h3>
-                  <p className="text-[11px] text-rose-100">Rincian ayat jurnal Debet dan Kredit hasil posting</p>
                 </div>
               </div>
               <button

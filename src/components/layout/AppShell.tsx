@@ -121,6 +121,8 @@ const PAGE_TITLES: Record<string, string> = {
   "/akuntansi/posting-jurnal/sp2d": "POSTING JURNAL SP2D",
   "/akuntansi/posting-jurnal/spj": "POSTING JURNAL SPJ UP/GU/TU",
   "/akuntansi/posting-jurnal/setor-sisa-kas": "POSTING JURNAL SETOR SISA KAS / PENGEMBALIAN",
+  "/akuntansi/jurnal-penyesuaian": "JURNAL PENYESUAIAN",
+  "/akuntansi/buku-besar": "BUKU BESAR",
   "/penatausahaan/bendahara-pengeluaran": "BENDAHARA PENGELUARAN",
   "/penatausahaan/bendahara-pengeluaran/pembukuan-sp2d": "PEMBUKUAN SP2D",
   "/penatausahaan/bendahara-pengeluaran/validasi-spj": "VALIDASI SPJ",
@@ -1293,7 +1295,10 @@ export default function AppShell({
             )}
 
           {/* GRUP MENU AKUNTANSI / PELAPORAN */}
-          {postingJurnalSubMenus.length > 0 && (
+          {(postingJurnalSubMenus.length > 0 ||
+            can("menu:akuntansi:jurnal-penyesuaian") ||
+            can("akuntansi:read") ||
+            can("akuntansi:post")) && (
             <div className="bg-[#8E1B24] rounded-xl p-2 space-y-1.5 shadow-sm border border-red-400/15">
               <button
                 type="button"
@@ -1314,51 +1319,101 @@ export default function AppShell({
 
               {openGroups.akuntansi && (
                 <div className="space-y-1 pt-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setPostingJurnalDropdownOpen((prev) => !prev)}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${
-                      pathname.startsWith("/akuntansi/posting-jurnal")
-                        ? "bg-[#7A121A] text-white font-bold"
-                        : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Layers className="w-3.5 h-3.5 text-amber-200 shrink-0" />
-                      <span>Posting Jurnal</span>
-                    </div>
-                    <ChevronDown
-                      className={`w-3 h-3 transition-transform ${
-                        postingJurnalDropdownOpen ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
+                  {postingJurnalSubMenus.length > 0 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setPostingJurnalDropdownOpen((prev) => !prev)}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${
+                          pathname.startsWith("/akuntansi/posting-jurnal")
+                            ? "bg-[#7A121A] text-white font-bold"
+                            : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Layers className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                          <span>Posting Jurnal</span>
+                        </div>
+                        <ChevronDown
+                          className={`w-3 h-3 transition-transform ${
+                            postingJurnalDropdownOpen ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
 
-                  {postingJurnalDropdownOpen && (
-                    <div className="pl-3.5 space-y-1 border-l-2 border-red-300/20 ml-2 py-0.5">
-                      {postingJurnalSubMenus.map((sub) => {
-                        const active = pathname === sub.href;
-                        return (
-                          <Link
-                            key={sub.href}
-                            href={sub.href}
-                            onClick={() => setSidebarOpen(false)}
-                            className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] transition-all ${
-                              active
-                                ? "bg-white text-[#88131A] font-bold shadow-sm"
-                                : "text-red-100 hover:text-white hover:bg-[#7A121A] font-medium"
-                            }`}
-                          >
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                active ? "bg-[#88131A]" : "bg-red-300/60"
-                              }`}
-                            />
-                            <span className="truncate">{sub.label}</span>
-                          </Link>
-                        );
-                      })}
-                    </div>
+                      {postingJurnalDropdownOpen && (
+                        <div className="pl-3.5 space-y-1 border-l-2 border-red-300/20 ml-2 py-0.5">
+                          {postingJurnalSubMenus.map((sub) => {
+                            const active = pathname === sub.href;
+                            return (
+                              <Link
+                                key={sub.href}
+                                href={sub.href}
+                                onClick={() => setSidebarOpen(false)}
+                                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] transition-all ${
+                                  active
+                                    ? "bg-white text-[#88131A] font-bold shadow-sm"
+                                    : "text-red-100 hover:text-white hover:bg-[#7A121A] font-medium"
+                                }`}
+                              >
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                    active ? "bg-[#88131A]" : "bg-red-300/60"
+                                  }`}
+                                />
+                                <span className="truncate">{sub.label}</span>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {(can("menu:akuntansi:jurnal-penyesuaian") ||
+                    can("akuntansi:read") ||
+                    can("akuntansi:post")) && (
+                    <Link
+                      href="/akuntansi/jurnal-penyesuaian"
+                      onClick={() => setSidebarOpen(false)}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${
+                        pathname === "/akuntansi/jurnal-penyesuaian"
+                          ? "bg-white text-[#88131A] font-bold shadow-sm"
+                          : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                      }`}
+                    >
+                      <FileText
+                        className={`w-3.5 h-3.5 shrink-0 ${
+                          pathname === "/akuntansi/jurnal-penyesuaian"
+                            ? "text-[#88131A]"
+                            : "text-amber-200"
+                        }`}
+                      />
+                      <span className="truncate">Jurnal Penyesuaian</span>
+                    </Link>
+                  )}
+
+                  {(can("menu:akuntansi:buku-besar") ||
+                    can("akuntansi:read") ||
+                    can("akuntansi:post")) && (
+                    <Link
+                      href="/akuntansi/buku-besar"
+                      onClick={() => setSidebarOpen(false)}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${
+                        pathname === "/akuntansi/buku-besar"
+                          ? "bg-white text-[#88131A] font-bold shadow-sm"
+                          : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                      }`}
+                    >
+                      <FileText
+                        className={`w-3.5 h-3.5 shrink-0 ${
+                          pathname === "/akuntansi/buku-besar"
+                            ? "text-[#88131A]"
+                            : "text-amber-200"
+                        }`}
+                      />
+                      <span className="truncate">Buku Besar</span>
+                    </Link>
                   )}
                 </div>
               )}
