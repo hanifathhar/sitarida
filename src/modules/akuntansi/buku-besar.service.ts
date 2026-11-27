@@ -184,6 +184,32 @@ export async function getBukuBesarData(
     : true;
 
   let saldoAwal = 0;
+
+  // Tambahkan Saldo Awal Akun dari tabel saldo_awal_akun
+  const saScopeSkpd = restrictedSkpd || (!(params.allKabupaten && isCrossOpd) ? params.kd_skpd : undefined);
+  const saScopeUnit = !params.allKabupaten && params.kd_unit?.trim() ? params.kd_unit.trim() : undefined;
+
+  const saldoAwalRows = await prisma.$queryRaw<{ rk: string; nilai: unknown }[]>`
+    SELECT rk::text AS rk, nilai
+    FROM saldo_awal_akun
+    WHERE "tahunAnggaran" = ${params.tahunAnggaran}
+      AND (kd_rek6 LIKE '1%' OR kd_rek6 LIKE '2%' OR kd_rek6 LIKE '3%')
+      AND (${saScopeSkpd ?? null}::text IS NULL OR kd_skpd = ${saScopeSkpd ?? null})
+      AND (${saScopeUnit ?? null}::text IS NULL OR kd_unit = ${saScopeUnit ?? null})
+      AND (
+        ${selectedKode || null}::text IS NULL
+        OR (${params.rekLevel === "6" || !params.rekLevel} AND kd_rek6 = ${selectedKode})
+        OR (${!(params.rekLevel === "6" || !params.rekLevel)} AND (kd_rek6 = ${selectedKode} OR kd_rek6 LIKE ${`${selectedKode}.%`}))
+      )
+  `;
+
+  for (const sa of saldoAwalRows) {
+    const nilai = Number(sa.nilai) || 0;
+    const debet = sa.rk === "D" ? nilai : 0;
+    const kredit = sa.rk === "K" ? nilai : 0;
+    saldoAwal += normalDebit ? debet - kredit : kredit - debet;
+  }
+
   const periodEntries: typeof allEntries = [];
 
   for (const e of allEntries) {

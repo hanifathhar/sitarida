@@ -123,6 +123,11 @@ const PAGE_TITLES: Record<string, string> = {
   "/akuntansi/posting-jurnal/setor-sisa-kas": "POSTING JURNAL SETOR SISA KAS / PENGEMBALIAN",
   "/akuntansi/jurnal-penyesuaian": "JURNAL PENYESUAIAN",
   "/akuntansi/buku-besar": "BUKU BESAR",
+  "/akuntansi/saldo-awal": "INPUT SALDO AWAL",
+  "/akuntansi/neraca-saldo": "NERACA SALDO",
+  "/akuntansi/laporan-keuangan/lra": "LAPORAN REALISASI ANGGARAN (LRA)",
+  "/akuntansi/laporan-keuangan/lo": "LAPORAN OPERASIONAL (LO)",
+  "/akuntansi/laporan-keuangan/neraca": "NERACA",
   "/penatausahaan/bendahara-pengeluaran": "BENDAHARA PENGELUARAN",
   "/penatausahaan/bendahara-pengeluaran/pembukuan-sp2d": "PEMBUKUAN SP2D",
   "/penatausahaan/bendahara-pengeluaran/validasi-spj": "VALIDASI SPJ",
@@ -205,6 +210,9 @@ export default function AppShell({
   const [postingJurnalDropdownOpen, setPostingJurnalDropdownOpen] = useState(() =>
     pathname.startsWith("/akuntansi/posting-jurnal")
   );
+  const [laporanKeuanganDropdownOpen, setLaporanKeuanganDropdownOpen] = useState(() =>
+    pathname.startsWith("/akuntansi/laporan-keuangan")
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -235,6 +243,9 @@ export default function AppShell({
     }
     if (pathname.startsWith("/akuntansi/posting-jurnal")) {
       setPostingJurnalDropdownOpen(true);
+    }
+    if (pathname.startsWith("/akuntansi/laporan-keuangan")) {
+      setLaporanKeuanganDropdownOpen(true);
     }
   }, [pathname]);
 
@@ -593,6 +604,27 @@ export default function AppShell({
       label: "Jurnal Setor Sisa Kas/Pengembalian",
       href: "/akuntansi/posting-jurnal/setor-sisa-kas",
       perm: "menu:akuntansi:jurnal-setor-sisa",
+    },
+  ].filter(
+    (m) =>
+      can(m.perm) || can("akuntansi:read") || can("akuntansi:post")
+  );
+
+  const laporanKeuanganSubMenus = [
+    {
+      label: "LRA",
+      href: "/akuntansi/laporan-keuangan/lra",
+      perm: "menu:akuntansi:laporan-lra",
+    },
+    {
+      label: "LO",
+      href: "/akuntansi/laporan-keuangan/lo",
+      perm: "menu:akuntansi:laporan-lo",
+    },
+    {
+      label: "Neraca",
+      href: "/akuntansi/laporan-keuangan/neraca",
+      perm: "menu:akuntansi:laporan-neraca",
     },
   ].filter(
     (m) =>
@@ -1296,6 +1328,7 @@ export default function AppShell({
 
           {/* GRUP MENU AKUNTANSI / PELAPORAN */}
           {(postingJurnalSubMenus.length > 0 ||
+            laporanKeuanganSubMenus.length > 0 ||
             can("menu:akuntansi:jurnal-penyesuaian") ||
             can("akuntansi:read") ||
             can("akuntansi:post")) && (
@@ -1414,6 +1447,103 @@ export default function AppShell({
                       />
                       <span className="truncate">Buku Besar</span>
                     </Link>
+                  )}
+
+                  {(can("menu:akuntansi:saldo-awal") ||
+                    can("akuntansi:read") ||
+                    can("akuntansi:post")) && (
+                    <Link
+                      href="/akuntansi/saldo-awal"
+                      onClick={() => setSidebarOpen(false)}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${
+                        pathname === "/akuntansi/saldo-awal"
+                          ? "bg-white text-[#88131A] font-bold shadow-sm"
+                          : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                      }`}
+                    >
+                      <FileText
+                        className={`w-3.5 h-3.5 shrink-0 ${
+                          pathname === "/akuntansi/saldo-awal"
+                            ? "text-[#88131A]"
+                            : "text-amber-200"
+                        }`}
+                      />
+                      <span className="truncate">Input Saldo Awal</span>
+                    </Link>
+                  )}
+
+                  {(can("menu:akuntansi:neraca-saldo") ||
+                    can("akuntansi:read") ||
+                    can("akuntansi:post")) && (
+                    <Link
+                      href="/akuntansi/neraca-saldo"
+                      onClick={() => setSidebarOpen(false)}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${
+                        pathname === "/akuntansi/neraca-saldo"
+                          ? "bg-white text-[#88131A] font-bold shadow-sm"
+                          : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                      }`}
+                    >
+                      <FileText
+                        className={`w-3.5 h-3.5 shrink-0 ${
+                          pathname === "/akuntansi/neraca-saldo"
+                            ? "text-[#88131A]"
+                            : "text-amber-200"
+                        }`}
+                      />
+                      <span className="truncate">Neraca Saldo</span>
+                    </Link>
+                  )}
+
+                  {laporanKeuanganSubMenus.length > 0 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setLaporanKeuanganDropdownOpen((prev) => !prev)}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${
+                          pathname.startsWith("/akuntansi/laporan-keuangan")
+                            ? "bg-[#7A121A] text-white font-bold"
+                            : "bg-[#5E0E14] hover:bg-[#46090E] text-white font-medium"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Layers className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                          <span>Laporan Keuangan</span>
+                        </div>
+                        <ChevronDown
+                          className={`w-3 h-3 transition-transform ${
+                            laporanKeuanganDropdownOpen ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
+
+                      {laporanKeuanganDropdownOpen && (
+                        <div className="pl-3.5 space-y-1 border-l-2 border-red-300/20 ml-2 py-0.5">
+                          {laporanKeuanganSubMenus.map((sub) => {
+                            const active = pathname === sub.href;
+                            return (
+                              <Link
+                                key={sub.href}
+                                href={sub.href}
+                                onClick={() => setSidebarOpen(false)}
+                                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] transition-all ${
+                                  active
+                                    ? "bg-white text-[#88131A] font-bold shadow-sm"
+                                    : "text-red-100 hover:text-white hover:bg-[#7A121A] font-medium"
+                                }`}
+                              >
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                    active ? "bg-[#88131A]" : "bg-red-300/60"
+                                  }`}
+                                />
+                                <span className="truncate">{sub.label}</span>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}

@@ -1708,3 +1708,78 @@ model Trdmaping {
   @@index([kd_rek6])
   @@map("trdmaping")
 }
+
+model SaldoAwalAkun {
+  id            String   @id @default(uuid())
+  tahunAnggaran Int      @default(2026)
+  kd_skpd       String
+  nm_skpd       String?
+  kd_unit       String   @default("")
+  nm_unit       String?
+  kd_rek6       String
+  nm_rek6       String
+  rk            RkType   @default(D)
+  nilai         Decimal  @default(0) @db.Decimal(18, 2)
+  keterangan    String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([tahunAnggaran, kd_skpd, kd_unit, kd_rek6])
+  @@index([tahunAnggaran, kd_skpd])
+  @@index([kd_rek6])
+  @@map("saldo_awal_akun")
+}
+
+model MapLaporanLra {
+  id           String   @id @default(uuid())
+  urutan       Int
+  kodeBaris    String   // Contoh: "4", "4.1", "4.1.01", ""
+  uraian       String
+  tipeBaris    String   @default("DETAIL") // "HEADER" | "DETAIL" | "SUBTOTAL" | "TOTAL" | "SPACER"
+  level        Int      @default(1) // 1..4 untuk indentasi & styling
+  kodeRekening String?  @db.Text // Comma-separated prefix/kode rekening
+  posisiNormal String   @default("AUTO") // "AUTO" | "DEBET" | "KREDIT" | "MINUS_DEBET" | "MINUS_KREDIT"
+  formula      String?  @db.Text
+  isBold       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([urutan])
+  @@map("map_laporan_lra")
+}
+
+model MapLaporanLo {
+  id           String   @id @default(uuid())
+  urutan       Int
+  kodeBaris    String
+  uraian       String
+  tipeBaris    String   @default("DETAIL")
+  level        Int      @default(1)
+  kodeRekening String?  @db.Text
+  posisiNormal String   @default("AUTO")
+  formula      String?  @db.Text
+  isBold       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([urutan])
+  @@map("map_laporan_lo")
+}
+
+model MapLaporanNeraca {
+  id           String   @id @default(uuid())
+  urutan       Int
+  kodeBaris    String
+  uraian       String
+  tipeBaris    String   @default("DETAIL")
+  level        Int      @default(1)
+  kodeRekening String?  @db.Text
+  posisiNormal String   @default("AUTO")
+  formula      String?  @db.Text
+  isBold       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([urutan])
+  @@map("map_laporan_neraca")
+}
